@@ -266,7 +266,7 @@ restore_previous_images() {
   )
 }
 
-if ! bash "$PROJECT_DIR/hostgator-setup-kit/update.sh" --to "$TARGET_TAG" --force --skip-backup; then
+if ! (cd "$PROJECT_DIR" && bash "$PROJECT_DIR/hostgator-setup-kit/update.sh" --to "$TARGET_TAG" --force --skip-backup); then
   if restore_previous_images; then
     die "A migração falhou e as imagens anteriores voltaram a ficar saudáveis. O backup do banco está em $db_after; verifique os logs antes de tentar novamente."
   fi
