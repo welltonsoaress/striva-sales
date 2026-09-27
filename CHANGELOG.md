@@ -9,4 +9,30 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [1.0.0] — 2026-09-27
+
+### ⚠️ Requer atenção
+
+- **Lançamento da distribuição independente Striva Sales** Esta é a primeira release própria, Striva Sales 1.0.0. A atualização é manual e fica disponível somente para a administração da plataforma. Ela reinicia os serviços compartilhados por todas as organizações desta instalação; escolha uma janela adequada. O atualizador valida as três imagens, faz backup antes de alterar código ou banco e mantém o runtime anterior quando não consegue iniciar a nova imagem.
+
+  O produto passa a consultar somente releases próprias `striva-v*` do repositório Striva Sales. Versões homônimas e changelogs do projeto de origem não entram na comparação ou nas notas. O build em execução passa a informar sua distribuição, versão, tag e revisão.
+
+  A interface recebe a identidade Striva Sales, símbolo S geométrico e paleta violeta. Marcas configuradas por instalação e por organização continuam prevalecendo. No atendimento, sugestões de resposta podem ser fechadas e reabertas sem perder o rascunho; Casos ganha acesso direto, indicador de pendências aguardando ação humana e aviso flutuante não bloqueante.
+
+### Adicionado
+
+- **Lançamento da distribuição independente Striva Sales** Esta é a primeira versão da distribuição independente Striva Sales, numerada como 1.0.0.
+
+### Corrigido
+
+- **Revisão da marca, sugestões, casos e execução do Operador** Login e cadastro passam a usar o nome da instalação salvo no banco, como o logo e as cores. Sugestões concluídas permitem gerar uma nova resposta pelo controle compacto. Alterações nos casos atualizam também a lista em tempo real.
+
+  O Operador recebe orientação explícita para conferir o lead e as etapas autorizadas antes de mover o funil. A métrica de ação considera somente escritas concluídas, excluindo consultas e recusas; turnos antigos sem confirmação são identificados separadamente. Bloqueios de reserva explicam como revisar os funis permitidos, mantendo as permissões existentes.
+
+  Atualiza as dependências transitivas Hono e js-yaml para versões corrigidas dos avisos de segurança identificados antes da publicação.
+
+  O atualizador interrompe a instalação se o backup ou a aplicação do banco falhar e confere app, worker e scheduler antes de declarar a instalação atualizada.
+
 <!-- release-base: 0.0.0 -->
+
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...HEAD
