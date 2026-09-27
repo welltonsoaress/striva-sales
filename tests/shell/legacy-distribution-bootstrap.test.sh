@@ -88,6 +88,7 @@ set -e
 
 check "missing scheduler image refuses the migration" test "$RESULT" -ne 0
 check "refusal identifies the missing Striva image" grep -q 'Não consegui baixar ghcr.io/welltonsoaress/striva-scheduler:1.0.0' "$WORK/output.log"
+check "the new updater runs from the selected project directory" grep -Fq 'if ! (cd "$PROJECT_DIR" && bash "$PROJECT_DIR/hostgator-setup-kit/update.sh"' "$SCRIPT"
 if [ -f "$DOCKER_LOG" ]; then
   check "all three own images were preflighted" test "$(grep -c '^pull ' "$DOCKER_LOG")" -eq 3
   check "failure happens before any Docker project inspection" not_contains 'ps -a' "$DOCKER_LOG"
