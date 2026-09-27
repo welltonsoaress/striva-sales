@@ -303,7 +303,7 @@ export const NAV_CATALOG = [
     group: "ia",
     section: "Montar o agente",
     minRole: "manager",
-    sidebar: true,
+    // Configuração disponível em "Ver tudo em IA"; Casos ocupa o acesso diário.
   },
   {
     href: "/app/ai/credentials",
@@ -366,6 +366,7 @@ export const NAV_CATALOG = [
     group: "ia",
     section: "Acompanhar o agente",
     minRole: "agent",
+    sidebar: true,
   },
   {
     href: "/app/ai/inbox",
