@@ -120,6 +120,12 @@ hash -r
 ) && echo '  ✓ release fetch resolves the Striva remote, not the colliding local tag' || { echo '  ✗ contaminated tag won release resolution'; FAILS=$((FAILS+1)); }
 check "release commit uses a private ref instead of rewriting local tags" git -C "$LOCAL" show-ref --verify --quiet refs/distribution/releases/striva-v1.0.0
 check "contaminated public tag remains untouched" test "$(git -C "$LOCAL" rev-parse striva-v1.0.0)" = "$CONTAMINATED_TAG_COMMIT"
+(
+  cd "$LOCAL"
+  source "$KIT/_common.sh"
+  # HEAD está adiantado, mas o runtime ainda é o commit anterior.
+  ! is_already_in_head "$CONTAMINATED_TAG_COMMIT" "$OWN_COMMIT"
+) && echo '  ✓ checkout ahead does not turn a runtime update into a downgrade' || { echo '  ✗ checkout was used instead of the runtime'; FAILS=$((FAILS+1)); }
 
 # The one-time branding bridge changes only the former product default.
 BRAND_ENV="$WORK/brand.env"
@@ -179,6 +185,76 @@ check "failed preflight leaves local rollback image reference untouched" grep -q
 check "failed preflight stops before backup" test ! -e "$WORK/backup-ran"
 if grep -q 'compose .* up -d' "$DOCKER_LOG"; then echo '  ✗ Compose was recreated before image validation'; FAILS=$((FAILS+1)); else echo '  ✓ no Compose recreation occurred'; fi
 check "checkout is unchanged after image failure" test "$(git -C "$PROJ" symbolic-ref --short HEAD)" = main -o "$(git -C "$PROJ" symbolic-ref --short HEAD)" = master
+
+# Exercise the production decisions without touching services or a database.
+sed -n '/^image_desatualizada() {/,/^}/p' "$KIT/update.sh" > "$WORK/image-check.sh"
+source "$WORK/image-check.sh"
+dc() { printf '%s\n' "${!#}"; }
+docker() {
+  if [ "$1" = inspect ]; then
+    [ "${!#}" = "${DRIFT_SERVICE:-none}" ] && printf 'old\n' || printf 'target\n'
+  elif [ "$1 $2" = 'image inspect' ]; then
+    [ "${LOOKUP_FAIL:-0}" = 1 ] && return 1
+    printf 'target\n'
+  fi
+}
+VERSAO_ALVO=1.2.0
+if image_desatualizada; then FAILS=$((FAILS+1)); echo '  ✗ identical trio considered outdated'; else echo '  ✓ identical trio is current'; fi
+for DRIFT_SERVICE in app worker scheduler; do
+  check "drift in $DRIFT_SERVICE requires update" image_desatualizada
+done
+unset DRIFT_SERVICE
+LOOKUP_FAIL=1
+check "failed image lookup never means current" image_desatualizada
+unset LOOKUP_FAIL
+
+sed -n '/^if \[ -z "\$SKIP_BACKUP" \]; then/,/^fi$/p' "$KIT/update.sh" > "$WORK/backup-check.sh"
+sed -n '/^if \[ -f supabase\/baseline.sql \]; then/,/^fi$/p' "$KIT/update.sh" > "$WORK/schema-check.sh"
+step() { :; }; c_grn() { :; }; die() { exit 1; }
+url_do_schema() { printf 'postgresql://test.invalid/test'; }
+if (SKIP_BACKUP=''; bash() { return 1; }; source "$WORK/backup-check.sh"; touch "$WORK/continued-after-backup"); then
+  FAILS=$((FAILS+1)); echo '  ✗ backup failure accepted'
+else echo '  ✓ backup failure stops the update'; fi
+check "no continuation after failed backup" test ! -e "$WORK/continued-after-backup"
+for FAILURE in extensions schema; do
+  if (cd "$PROJ"; PROJECT_DIR="$PROJ"; docker() {
+    case "$*" in
+      *'ON_ERROR_STOP=1'*) [ "$FAILURE" != schema ] ;;
+      *) [ "$FAILURE" != extensions ] ;;
+    esac
+  }; source "$WORK/schema-check.sh"; touch "$WORK/continued-after-$FAILURE"); then
+    FAILS=$((FAILS+1)); echo "  ✗ $FAILURE failure accepted"
+  else echo "  ✓ $FAILURE failure stops the update"; fi
+  check "no continuation after failed $FAILURE" test ! -e "$WORK/continued-after-$FAILURE"
+done
+check "schema success allows continuation" bash -c 'set -e; cd "$1"; PROJECT_DIR="$1"; docker() { return 0; }; url_do_schema() { :; }; c_grn() { :; }; die() { exit 1; }; source "$2"' _ "$PROJ" "$WORK/schema-check.sh"
+
+# Run the real backup against an installation whose directory and Docker project
+# differ. The volume must come from the running WAHA container, never the folder.
+cp "$KIT/backup.sh" "$PROJ/hostgator-setup-kit/"
+cat > "$WORK/bin/docker" <<'DOCKER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DOCKER_LOG"
+case "$*" in
+  *'pg_dump '*) [ "${BACKUP_FAIL:-}" = dump ] && exit 1; printf '%s\n' '-- fixture dump'; exit 0 ;;
+  *' ps -q waha') printf 'waha-existing\n'; exit 0 ;;
+  *'inspect '*) [ "${BACKUP_FAIL:-}" = volume ] && exit 1; printf 'original-project_waha-data\n'; exit 0 ;;
+  *' tar czf '*) [ "${BACKUP_FAIL:-}" = archive ] && exit 1; exit 0 ;;
+esac
+exit 0
+DOCKER
+chmod +x "$WORK/bin/docker"
+: > "$DOCKER_LOG"
+run_backup() { (cd "$PROJ" && bash hostgator-setup-kit/backup.sh); }
+check "backup uses the existing volume after directory rename" run_backup
+check "archive mounted the actual legacy volume" grep -q 'original-project_waha-data:/data:ro' "$DOCKER_LOG"
+for BACKUP_FAIL in dump volume archive; do
+  export BACKUP_FAIL
+  if run_backup > "$WORK/backup-failure.out" 2>&1; then
+    echo "  ✗ backup accepted failure in $BACKUP_FAIL"; FAILS=$((FAILS+1))
+  else echo "  ✓ backup rejects failure in $BACKUP_FAIL"; fi
+done
+unset BACKUP_FAIL
 
 echo
 if [ "$FAILS" -eq 0 ]; then echo 'OK — release isolation and update preflight passed.'; else echo "FAILED — $FAILS assertion(s)."; fi

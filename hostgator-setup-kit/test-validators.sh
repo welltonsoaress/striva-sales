@@ -2314,7 +2314,8 @@ TMP_DDL_C="$(mktemp -d)"
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$DOCKER_LOG"
 case "$1" in
-  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; esac; exit 0 ;;
+  compose) case "$*" in *" exec "*) printf 'healthy\n{"data":{"status":"healthy"}}\n' ;; *' ps -q waha') printf 'waha-fixture\n' ;; esac; exit 0 ;;
+  inspect) printf 'legacy_waha-data\n'; exit 0 ;;
 esac
 exit 0
 STUB
@@ -2374,8 +2375,8 @@ STUB
 NEXT_PUBLIC_APP_URL='https://crm.exemplo.com.br'"
   # Sem token — o estado de quem instalou pelo caminho documentado.
   unset SUPABASE_ACCESS_TOKEN
-  um="$(rodar update.sh "" "$extra")"
-  dois="$(rodar update.sh "" "$extra")"
+  um="$(rodar update.sh --skip-backup "$extra")"
+  dois="$(rodar update.sh --skip-backup "$extra")"
 
   # CONTROLE POSITIVO: sem chegar ao fim, a ausência do aviso não mede nada.
   if ! printf '%s' "$um" | grep -q 'Atualização concluída'; then

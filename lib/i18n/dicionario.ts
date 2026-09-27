@@ -956,6 +956,12 @@ export const DICIONARIO: Traducoes = {
   "Digite uma expressão e aperte Enter": { es: "Escribe una expresión y presiona Enter" },
   Adicionar: { es: "Agregar" },
   // ─── Agentes de IA: funis do agente, fluxos de follow-up ───
+  "Novas reservas também são bloqueadas quando o contato tem um negócio aberto em um funil não marcado. Revise os funis deste assistente ou faça o agendamento manualmente.": {
+    es: "Las nuevas reservas también se bloquean cuando el contacto tiene un negocio abierto en un embudo no marcado. Revisa los embudos de este asistente o realiza la reserva manualmente.",
+  },
+  "turnos antigos não registraram confirmação de execução e ficaram fora dessa contagem.": {
+    es: "turnos anteriores no registraron confirmación de ejecución y quedaron fuera de este recuento.",
+  },
   "Em que negócios ele pode mexer": { es: "En qué negocios puede intervenir" },
   "Marque os funis que este assistente cuida. Ele conversa com qualquer cliente, mas só move, edita ou encerra negócio dos funis marcados aqui.": {
     es: "Marca los embudos que este asistente gestiona. Conversa con cualquier cliente, pero solo mueve, edita o cierra negocios de los embudos marcados aquí.",

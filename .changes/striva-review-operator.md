@@ -9,3 +9,5 @@ Login e cadastro passam a usar o nome da instalação salvo no banco, como o log
 O Operador recebe orientação explícita para conferir o lead e as etapas autorizadas antes de mover o funil. A métrica de ação considera somente escritas concluídas, excluindo consultas e recusas; turnos antigos sem confirmação são identificados separadamente. Bloqueios de reserva explicam como revisar os funis permitidos, mantendo as permissões existentes.
 
 Atualiza as dependências transitivas Hono e js-yaml para versões corrigidas dos avisos de segurança identificados antes da publicação.
+
+O atualizador interrompe a instalação se o backup ou a aplicação do banco falhar e confere app, worker e scheduler antes de declarar a instalação atualizada.

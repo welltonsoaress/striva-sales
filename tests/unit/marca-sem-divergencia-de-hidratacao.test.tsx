@@ -236,15 +236,22 @@ describe("catraca: `branding()` é server-only", () => {
     // A guarda contra o erro NOVO que o corte por bloco introduz: se o regex de
     // `/* … */` engolisse código, esta lista esvaziaria e a catraca ficaria verde
     // por cegueira — o mesmo defeito que ela existe para impedir, do lado do
-    // instrumento. Estes quatro são servidores e DEVEM chamar `branding()`.
+    // instrumento. Estes servidores ainda chamam o fallback `branding()`.
+    // Login/cadastro agora resolvem a marca do banco por `marcaDaSaida(null)`.
     const esperados = [
-      "app/(public)/login/page.tsx",
-      "app/(public)/signup/page.tsx",
       "app/onboarding/layout.tsx",
       "lib/legal/operador.ts",
     ];
     const vistos = varridos.filter(chamaBranding).map((f) => relativoEmBarraNormal(RAIZ, f));
     expect(esperados.filter((e) => !vistos.includes(e))).toEqual([]);
+  });
+
+  it("login e cadastro usam a mesma marca do banco que o layout", () => {
+    for (const pagina of ["login", "signup"]) {
+      const fonte = semComentarios(fs.readFileSync(path.join(RAIZ, `app/(public)/${pagina}/page.tsx`), "utf8"));
+      expect(fonte).toMatch(/await marcaDaSaida\(null\)/);
+      expect(fonte).not.toMatch(/\bbranding\(\)/);
+    }
   });
 
   it("nenhum componente `\"use client\"` chama `branding()`", () => {

@@ -59,11 +59,15 @@ TARGET_REF="$(ref_local_da_release "$TARGET_TAG")"
 RUNNING_CONTAINER="$(dc ps -q app 2>/dev/null | head -1)" || RUNNING_CONTAINER=""
 RUNNING_IMAGE_ID=""
 CURRENT_TAG=""
+CURRENT_REVISION=""
+CURRENT_SOURCE=""
 if [ -n "$RUNNING_CONTAINER" ]; then
   RUNNING_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$RUNNING_CONTAINER" 2>/dev/null)" || RUNNING_IMAGE_ID=""
   if [ -n "$RUNNING_IMAGE_ID" ]; then
     CURRENT_TAG="$(docker image inspect "$RUNNING_IMAGE_ID" --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}' 2>/dev/null)" || CURRENT_TAG=""
     [ "$CURRENT_TAG" = "<no value>" ] && CURRENT_TAG=""
+    CURRENT_REVISION="$(docker image inspect "$RUNNING_IMAGE_ID" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null)" || CURRENT_REVISION=""
+    CURRENT_SOURCE="$(docker image inspect "$RUNNING_IMAGE_ID" --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' 2>/dev/null)" || CURRENT_SOURCE=""
   fi
 fi
 
@@ -78,14 +82,17 @@ fi
 image_desatualizada() {
   # Comparar a imagem que roda com a referência da release-alvo. Um ID local ou
   # digest nunca vira endereço remoto; falha de consulta não significa "em dia".
-  local container running_id target_id
-  container="$(dc ps -q app 2>/dev/null | head -1)" || container=""
-  [ -n "$container" ] || return 0
-  running_id="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null)" || running_id=""
-  target_id="$(docker image inspect "${IMG_APP}:${VERSAO_ALVO}" --format '{{.Id}}' 2>/dev/null)" || target_id=""
-  [ -n "$target_id" ] || return 0
-  [ -n "$running_id" ] || return 0
-  [ "$running_id" != "$target_id" ]
+  local service image container running_id target_id
+  for service in app worker scheduler; do
+    case "$service" in app) image="$IMG_APP" ;; worker) image="$IMG_WORKER" ;; scheduler) image="$IMG_SCHEDULER" ;; esac
+    container="$(dc ps -q "$service" 2>/dev/null | head -1)" || container=""
+    [ -n "$container" ] || return 0
+    running_id="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null)" || running_id=""
+    target_id="$(docker image inspect "${image}:${VERSAO_ALVO}" --format '{{.Id}}' 2>/dev/null)" || target_id=""
+    [ -n "$target_id" ] && [ -n "$running_id" ] || return 0
+    [ "$running_id" = "$target_id" ] || return 0
+  done
+  return 1
 }
 
 MESMA_TAG=""
@@ -105,8 +112,14 @@ fi
 # no tempo continua possível, mas só quando alguém pede de propósito.
 # Quando o alvo é a MESMA tag já instalada, a guarda não se aplica: não há para
 # onde voltar no tempo — só a imagem é que ficou para trás.
-if [ -z "$FORCE" ] && [ -z "$MESMA_TAG" ]; then
-  is_already_in_head "$TARGET_REF" && CONTIDA=0 || CONTIDA=$?
+# O checkout pode ter avançado numa tentativa que falhou. Compare com o commit
+# que realmente roda; a distribuição legada inicia uma nova linha de versões.
+if [ -z "$FORCE" ] && [ -z "$MESMA_TAG" ] && [ "$CURRENT_SOURCE" = "https://github.com/$DISTRIBUTION_REPOSITORY" ]; then
+  if [[ "$CURRENT_REVISION" =~ ^[0-9a-f]{40,64}$ ]]; then
+    is_already_in_head "$TARGET_REF" "$CURRENT_REVISION" && CONTIDA=0 || CONTIDA=$?
+  else
+    CONTIDA=2
+  fi
   case "$CONTIDA" in
     0) refuse "A versão $TARGET_TAG é ANTERIOR à que já está instalada neste servidor.
      Instalar ela seria voltar no tempo e desligar coisas que você já tem.
@@ -144,9 +157,7 @@ if [ -z "$SKIP_BACKUP" ]; then
   if bash "$(dirname "$0")/backup.sh"; then
     c_grn "✓ backup feito — se algo der errado, dá pra restaurar (restore.sh)."
   else
-    c_ylw "⚠ o backup falhou. A atualização NÃO apaga dados (só reorganiza os contatos),"
-    c_ylw "  mas o ideal é ter backup. Ctrl+C pra parar e investigar; continuo em 8s…"
-    sleep 8
+    die "O backup falhou. A atualização foi interrompida antes de alterar código, banco ou serviços. Corrija o backup antes de tentar novamente."
   fi
 fi
 # Avisa o agente do host (se for ele quem está dirigindo) — é o que faz a tela
@@ -162,10 +173,8 @@ fi
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" codigo
 
 # ── 4. Banco: schema + correções de dados (schema ANTES do app) ──────────────
-# O baseline é idempotente e auto-curativo. Re-aplicar numa base que JÁ existe
-# gera erros do tipo "já existe" / "multiple primary keys" — isso é ESPERADO e
-# inofensivo (são objetos que já estavam lá). Filtramos esse ruído e só
-# mostramos problemas de verdade.
+# O baseline é idempotente (o CI o aplica duas vezes com ON_ERROR_STOP).
+# Qualquer falha interrompe a atualização antes da recriação dos serviços.
 # Re-aplicar o baseline é DDL, então vai por `url_do_schema` (_common.sh) e não
 # pela string do app: numa instalação em Supabase próprio, com a role menor no
 # `.env` como recomendamos, este passo passava a falhar em silêncio a cada
@@ -175,29 +184,15 @@ if [ -f supabase/baseline.sql ]; then
   # Extensões que o schema exige (idempotente; iguais ao install.sh).
   docker run --rm postgres:17-alpine psql "$(url_do_schema)" -c \
     "create extension if not exists vector with schema public; create extension if not exists citext with schema public; create extension if not exists pg_trgm with schema public;" \
-    >/dev/null 2>&1 || true
+    >/dev/null 2>&1 || die "Não consegui preparar as extensões do banco. Os serviços atuais continuam em execução."
 
-  raw="$(docker run --rm -i -v "$PROJECT_DIR/supabase/baseline.sql:/b.sql:ro" \
-        postgres:17-alpine psql "$(url_do_schema)" -f /b.sql 2>&1 || true)"
-
-  # Erros benignos ao re-aplicar sobre uma base existente:
-  benign='already exists|multiple primary keys|multiple default values|is already a member|already a partition'
-  unexpected="$(printf '%s\n' "$raw" | grep -iE 'ERROR|FATAL' | grep -viE "$benign" || true)"
-
-  if [ -n "$unexpected" ]; then
-    c_ylw "⚠ Apareceram avisos no banco que NÃO são os esperados:"
-    printf '%s\n' "$unexpected" | head -20
-    c_ylw "  O app pode ainda funcionar. Se algo estiver errado, restaure o backup (restore.sh)."
-    case "$unexpected" in
-      *permission\ denied*|*must\ be\ owner*|*permissão\ negada*)
-        c_ylw "  Os erros são de PERMISSÃO: a conexão do .env não é o dono do banco. Num Supabase"
-        c_ylw "  próprio, declare SUPABASE_DB_ADMIN_URL no .env — é ela que roda o schema." ;;
-    esac
-  else
-    c_grn "✓ banco atualizado (e conversas reorganizadas, se havia bagunça)."
+  if ! docker run --rm -i -v "$PROJECT_DIR/supabase/baseline.sql:/b.sql:ro" \
+        postgres:17-alpine psql "$(url_do_schema)" -v ON_ERROR_STOP=1 -f /b.sql >/dev/null 2>&1; then
+    die "Falha ao aplicar o schema. Os serviços não foram recriados. Preserve o backup e confira a conexão administrativa e as permissões do banco antes de tentar novamente."
   fi
+  c_grn "✓ banco atualizado (e conversas reorganizadas, se havia bagunça)."
 else
-  c_ylw "⚠ supabase/baseline.sql não encontrado — pulei a parte do banco."
+  die "supabase/baseline.sql não encontrado. A atualização foi interrompida antes de recriar os serviços."
 fi
 [ -n "${DESKCOMM_AGENT_REPORT:-}" ] && eval "${DESKCOMM_AGENT_REPORT_CMD}" banco
 

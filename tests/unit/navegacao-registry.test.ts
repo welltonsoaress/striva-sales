@@ -136,9 +136,9 @@ describe("sidebarGroups", () => {
     expect(ia?.items.map((i) => i.href)).toEqual([
       "/app/ai/agents",
       "/app/ai/followups",
-      "/app/ai/routers",
       "/app/ai/cases",
     ]);
+    expect(hubSections("ia", true, null).flatMap((s) => s.items.map((i) => i.href))).toContain("/app/ai/routers");
   });
 });
 

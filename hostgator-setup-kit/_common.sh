@@ -306,6 +306,7 @@ refuse() { c_red "✖ $*"; exit "$REFUSED_RC"; }
 # quem não sabe consertar.
 is_already_in_head() {
   local ref="$1"
+  local installed_ref="${2:-HEAD}"
   if [ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)" = "true" ]; then
     completar_historico_da_distribuicao || true
   fi
@@ -313,7 +314,8 @@ is_already_in_head() {
     false) : ;;
     *) return 2 ;;   # ainda raso, ou nem é repositório git: não dá pra saber
   esac
-  git merge-base --is-ancestor "$ref" HEAD 2>/dev/null && return 0
+  git rev-parse --verify --quiet "${installed_ref}^{commit}" >/dev/null || return 2
+  git merge-base --is-ancestor "$ref" "$installed_ref" 2>/dev/null && return 0
   return 1
 }
 
