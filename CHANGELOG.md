@@ -9,6 +9,12 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [1.0.1] — 2026-09-27
+
+### Corrigido
+
+- **A migração inicial executa a atualização dentro da pasta instalada** A ponte de migração agora muda para o diretório da instalação antes de chamar o atualizador. Assim, o Compose encontra os arquivos do projeto mesmo quando o comando inicial é executado a partir de outra pasta.
+
 ## [1.0.0] — 2026-09-27
 
 ### ⚠️ Requer atenção
@@ -35,4 +41,5 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 <!-- release-base: 0.0.0 -->
 
-[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...HEAD
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.1...HEAD
+[1.0.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...striva-v1.0.1
