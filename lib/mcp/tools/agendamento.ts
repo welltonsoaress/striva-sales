@@ -158,7 +158,9 @@ const horariosLivresShape = {
     .min(1)
     .max(MAXIMO_DE_DIAS)
     .optional()
-    .describe(`quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use ESTE campo se você não sabe a data de hoje.`),
+    .describe(
+      `quantos dias olhar a partir de agora (padrão ${DIAS_PADRAO}). Use somente para um período relativo; não envie junto com o campo dia.`,
+    ),
   /**
    * A data civil é deliberadamente diferente de um ISO com offset. O modelo sabe
    * que o cliente pediu "dia 13", mas não sabe onde começa esse dia no fuso da
@@ -170,7 +172,9 @@ const horariosLivresShape = {
     .regex(/^\d{4}-\d{2}-\d{2}$/, "dia deve estar em YYYY-MM-DD")
     .refine(dataYmdValida, "dia deve existir no calendário")
     .optional()
-    .describe("dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda."),
+    .describe(
+      "dia civil pedido pelo cliente, em YYYY-MM-DD. Use para uma data específica; o servidor aplica o fuso da agenda. Se também enviar dias_a_frente, este dia específico prevalece.",
+    ),
   owner_user_id: z.string().uuid().optional(),
   limite: z
     .number()
@@ -195,10 +199,14 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     "existem e `ha_mais` avisa que sobraram — lista cortada NÃO é agenda cheia. " +
     "QUANDO: informe `dias_a_frente` (a partir de agora — ex.: 7 para a próxima semana). " +
     "Para uma data que o cliente nomeou, use `dia` em YYYY-MM-DD; o servidor aplica o fuso da agenda. " +
+    "Se por engano também vier `dias_a_frente`, o dia nomeado pelo cliente prevalece. " +
     "NUNCA monte um intervalo UTC por conta própria. " +
     "Lista vazia NÃO é erro e NÃO significa que a agenda está cheia: leia `publicou_horarios`. " +
     "Se ele for false, o atendente ainda não publicou os horários dele — não invente horários e " +
     "não diga que está lotado; avise que alguém da equipe confirma. " +
+    "Se `google_cobertura_parcial` ou `agenda_externa_nunca_lida` forem true, ou " +
+    "`fontes_defasadas` não estiver vazio, não ofereça nem marque esses horários; peça que a equipe " +
+    "confira a sincronização da agenda externa. " +
     "Se `fuso_suposto` for true, o fuso da agenda não foi escolhido por ninguém, veio do padrão: " +
     "ofereça o horário pedindo confirmação em vez de afirmar.",
   inputSchema: horariosLivresShape,
@@ -207,17 +215,12 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
   requiresScope: "mcp:read",
   handler: async (input, ctx) => {
     const agora = new Date();
-    if (input.dia !== undefined && input.dias_a_frente !== undefined) {
-      return {
-        horarios: [],
-        motivo: "periodo_ambiguo",
-        mensagem: "informe um dia específico ou quantos dias olhar, não os dois.",
-      };
-    }
-
     // A faixa larga contém o dia civil em QUALQUER fuso. Depois de a coleta
     // revelar o fuso da regra, filtramos pelo mesmo dia local. Assim a IA não
     // converte "13/09" em meia-noite UTC e não perde a noite de Manaus.
+    // Se o modelo enviar também `dias_a_frente`, `dia` é a data explícita que
+    // a pessoa pediu e prevalece; rejeitar ambos fazia a ferramenta retornar
+    // `periodo_ambiguo` antes de consultar qualquer agenda.
     const inicioDoDiaUtc =
       input.dia === undefined ? null : new Date(`${input.dia}T00:00:00.000Z`);
     const de =
@@ -282,6 +285,10 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
       fuso_suposto: consulta.fusoSuposto,
       /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
       fontes_defasadas: consulta.fontesDefasadas,
+      /** Cobertura do Google incompleta para o período consultado. */
+      google_cobertura_parcial: consulta.googleCoberturaParcial,
+      /** A conexão existe, mas ainda não trouxe nenhum evento externo. */
+      agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
     };
   },
 };
