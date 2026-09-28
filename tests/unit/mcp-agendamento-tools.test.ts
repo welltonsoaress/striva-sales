@@ -140,14 +140,29 @@ describe("crm_find_free_slots", () => {
     expect(params.ate.toISOString()).toBe("2026-09-14T14:00:00.000Z");
   });
 
-  it("não aceita dia específico e período relativo juntos", async () => {
+  it("prioriza o dia nomeado quando o modelo também repete dias_a_frente", async () => {
+    respondeCom({
+      ...SUCESSO,
+      fusoDaRegra: "America/Fortaleza",
+      slots: [
+        {
+          inicio: new Date("2026-09-29T17:00:00.000Z"),
+          fim: new Date("2026-09-29T17:30:00.000Z"),
+        },
+      ],
+    });
     const r = (await crmFindFreeSlots.handler(
-      { event_type_slug: "c", dia: "2026-09-13", dias_a_frente: 7 },
+      { event_type_slug: "consulta", dia: "2026-09-29", dias_a_frente: 1 },
       ctx,
-    )) as { motivo: string; mensagem: string };
-    expect(r.motivo).toBe("periodo_ambiguo");
-    expect(r.mensagem).toMatch(/não os dois/);
-    expect(horariosLivresDaOrg).not.toHaveBeenCalled();
+    )) as { horarios: { inicio: string }[]; total_de_horarios: number; motivo?: string };
+
+    expect(vi.mocked(horariosLivresDaOrg)).toHaveBeenCalledOnce();
+    const params = vi.mocked(horariosLivresDaOrg).mock.calls[0]![2];
+    expect(params.de.toISOString()).toBe("2026-09-28T10:00:00.000Z");
+    expect(params.ate.toISOString()).toBe("2026-09-30T14:00:00.000Z");
+    expect(r.motivo).toBeUndefined();
+    expect(r.horarios.map((h) => h.inicio)).toEqual(["2026-09-29T17:00:00.000Z"]);
+    expect(r.total_de_horarios).toBe(1);
   });
 
   it("⚠️ a recusa que sai é a do CLIENTE, nunca a do OPERADOR", async () => {
@@ -170,20 +185,31 @@ describe("crm_find_free_slots", () => {
     expect(r.mensagem).not.toMatch(/timezone|Marina|campo/i);
   });
 
-  it("os dois sinais que a lista vazia esconde chegam ao MODELO", async () => {
+  it("a disponibilidade e a cobertura externa ficam explícitas para o MODELO", async () => {
     // `publicou_horarios` distingue "não publiquei" de "não tenho vaga" (DECISÃO 1.1);
-    // `fuso_suposto` avisa que ninguém escolheu o fuso (DECISÃO 20.2). A IA OFERECE
-    // horário — se a marca ficasse só na tela, ela afirmaria com confiança um horário
-    // que ninguém confirmou.
-    respondeCom({ ...SUCESSO, slots: [], publicouHorarios: false, fusoSuposto: true });
+    // `fuso_suposto` avisa que ninguém escolheu o fuso (DECISÃO 20.2). A IA também
+    // precisa saber se a lista do Google está incompleta: esses avisos existiam na
+    // rota da tela, mas eram descartados pela ferramenta de conversa.
+    respondeCom({
+      ...SUCESSO,
+      slots: [],
+      publicouHorarios: false,
+      fusoSuposto: true,
+      googleCoberturaParcial: true,
+      agendaExternaNuncaLida: true,
+    });
     const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as {
       horarios: unknown[];
       publicou_horarios: boolean;
       fuso_suposto: boolean;
+      google_cobertura_parcial: boolean;
+      agenda_externa_nunca_lida: boolean;
     };
     expect(r.horarios).toEqual([]);
     expect(r.publicou_horarios).toBe(false);
     expect(r.fuso_suposto).toBe(true);
+    expect(r.google_cobertura_parcial).toBe(true);
+    expect(r.agenda_externa_nunca_lida).toBe(true);
   });
 
   it("CONTROLE: o sucesso devolve os horários em ISO — senão os casos acima passariam por vazio", async () => {
