@@ -9,6 +9,12 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [1.0.2] — 2026-09-28
+
+### Corrigido
+
+- **A IA respeita a data e os avisos da agenda** Quando a IA envia a data pedida junto com um período relativo redundante, a consulta usa a data específica. A ferramenta também informa se a agenda Google está parcialmente sincronizada, para o agente não oferecer horários sem essa confirmação.
+
 ## [1.0.1] — 2026-09-27
 
 ### Corrigido
@@ -41,5 +47,6 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 <!-- release-base: 0.0.0 -->
 
-[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.1...HEAD
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.2...HEAD
+[1.0.2]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.1...striva-v1.0.2
 [1.0.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...striva-v1.0.1
