@@ -13,7 +13,7 @@
  *   - "Publicado vN + Rascunho vM" (formulário mostra a draft)
  */
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -307,7 +307,10 @@ export function AgentForm(props: Props) {
    * navegação — o rascunho é um só, e uma URL por papel faria o usuário achar
    * que salvou um e não o outro.
    */
-  const [papel, setPapel] = React.useState<"conversa" | "operacao" | "seguranca">("conversa");
+  const requestedPipeline = useSearchParams().get("pipeline");
+  const [papel, setPapel] = React.useState<"conversa" | "operacao" | "seguranca">(
+    requestedPipeline && funis.some((funil) => funil.id === requestedPipeline) ? "operacao" : "conversa",
+  );
 
   const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
 

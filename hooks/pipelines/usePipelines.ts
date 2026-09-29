@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
 import { apiClient } from "@/lib/api/client";
+import type { CriarFunilInput } from "@/lib/pipelines/template-input";
 
 /**
  * Criar, editar e arquivar FUNIL — a escrita da tela do Kanban.
@@ -57,7 +58,7 @@ function useReler() {
 export function useCriarFunil() {
   const reler = useReler();
   return useMutation({
-    mutationFn: (name: string) => apiClient.post<Resposta>(ROTA, { name }),
+    mutationFn: (input: CriarFunilInput) => apiClient.post<Resposta>(ROTA, input),
     onSettled: reler,
   });
 }

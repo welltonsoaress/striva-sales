@@ -1,4 +1,5 @@
 "use client";
+import { flowQueryKey } from "./flow-query-key";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { LeadStage } from "@/lib/agent-engine/agent/lead-state";
@@ -69,5 +70,6 @@ export function useSaveAgentMapping(pipelineId: string) {
     onError: () => {
       void qc.invalidateQueries({ queryKey: chave(pipelineId) });
     },
+    onSettled: () => qc.invalidateQueries({ queryKey: flowQueryKey(pipelineId) }),
   });
 }

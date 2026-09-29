@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 
 import { chaveDoFunil } from "./useAgentMapping";
+import { flowQueryKey } from "./flow-query-key";
 
 /**
  * Criar, editar e arquivar etapa do funil — a escrita da tela de etapas.
@@ -43,6 +44,7 @@ function useReler(pipelineId: string) {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: chaveDoFunil(pipelineId) });
+    void qc.invalidateQueries({ queryKey: flowQueryKey(pipelineId) });
   };
 }
 

@@ -85,6 +85,7 @@ const TELAS = ["/app/inbox", "/app/kanban", "/app/contacts", "/app/metrics", "/a
  */
 const DADO_DO_TENANT = new Set([
   "Entregue", // crm_stages.name, do seed de e2e
+  "Aguardando pagamento", // crm_stages.name, do funil padrão semeado para a organização
 ]);
 
 const CHAVES_QUE_MUDAM = new Set(

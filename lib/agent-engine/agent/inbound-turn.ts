@@ -2875,6 +2875,7 @@ async function executarTurnoDoAgente(
               ...(update.transition.reason !== undefined
                 ? { reason: update.transition.reason }
                 : {}),
+              ...(agentConfig !== null ? { pipelineIds: agentConfig.pipelineIds } : {}),
             });
             if (!mirror.ok) {
               runLog.warn('espelho de stage no CRM falhou — harness mantido', {

@@ -1,2 +1,20 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 110" role="img" aria-labelledby="title desc"><title id="title">Striva Sales — tema escuro</title><desc id="desc">S geométrico vetorial com módulo destacado e lettering Striva Sales sem dependência de fonte.</desc><g fill="#a78bfa" transform="translate(4 2) scale(0.84)"><path d="M94 8H48C29 8 18 19 18 36c0 15 10 24 28 29l20 6c7 2 10 5 10 10 0 6-5 9-14 9H18v14h45c20 0 31-11 31-28 0-14-8-23-26-29l-20-6c-7-2-10-5-10-10 0-6 4-9 12-9h44Z"/><rect x="3" y="3" width="12" height="12" rx="3" fill="#7c3aed"/></g><g stroke="#f5f4ef" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke-width="8"><path transform="translate(108 22)" d="M34 4H15C7 4 3 9 3 16c0 7 5 10 13 12l9 2c6 1 9 4 9 9 0 6-5 9-12 9H3"/><path transform="translate(151 22)" d="M3 4H37M20 4V48"/><path transform="translate(197 22)" d="M3 48V4h20c9 0 14 5 14 12s-5 12-14 12H3m18 0 17 20"/><path transform="translate(245 22)" d="M4 4V48"/><path transform="translate(263 22)" d="M3 4 20 48 37 4"/><path transform="translate(309 22)" d="M3 48 20 4l17 44M9 33h22"/></g><g stroke="#8e8b7f" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke-width="4.5"><path transform="translate(110 83)" d="M12 2H5C2 2 1 4 1 6c0 3 2 4 5 5l3 1c3 1 4 2 4 4 0 3-2 4-5 4H1"/><path transform="translate(129 83)" d="M1 20 8 2l7 18M4 14h8"/><path transform="translate(150 83)" d="M2 2v18h13"/><path transform="translate(169 83)" d="M14 2H2v18h12M2 11h10"/><path transform="translate(190 83)" d="M12 2H5C2 2 1 4 1 6c0 3 2 4 5 5l3 1c3 1 4 2 4 4 0 3-2 4-5 4H1"/></g> </svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" role="img" aria-labelledby="title desc">
+  <title id="title">Striva Sales — tema escuro</title>
+  <desc id="desc">Símbolo roxo de fita contínua, divisor vertical e nome Striva Sales sem fundo.</desc>
+  <defs>
+    <linearGradient id="striva-purple" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="100" y2="0">
+      <stop offset="0" stop-color="#7c3aed" />
+      <stop offset="0.58" stop-color="#a78bfa" />
+      <stop offset="1" stop-color="#d5ccff" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(2 5) scale(0.9)">
+    <path d="M73 13 C55 24 30 42 11 58 C4 64 18 72 26 66 C38 57 62 58 82 58 C88 58 92 62 88 67 C84 72 54 74 42 84" fill="none" stroke="url(#striva-purple)" stroke-width="14" stroke-linecap="butt" stroke-linejoin="round" />
+    <path d="M80 2 75.8 19.5 68.5 7.6Z M33 98 38.3 78 47.2 88.8Z" fill="url(#striva-purple)" />
+    <circle cx="90" cy="15" r="8" fill="url(#striva-purple)" />
+    <circle cx="14" cy="87" r="7.5" fill="#7c3aed" />
+  </g>
+  <line x1="104" y1="18" x2="104" y2="82" stroke="#46433b" stroke-width="1.25" />
+  <text x="124" y="54" fill="#f5f4ef" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-size="46" font-weight="700" letter-spacing="-1.2">Striva</text>
+  <text x="190" y="78" text-anchor="middle" fill="#a78bfa" font-family="Atkinson Hyperlegible, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="8.2">SALES</text>
+</svg>

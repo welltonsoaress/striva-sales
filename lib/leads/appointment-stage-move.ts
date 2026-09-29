@@ -5,12 +5,13 @@ import { logger } from "@/lib/logger";
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import type { Transicao } from "@/lib/agenda/laco";
+import { LEGACY_EVENT_STAGE_SLUGS } from "@/lib/pipelines/flow-config";
 
 /**
  * Espelha a transição de um agendamento (`calendar_appointments.status`) no
- * funil do CRM — MESMO padrão opt-in de `handoff-stage-move.ts`: a ponte é o
- * `slug` da etapa, e pipeline sem a etapa correspondente não muda de
- * comportamento nenhum (`sem_etapa_mapeada`, igual a `sem_etapa_de_handoff`).
+ * funil do CRM. Funis novos escolhem o destino pelo id ativo; instalações
+ * antigas continuam usando os slugs históricos até que o dono configure um
+ * destino pela tela.
  *
  * ⚠️ SÓ `pending` E `confirmed` AVANÇAM O CARD, de propósito. As demais
  * transições (`rescheduled`, `cancelled`, `completed`, `no_show`) não têm
@@ -20,8 +21,8 @@ import type { Transicao } from "@/lib/agenda/laco";
  * humano arrastando o card, nunca o agendamento sozinho.
  */
 export const SLUG_ETAPA_POR_TRANSICAO: Partial<Record<Transicao, string>> = {
-  pending: "agendamento-solicitado",
-  confirmed: "agendado",
+  pending: LEGACY_EVENT_STAGE_SLUGS.appointment_pending,
+  confirmed: LEGACY_EVENT_STAGE_SLUGS.appointment_confirmed,
 };
 
 export interface ResultadoDoMovimentoDeAgendamento {
@@ -35,6 +36,7 @@ export interface ResultadoDoMovimentoDeAgendamento {
     | "lead_fechado"
     | "conflito_humano"
     | "falha_de_escrita"
+    | "destino_invalido"
     | "indisponivel";
 }
 
@@ -82,13 +84,47 @@ export async function moverLeadParaEtapaDeAgendamento(
     return { moveu: false, motivo: "lead_fechado" };
   }
 
-  const { data: etapa, error: erroEtapa } = await admin
-    .from("crm_stages")
-    .select("id, name")
-    .eq("pipeline_id", leadRow.pipeline_id)
-    .eq("slug", slugAlvo)
+  const evento = input.transicao === "pending" ? "appointment_pending" : "appointment_confirmed";
+  const { data: pipeline, error: erroPipeline } = await admin
+    .from("crm_pipelines")
+    .select("settings")
     .eq("is_archived", false)
+    .eq("id", leadRow.pipeline_id)
+    .eq("organization_id", input.organizationId)
     .maybeSingle();
+  if (erroPipeline) {
+    logger.warn("[appointment-stage-move] leitura da configuração do funil falhou", {
+      lead_id: leadRow.id,
+      organization_id: input.organizationId,
+      error: erroPipeline.message,
+    });
+    return { moveu: false, motivo: "indisponivel" };
+  }
+  if (!pipeline) return { moveu: false, motivo: "destino_invalido" };
+  const settings = (pipeline?.settings ?? {}) as { flow?: { event_stage_ids?: Record<string, string | null | undefined> } };
+  const destinos = settings.flow?.event_stage_ids;
+  const temConfig = destinos !== undefined && Object.prototype.hasOwnProperty.call(destinos, evento);
+  const stageIdConfigurado = temConfig ? destinos?.[evento] ?? null : null;
+  if (temConfig && !stageIdConfigurado) {
+    logger.warn("[appointment-stage-move] destino do agendamento não configurado", {
+      lead_id: leadRow.id,
+      organization_id: input.organizationId,
+      pipeline_id: leadRow.pipeline_id,
+      transition: input.transicao,
+    });
+    return { moveu: false, motivo: "sem_etapa_mapeada" };
+  }
+
+  let etapaQuery = admin
+    .from("crm_stages")
+    .select("id, name, is_won, is_lost")
+    .eq("organization_id", input.organizationId)
+    .eq("pipeline_id", leadRow.pipeline_id)
+    .eq("is_archived", false);
+  etapaQuery = stageIdConfigurado
+    ? etapaQuery.eq("id", stageIdConfigurado)
+    : etapaQuery.eq("slug", slugAlvo);
+  const { data: etapa, error: erroEtapa } = await etapaQuery.maybeSingle();
   if (erroEtapa) {
     logger.warn("[appointment-stage-move] leitura da etapa alvo falhou", {
       lead_id: leadRow.id,
@@ -100,7 +136,12 @@ export async function moverLeadParaEtapaDeAgendamento(
   if (!etapa) {
     return { moveu: false, motivo: "sem_etapa_mapeada" };
   }
-  const etapaRow = etapa as { id: string; name: string };
+  const etapaRow = etapa as { id: string; name: string; is_won: boolean; is_lost: boolean };
+  // O resultado da etapa pode ter sido editado depois da associação.
+  if (etapaRow.is_lost || ((input.transicao === "pending") && etapaRow.is_won)) {
+    logger.warn("pipeline_event_destination_invalid", { organization_id: input.organizationId, pipeline_id: leadRow.pipeline_id, stage_id: etapaRow.id });
+    return { moveu: false, motivo: "destino_invalido" };
+  }
 
   if (leadRow.stage_id === etapaRow.id) {
     return { moveu: false, motivo: "ja_esta_la" };
@@ -119,6 +160,9 @@ export async function moverLeadParaEtapaDeAgendamento(
     .from("crm_leads")
     .update({ stage_id: etapaRow.id })
     .eq("id", leadRow.id)
+    .eq("organization_id", input.organizationId)
+    .eq("pipeline_id", leadRow.pipeline_id)
+    .eq("status", "open")
     // Trava otimista pelo estágio de ORIGEM: se um humano moveu o card entre a
     // leitura e a escrita, a decisão dele vence.
     .eq("stage_id", leadRow.stage_id)
@@ -168,7 +212,7 @@ export async function moverLeadParaEtapaDeAgendamento(
       pipeline_id: leadRow.pipeline_id,
       from_stage_id: leadRow.stage_id,
       to_stage_id: etapaRow.id,
-      status: leadRow.status,
+      status: etapaRow.is_won ? "won" : "open",
     },
     p_metadata: { actor_kind: "system", source: "appointment-stage-move", transicao: input.transicao },
     p_organization_id: input.organizationId,
