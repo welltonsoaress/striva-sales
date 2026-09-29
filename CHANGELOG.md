@@ -9,6 +9,16 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [1.1.0] — 2026-09-29
+
+### Alterado
+
+- **Crie funis por modelos de negócio e conecte etapas ao atendimento** Na tela Funis, escolha um modelo por tipo de negócio, revise etapas, critérios e destinos da agenda ou do handoff, e crie o quadro com as associações já salvas. As mesmas orientações do catálogo aparecem no onboarding e ficam disponíveis ao agente. As ligações usam IDs de etapa, preservam o histórico e continuam válidas após renomear colunas. Etapas da agenda podem ser revisadas para não encerrar como ganho antes da hora.
+
+  A criação mostra o próximo passo para autorizar o agente pela versão publicada. Edições de etapas atualizam as regras na mesma tela, falhas de criação aparecem no diálogo e salvamentos concorrentes são recusados sem sobrescrever configurações. Agenda e handoff revalidam o destino, e a revisão de oportunidades considera outros funis do contato.
+
+- **Veja a nova identidade visual do Striva Sales** O símbolo de fita roxa contínua e a assinatura horizontal “Striva SALES” agora aparecem no login, no menu e no favicon padrão. As curvas têm espessura uniforme e os dois pontos ficam separados do traço; a imagem não tem fundo. Marcas configuradas pela instalação ou pela organização continuam sendo respeitadas.
+
 ## [1.0.2] — 2026-09-28
 
 ### Corrigido
@@ -47,6 +57,7 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 <!-- release-base: 0.0.0 -->
 
-[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.2...HEAD
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.0...HEAD
+[1.1.0]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.2...striva-v1.1.0
 [1.0.2]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.1...striva-v1.0.2
 [1.0.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...striva-v1.0.1
