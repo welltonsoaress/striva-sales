@@ -24,6 +24,16 @@ describe('mirrorLeadStageToCrm', () => {
     });
   });
 
+  it('repassa ao espelho o escopo de funis publicado do agente', async () => {
+    const sync = vi.fn().mockResolvedValue({ moveu: true, motivo: 'movido' });
+    await mirrorLeadStageToCrm(db, cfg as never, {
+      tenantId: 'org-1', leadId: 'contato-1', toStage: 'qualified', pipelineIds: ['pipeline-1'],
+    }, { sync });
+    expect(sync).toHaveBeenCalledWith(cfg.supabase, {
+      organizationId: 'org-1', contactId: 'contato-1', passo: 'qualified', escopoDeFunis: ['pipeline-1'],
+    });
+  });
+
   it('estágio já ocupado é sucesso, não falha', async () => {
     const sync = vi.fn().mockResolvedValue({ moveu: false, motivo: 'ja_esta_la' });
     const r = await mirrorLeadStageToCrm(

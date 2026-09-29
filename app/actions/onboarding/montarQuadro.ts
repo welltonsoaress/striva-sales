@@ -22,6 +22,9 @@ import {
   validarProposta,
   type PropostaDeFunil,
 } from "@/lib/onboarding/proposta-de-funil";
+import { EXPLICACAO_DO_PASSO } from "@/lib/leads/agent-mapping";
+import { savePipelineSettings } from "@/lib/pipelines/save-settings";
+import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
 import { escolherPacotePorTexto, sugerirFunil, type Sugestao } from "@/lib/onboarding/sugerir-funil";
 import { requireOnboardingCtx, patchOnboardingState, loadOnboardingState, OnboardingError } from "./_shared";
 
@@ -211,6 +214,45 @@ export async function aplicarQuadro(formData: FormData): Promise<ResultadoDoQuad
   const veredito = validarProposta(proposta);
   if (!veredito.ok) return { ok: false, erro: veredito.erros.join(" ") };
 
+  const templateIdBruto = formData.get("template_id");
+  const templateId = typeof templateIdBruto === "string" && templateIdBruto ? templateIdBruto : null;
+  const pacote = templateId ? PACOTES.find((item) => item.id === templateId) : null;
+  if (templateId && !pacote) return { ok: false, erro: "Este modelo não está mais disponível. Escolha outro e tente novamente." };
+  const chavesDasEtapas = proposta.etapas.flatMap((etapa) => etapa.chave ? [etapa.chave] : []);
+  if (new Set(chavesDasEtapas).size !== chavesDasEtapas.length) {
+    return { ok: false, erro: "Cada etapa precisa ter uma ligação própria. Recarregue o modelo antes de continuar." };
+  }
+
+  let destinosInformados: Record<string, unknown> | null = null;
+  const destinosBrutos = formData.get("event_stage_keys");
+  if (typeof destinosBrutos === "string") {
+    try {
+      const parsed = JSON.parse(destinosBrutos) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { ok: false, erro: "Revise os destinos dos acontecimentos do funil." };
+      destinosInformados = parsed as Record<string, unknown>;
+    } catch {
+      return { ok: false, erro: "Não consegui ler os destinos dos acontecimentos do funil." };
+    }
+  }
+  const destino = (evento: "appointment_pending" | "appointment_confirmed" | "human_handoff", chavePadrao: string | null) => {
+    const valor = destinosInformados && Object.hasOwn(destinosInformados, evento) ? destinosInformados[evento] : chavePadrao;
+    return typeof valor === "string" && chavesDasEtapas.includes(valor) ? valor : valor === null ? null : undefined;
+  };
+  const chavesDestino = {
+    appointment_pending: destino("appointment_pending", pacote?.destinosDeAgendamento?.pending ?? null),
+    appointment_confirmed: destino("appointment_confirmed", pacote?.destinosDeAgendamento?.confirmed ?? null),
+    human_handoff: destino("human_handoff", null),
+  };
+  if (Object.values(chavesDestino).some((chave) => chave === undefined)) {
+    return { ok: false, erro: "Escolha uma etapa existente para cada acontecimento, ou deixe sem movimentação." };
+  }
+  const etapaPendente = proposta.etapas.find((etapa) => etapa.chave === chavesDestino.appointment_pending);
+  const etapaConfirmada = proposta.etapas.find((etapa) => etapa.chave === chavesDestino.appointment_confirmed);
+  const etapaHandoff = proposta.etapas.find((etapa) => etapa.chave === chavesDestino.human_handoff);
+  if (etapaPendente && (etapaPendente.passo === "won" || etapaPendente.passo === "lost")) return { ok: false, erro: "Um horário solicitado precisa ir para uma etapa em andamento." };
+  if (etapaConfirmada?.passo === "lost") return { ok: false, erro: "Um agendamento confirmado não pode levar para uma etapa de perda." };
+  if (etapaHandoff && (etapaHandoff.passo === "won" || etapaHandoff.passo === "lost")) return { ok: false, erro: "Uma transferência para uma pessoa precisa ir para uma etapa em andamento." };
+
   const admin = createAdminClient();
   const atual = await carregarQuadroAtual(admin, ctx.orgId);
   if (!atual) return { ok: false, erro: "Não encontrei o quadro desta empresa." };
@@ -251,6 +293,51 @@ export async function aplicarQuadro(formData: FormData): Promise<ResultadoDoQuad
     return { ok: false, erro: explicarRecusa(r.motivo, r.quantos) };
   }
 
+  // O onboarding também usa o catálogo compartilhado: grava os critérios e as
+  // ligações por id de etapa para que renomear uma coluna não desfaça o fluxo.
+  const { data: etapasAtivas, error: erroEtapas } = await admin
+    .from("crm_stages")
+    .select("id, name")
+    .eq("organization_id", ctx.orgId)
+    .eq("pipeline_id", atual.pipelineId)
+    .eq("is_archived", false);
+  if (erroEtapas) return { ok: false, erro: "O quadro foi criado, mas não consegui salvar as orientações das etapas. Abra Configurações › Funis para concluir." };
+  const etapaPorNome = new Map(((etapasAtivas ?? []) as Array<{ id: string; name: string }>).map((etapa) => [etapa.name, etapa]));
+  const stageGuidance: Record<string, { purpose: string }> = {};
+  for (const etapa of proposta.etapas) {
+    const criada = etapaPorNome.get(etapa.nome);
+    if (criada) {
+      const purpose = etapa.orientacao ?? (etapa.passo ? EXPLICACAO_DO_PASSO[etapa.passo] : "Etapa movimentada manualmente pela equipe quando esta for a situação do negócio.");
+      stageGuidance[criada.id] = { purpose };
+    }
+  }
+  const idDoDestino = (chave: string | null | undefined) => chave ? etapaPorNome.get(proposta.etapas.find((etapa) => etapa.chave === chave)?.nome ?? "")?.id ?? null : null;
+  const { data: pipelineAtual, error: erroLerPipeline } = await admin
+    .from("crm_pipelines")
+    .select("settings, updated_at")
+    .eq("id", atual.pipelineId)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+  if (erroLerPipeline || !pipelineAtual) return { ok: false, erro: "O quadro foi criado, mas não consegui ler suas configurações. Abra Configurações › Funis para concluir." };
+  const settingsAtuais = pipelineAtual.settings && typeof pipelineAtual.settings === "object" ? pipelineAtual.settings as Record<string, unknown> : {};
+  const flowAtual = settingsAtuais.flow && typeof settingsAtuais.flow === "object" ? settingsAtuais.flow as Record<string, unknown> : {};
+  const flow = {
+    ...flowAtual,
+    stage_guidance: stageGuidance,
+    event_stage_ids: {
+      appointment_pending: idDoDestino(chavesDestino.appointment_pending),
+      appointment_confirmed: idDoDestino(chavesDestino.appointment_confirmed),
+      human_handoff: idDoDestino(chavesDestino.human_handoff),
+    },
+    template_id: templateId,
+  };
+  try {
+    const saved = await savePipelineSettings(admin, { organizationId: ctx.orgId, pipelineId: atual.pipelineId, expectedUpdatedAt: pipelineAtual.updated_at, settings: { ...settingsAtuais, flow } });
+    if (!saved) return { ok: false, erro: "O quadro foi criado, mas suas configurações mudaram durante a gravação. Abra Configurações › Funis para revisar as ligações." };
+  } catch {
+    return { ok: false, erro: "O quadro foi criado, mas não consegui ativar as ligações dos acontecimentos. Abra Configurações › Funis para concluir." };
+  }
+
   const origem = String(formData.get("origem") ?? "pacote") === "ia" ? "ia" : "pacote";
   try {
     await patchOnboardingState(ctx.orgId, {
@@ -267,7 +354,7 @@ export async function aplicarQuadro(formData: FormData): Promise<ResultadoDoQuad
     organizationId: ctx.orgId,
     resourceType: "crm_pipeline",
     resourceId: atual.pipelineId,
-    metadata: { origem, etapas: proposta.etapas.length, nome: proposta.nome },
+    metadata: { origem, template_id: templateId, etapas: proposta.etapas.length, nome: proposta.nome },
   });
 
   redirect("/onboarding");

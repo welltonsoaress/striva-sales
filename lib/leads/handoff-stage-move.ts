@@ -5,27 +5,27 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
+import { LEGACY_EVENT_STAGE_SLUGS } from "@/lib/pipelines/flow-config";
 
 /**
  * Move o card do lead para a etapa do funil que o tenant marcou como destino
  * de handoff, sempre que o orquestrador (`lib/ai/handoff/orchestrator.ts`)
  * decide que um atendimento precisa de humano.
  *
- * ⚠️ OPT-IN POR PIPELINE, via `slug`, não `requires_human`. `requires_human`
+ * ⚠️ OPT-IN POR PIPELINE, via etapa escolhida, não `requires_human`. `requires_human`
  * já é usado por `checkG4Stage` no sentido INVERSO (lead JÁ está numa etapa
  * assim → dispara handoff) e mais de uma etapa pode carregar essa flag no
  * mesmo pipeline (ex.: "Repassado para o Fernando", que é atribuição a uma
  * PESSOA, não "precisa de humano agora"). `slug` é estável, único por
- * pipeline (`uniq_crm_stages_pipeline_slug`) e é exatamente o campo que este
- * schema já tem para apontar sem ambiguidade — different de `name`, que o
- * tenant pode renomear a qualquer momento.
+ * O destino novo é salvo pelo id da etapa e pode ser renomeado sem perder a
+ * ligação. Instalações antigas continuam usando o slug histórico.
  *
  * Pipeline SEM essa etapa (todo clone novo, por padrão) não muda de
  * comportamento nenhum: `sem_etapa_de_handoff` é resposta legítima, igual ao
  * `sem_mapeamento` de `agent-stage-sync.ts` — não inventamos etapa que o
  * tenant não criou.
  */
-export const SLUG_ETAPA_HANDOFF = "chamar-humano";
+export const SLUG_ETAPA_HANDOFF = LEGACY_EVENT_STAGE_SLUGS.human_handoff;
 
 export interface ResultadoDoMovimentoDeHandoff {
   moveu: boolean;
@@ -37,6 +37,7 @@ export interface ResultadoDoMovimentoDeHandoff {
     | "lead_fechado"
     | "conflito_humano"
     | "falha_de_escrita"
+    | "destino_invalido"
     | "indisponivel";
 }
 
@@ -81,13 +82,45 @@ export async function moverLeadParaEtapaDeHandoff(
     return { moveu: false, motivo: "lead_fechado" };
   }
 
-  const { data: etapa, error: erroEtapa } = await admin
-    .from("crm_stages")
-    .select("id, name")
-    .eq("pipeline_id", leadRow.pipeline_id)
-    .eq("slug", SLUG_ETAPA_HANDOFF)
+  const { data: pipeline, error: erroPipeline } = await admin
+    .from("crm_pipelines")
+    .select("settings")
     .eq("is_archived", false)
+    .eq("id", leadRow.pipeline_id)
+    .eq("organization_id", input.organizationId)
     .maybeSingle();
+  if (erroPipeline) {
+    logger.warn("[handoff-stage-move] leitura da configuração do funil falhou", {
+      lead_id: leadRow.id,
+      organization_id: input.organizationId,
+      error: erroPipeline.message,
+    });
+    return { moveu: false, motivo: "indisponivel" };
+  }
+  if (!pipeline) return { moveu: false, motivo: "destino_invalido" };
+  const settings = (pipeline?.settings ?? {}) as { flow?: { event_stage_ids?: Record<string, string | null | undefined> } };
+  const destinos = settings.flow?.event_stage_ids;
+  const temConfig = destinos !== undefined && Object.prototype.hasOwnProperty.call(destinos, "human_handoff");
+  const stageIdConfigurado = temConfig ? destinos?.human_handoff ?? null : null;
+  if (temConfig && !stageIdConfigurado) {
+    logger.warn("[handoff-stage-move] destino de transferência para pessoa não configurado", {
+      lead_id: leadRow.id,
+      organization_id: input.organizationId,
+      pipeline_id: leadRow.pipeline_id,
+    });
+    return { moveu: false, motivo: "sem_etapa_de_handoff" };
+  }
+
+  let etapaQuery = admin
+    .from("crm_stages")
+    .select("id, name, is_won, is_lost")
+    .eq("organization_id", input.organizationId)
+    .eq("pipeline_id", leadRow.pipeline_id)
+    .eq("is_archived", false);
+  etapaQuery = stageIdConfigurado
+    ? etapaQuery.eq("id", stageIdConfigurado)
+    : etapaQuery.eq("slug", SLUG_ETAPA_HANDOFF);
+  const { data: etapa, error: erroEtapa } = await etapaQuery.maybeSingle();
   if (erroEtapa) {
     logger.warn("[handoff-stage-move] leitura da etapa de handoff falhou", {
       lead_id: leadRow.id,
@@ -99,7 +132,12 @@ export async function moverLeadParaEtapaDeHandoff(
   if (!etapa) {
     return { moveu: false, motivo: "sem_etapa_de_handoff" };
   }
-  const etapaRow = etapa as { id: string; name: string };
+  const etapaRow = etapa as { id: string; name: string; is_won: boolean; is_lost: boolean };
+  // O resultado da etapa pode ter sido editado depois da associação.
+  if (etapaRow.is_lost || etapaRow.is_won) {
+    logger.warn("pipeline_event_destination_invalid", { organization_id: input.organizationId, pipeline_id: leadRow.pipeline_id, stage_id: etapaRow.id });
+    return { moveu: false, motivo: "destino_invalido" };
+  }
 
   if (leadRow.stage_id === etapaRow.id) {
     return { moveu: false, motivo: "ja_esta_la" };
@@ -124,6 +162,9 @@ export async function moverLeadParaEtapaDeHandoff(
     .from("crm_leads")
     .update({ stage_id: etapaRow.id })
     .eq("id", leadRow.id)
+    .eq("organization_id", input.organizationId)
+    .eq("pipeline_id", leadRow.pipeline_id)
+    .eq("status", "open")
     // Trava otimista pelo estágio de ORIGEM: se um humano moveu o card entre a
     // leitura e a escrita, a decisão dele vence.
     .eq("stage_id", leadRow.stage_id)
@@ -173,7 +214,7 @@ export async function moverLeadParaEtapaDeHandoff(
       pipeline_id: leadRow.pipeline_id,
       from_stage_id: leadRow.stage_id,
       to_stage_id: etapaRow.id,
-      status: leadRow.status,
+      status: etapaRow.is_won ? "won" : "open",
     },
     p_metadata: { actor_kind: "system", source: "handoff-stage-move", motivo_do_handoff: input.reason },
     p_organization_id: input.organizationId,

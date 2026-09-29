@@ -11,13 +11,16 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
+
+const navigation = vi.hoisted(() => ({ search: "" }));
+beforeEach(() => { navigation.search = ""; });
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/app/ai/agents/a1",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(navigation.search),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 
@@ -151,4 +154,14 @@ describe("o editor abre a versão que a regra escolheu", () => {
     });
     expect(texto).toBe("rascunho novo em andamento");
   });
+});
+
+
+it("o link do funil abre a aba de operação sem conceder permissão automaticamente", () => {
+  navigation.search = "pipeline=p1";
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={qc}><AgentForm mode="edit" agent={AGENTE as never} credentials={CREDENCIAIS as never} channelSessions={SESSOES as never} draft={null} published={versao(7, "published", PROMPT_BOM) as never} funis={[{ id: "p1", name: "Vendas", slug: "vendas", description: null, position: 1, is_default: false }]} /></QueryClientProvider>);
+  expect(screen.getByTestId("papel-operacao")).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("checkbox", { name: "Vendas" })).not.toBeChecked();
+  qc.clear();
 });

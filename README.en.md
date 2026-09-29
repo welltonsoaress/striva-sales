@@ -4,7 +4,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/brand/striva-sales-dark.svg">
-  <img src="docs/brand/striva-sales-light.svg" alt="Striva Sales" width="420">
+  <img src="docs/brand/striva-sales-light.svg" alt="Striva Sales" width="330">
 </picture>
 
 # 🛠️ Striva Sales — The open-source AI Sales OS for WhatsApp

@@ -38,6 +38,7 @@ import {
   type UpdateDeMarcacao,
 } from "@/lib/leads/stage-editing";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
+import { lerFlowConfig } from "@/lib/pipelines/flow-config";
 
 type SB = SupabaseClient;
 
@@ -64,11 +65,14 @@ export interface EtapaVisivel {
   /** `user` | `ai` | `system` — `null` nas etapas anteriores a esta coluna. */
   last_change_actor_kind: string | null;
   last_change_at: string | null;
+  /** Orientação escrita na configuração do fluxo; ausente em funis legados. */
+  purpose?: string;
 }
 
 type EtapaLida = EtapaEditavel & {
   last_change_actor_kind: string | null;
   last_change_at: string | null;
+  purpose?: string;
 };
 
 /**
@@ -89,7 +93,7 @@ export async function lerFunil(
 ): Promise<EtapaLida[] | null> {
   const { data: pipeline, error: pipeErr } = await supabase
     .from("crm_pipelines")
-    .select("id")
+    .select("id, settings")
     .eq("id", pipelineId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -104,7 +108,11 @@ export async function lerFunil(
     .order("position", { ascending: true });
   if (error) throw new Error(error.message);
 
-  return (data ?? []) as unknown as EtapaLida[];
+  const guidance = lerFlowConfig(pipeline.settings).stage_guidance;
+  return ((data ?? []) as unknown as EtapaLida[]).map((etapa) => ({
+    ...etapa,
+    ...(guidance[etapa.id] ? { purpose: guidance[etapa.id]!.purpose } : {}),
+  }));
 }
 
 /** O que a tela recebe de volta: o funil vivo, na ordem das colunas. */
@@ -121,6 +129,7 @@ export function corpo(etapas: EtapaLida[]): { etapas: EtapaVisivel[] } {
         is_lost: e.is_lost,
         last_change_actor_kind: e.last_change_actor_kind ?? null,
         last_change_at: e.last_change_at ?? null,
+        ...(e.purpose ? { purpose: e.purpose } : {}),
       })),
   };
 }

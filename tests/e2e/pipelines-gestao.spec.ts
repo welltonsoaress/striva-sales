@@ -50,6 +50,7 @@ function loadCreds(): Creds {
 const creds = loadCreds();
 const NOME = `Clinica E2E ${Date.now()}`;
 const RENOMEADO = `${NOME} renomeado`;
+const NOME_MODELO = `Modelo clínica E2E ${Date.now()}`;
 
 async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
@@ -97,8 +98,10 @@ test.describe("gestão de funis", () => {
   test("cria funil com colunas, edita, e as recusas aparecem explicadas", async ({ page }) => {
     // ---- criar ----
     await page.getByTestId("novo-funil").click();
+    await page.getByRole("button", { name: /Básico personalizável/ }).click();
     await page.getByTestId("nome-do-novo-funil").fill(NOME);
     await page.getByTestId("confirmar-novo-funil").click();
+    await page.getByRole("button", { name: "Concluir", exact: true }).click();
     await expect(linhaDoFunil(page, NOME)).toBeVisible();
     await page.screenshot({ path: path.join(EVIDENCIA, "funis-01-criado.png"), fullPage: true });
 
@@ -154,6 +157,32 @@ test.describe("gestão de funis", () => {
       path: path.join(EVIDENCIA, "funis-05-recusa-ultimo.png"),
       fullPage: true,
     });
+  });
+
+  test("cria um funil de clínica com destino da agenda revisado e salvo por id", async ({ page }) => {
+    await page.getByTestId("novo-funil").click();
+    await page.getByRole("button", { name: /Clínica, consultório ou salão/ }).click();
+    await page.getByLabel("Nome do funil").fill(NOME_MODELO);
+    await expect(page.getByText(/encerra o lead como ganho quando o agendamento for confirmado/)).toBeVisible();
+
+    // Revisar o valor que originalmente encerraria como ganho e mantê-lo aberto.
+    await page.getByLabel("Agendamento confirmado").click();
+    await page.getByRole("option", { name: /Escolhendo horário/ }).click();
+    await page.screenshot({ path: path.join(EVIDENCIA, "funis-06-modelo-clinica.png"), fullPage: true });
+    await page.getByRole("button", { name: "Criar funil" }).click();
+
+    await expect(linhaDoFunil(page, NOME_MODELO)).toBeVisible();
+    const id = await idDoFunil(page, NOME_MODELO);
+    const res = await page.request.get(`/api/v1/pipelines/${id}/flow-config`);
+    expect(res.ok()).toBe(true);
+    const body = (await res.json()) as { data: { stages: Array<{ id: string; name: string; is_won: boolean }>; stage_guidance: Record<string, { purpose: string }>; event_stage_ids: { appointment_pending: string | null; appointment_confirmed: string | null; human_handoff: string | null } } };
+    const escolhendoHorario = body.data.stages.find((stage) => stage.name === "Escolhendo horário")!;
+    expect(body.data.stage_guidance[escolhendoHorario.id]?.purpose).toContain("horário foi solicitado");
+    expect(body.data.event_stage_ids.appointment_confirmed).toBe(escolhendoHorario.id);
+    expect(body.data.event_stage_ids.human_handoff).toBeNull();
+
+    const arquivar = await page.request.delete(`/api/v1/pipelines/${id}`);
+    expect(arquivar.ok()).toBe(true);
   });
 
 });

@@ -33,6 +33,7 @@ vi.mock("./_mapping", () => ({
   AgentMappingSection: () => null,
   ancoraDoMapeamento: () => "mapeamento",
 }));
+vi.mock("./_flow", () => ({ FlowConfigSection: () => null }));
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

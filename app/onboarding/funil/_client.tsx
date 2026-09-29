@@ -30,8 +30,17 @@ export function QuadroClient({
   const inicial: PropostaDeFunil =
     sugestao.origem === "ia" ? sugestao.proposta : sugestao.pacote.proposta;
 
-  const [quadro, setQuadro] = useState<PropostaDeFunil>(inicial);
+  const [quadro, setQuadro] = useState<PropostaDeFunil>(() => ({
+    ...inicial,
+    etapas: inicial.etapas.map((etapa, i) => ({ ...etapa, chave: etapa.chave ?? `etapa_${i + 1}` })),
+  }));
   const [origem, setOrigem] = useState<"ia" | "pacote">(sugestao.origem);
+  const [templateId, setTemplateId] = useState<string | null>(sugestao.origem === "pacote" ? sugestao.pacote.id : null);
+  const [destinos, setDestinos] = useState({
+    appointment_pending: sugestao.origem === "pacote" ? sugestao.pacote.destinosDeAgendamento?.pending ?? null : null,
+    appointment_confirmed: sugestao.origem === "pacote" ? sugestao.pacote.destinosDeAgendamento?.confirmed ?? null : null,
+    human_handoff: null as string | null,
+  });
   const [trocando, setTrocando] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -46,7 +55,13 @@ export function QuadroClient({
   }
 
   function remover(i: number) {
+    const chave = quadro.etapas[i]?.chave;
     setQuadro((q) => ({ ...q, etapas: q.etapas.filter((_, j) => j !== i) }));
+    if (chave) setDestinos((atual) => ({
+      appointment_pending: atual.appointment_pending === chave ? null : atual.appointment_pending,
+      appointment_confirmed: atual.appointment_confirmed === chave ? null : atual.appointment_confirmed,
+      human_handoff: atual.human_handoff === chave ? null : atual.human_handoff,
+    }));
   }
 
   /**
@@ -62,7 +77,7 @@ export function QuadroClient({
       const corte = q.etapas.findIndex((e) => e.passo === "won" || e.passo === "lost");
       const onde = corte === -1 ? q.etapas.length : corte;
       const etapas = [...q.etapas];
-      etapas.splice(onde, 0, { nome: "", passo: null });
+      etapas.splice(onde, 0, { nome: "", passo: null, chave: `custom_${Date.now().toString(36)}_${q.etapas.length}` });
       return { ...q, etapas };
     });
   }
@@ -70,11 +85,47 @@ export function QuadroClient({
   function usarPacote(id: string) {
     const p = PACOTES.find((x) => x.id === id);
     if (!p) return;
-    setQuadro(p.proposta);
+    setQuadro({
+      ...p.proposta,
+      nome: t(p.proposta.nome),
+      etapas: p.proposta.etapas.map((etapa) => ({
+        ...etapa,
+        nome: t(etapa.nome),
+        orientacao: etapa.orientacao ? t(etapa.orientacao) : undefined,
+      })),
+    });
+    setTemplateId(p.id);
+    setDestinos({
+      appointment_pending: p.destinosDeAgendamento?.pending ?? null,
+      appointment_confirmed: p.destinosDeAgendamento?.confirmed ?? null,
+      human_handoff: null,
+    });
     // A origem acompanha: o resumo do onboarding registra de onde o quadro veio,
     // e manter "ia" depois de a pessoa escolher outro seria registrar mentira.
     setOrigem("pacote");
     setTrocando(false);
+  }
+
+  function campoDestino(key: keyof typeof destinos, titulo: string, ajuda: string) {
+    return (
+      <label className="block space-y-1 text-sm" key={key}>
+        <span className="font-medium">{titulo}</span>
+        <span className="block text-xs text-muted-foreground">{ajuda}</span>
+        <select
+          className="w-full rounded-md border bg-background px-3 py-2"
+          value={destinos[key] ?? "__manual__"}
+          onChange={(event) => setDestinos((atual) => ({ ...atual, [key]: event.target.value === "__manual__" ? null : event.target.value }))}
+        >
+          <option value="__manual__">{t("Não mover automaticamente")}</option>
+          {quadro.etapas.filter((etapa) => etapa.chave && (key === "appointment_confirmed" ? etapa.passo !== "lost" : etapa.passo !== "won" && etapa.passo !== "lost")).map((etapa) => (
+            <option key={etapa.chave} value={etapa.chave}>{etapa.nome}{key === "appointment_confirmed" && etapa.passo === "won" ? ` — ${t("encerra como ganho")}` : ""}</option>
+          ))}
+        </select>
+        {key === "appointment_confirmed" && quadro.etapas.find((etapa) => etapa.chave === destinos[key])?.passo === "won" && (
+          <span className="block text-xs text-amber-800">{t("A confirmação do agendamento encerrará esta oportunidade como ganha.")}</span>
+        )}
+      </label>
+    );
   }
 
   return (
@@ -142,6 +193,7 @@ export function QuadroClient({
                       ? `${t("Ele move o cliente para cá quando")} ${t(explicacao)}.`
                       : t("Coluna que só vocês movem — ele não mexe nesta.")}
                   </p>
+                  {etapa.orientacao && <p className="text-xs text-muted-foreground">{t(etapa.orientacao)}</p>}
                 </div>
                 {/*
                   As colunas de fechou/não fechou não são removíveis: sem elas o
@@ -182,6 +234,18 @@ export function QuadroClient({
               {MAX_ETAPAS} {t("colunas é o máximo — mais que isso não cabe na tela do celular.")}
             </span>
           ) : null}
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.02] p-4">
+        <div>
+          <h3 className="text-sm font-semibold">{t("Quando a agenda ou o atendimento humano movem o lead")}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">{t("Escolha uma etapa ativa para cada acontecimento. Sem destino, a equipe move o card manualmente.")}</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {campoDestino("appointment_pending", t("Horário solicitado"), t("A agenda recebeu uma solicitação, ainda sem confirmação."))}
+          {campoDestino("appointment_confirmed", t("Agendamento confirmado"), t("A agenda confirmou o horário. Só encerre como ganho se isso concluir a venda."))}
+          {campoDestino("human_handoff", t("Transferido para uma pessoa"), t("O agente transferiu o atendimento para a equipe."))}
         </div>
       </div>
 
@@ -255,6 +319,8 @@ export function QuadroClient({
               const fd = new FormData();
               fd.set("quadro", JSON.stringify(quadro));
               fd.set("origem", origem);
+              if (templateId) fd.set("template_id", templateId);
+              fd.set("event_stage_keys", JSON.stringify(destinos));
               const res = await aplicarQuadro(fd);
               // Sucesso redireciona no servidor; só o desfecho ruim volta.
               if (res && !res.ok) toast.error(res.erro);

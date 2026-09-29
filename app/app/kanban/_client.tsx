@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/types";
 import { Archive, CaretDown, CaretUp, Check, PencilSimple, Plus } from "@/lib/ui/icons";
 import { useArquivarFunil, useCriarFunil, useEditarFunil } from "@/hooks/pipelines/usePipelines";
+import { NovoFunilWizard, type CriarFunilInput } from "./_components/NovoFunilWizard";
 
 export interface FunilDaLista {
   id: string;
@@ -90,21 +91,21 @@ export function FunisClient({
   const editar = useEditarFunil();
   const arquivar = useArquivarFunil();
 
-  const [novo, setNovo] = useState<string | null>(null);
+  const [criacaoAberta, setCriacaoAberta] = useState(false);
+  const [createdPipeline, setCreatedPipeline] = useState<FunilDaLista | null>(null);
+  function abrirCriacao() { setCreatedPipeline(null); setErro(null); setCriacaoAberta(true); }
   const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
   const [arquivando, setArquivando] = useState<{ id: string; erro: string | null } | null>(null);
   const [erro, setErro] = useState<{ id: string | null; texto: string } | null>(null);
 
   const ocupado = criar.isPending || editar.isPending || arquivar.isPending;
 
-  function criarFunil() {
-    const nome = (novo ?? "").trim();
-    if (!nome) return;
+  function criarFunil(input: CriarFunilInput) {
     setErro(null);
-    criar.mutate(nome, {
+    criar.mutate(input, {
       onSuccess: (r) => {
         setFunis(r.data.pipelines);
-        setNovo(null);
+        setCreatedPipeline(r.data.pipelines.find((pipeline) => pipeline.name === input.name) ?? null);
       },
       onError: (e) => setErro({ id: null, texto: textoDoErro(e, t) }),
     });
@@ -140,50 +141,13 @@ export function FunisClient({
     );
   }
 
-  const formularioDeCriacao = novo !== null && (
-    <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center" data-testid="form-novo-funil">
-      <Input
-        autoFocus
-        value={novo}
-        onChange={(e) => setNovo(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") criarFunil();
-          if (e.key === "Escape") setNovo(null);
-        }}
-        placeholder={t("Nome do funil — ex.: Consultas, Obras, Matrículas")}
-        aria-label={t("Nome do novo funil")}
-        data-testid="nome-do-novo-funil"
-        disabled={ocupado}
-      />
-      <div className="flex gap-2">
-        <Button onClick={criarFunil} disabled={ocupado || !novo.trim()} data-testid="confirmar-novo-funil">
-          {t("Criar funil")}
-        </Button>
-        <Button variant="ghost" onClick={() => setNovo(null)} disabled={ocupado}>
-          {t("Cancelar")}
-        </Button>
-      </div>
-    </Card>
-  );
+  const wizard = <NovoFunilWizard open={criacaoAberta} onOpenChange={setCriacaoAberta} disabled={criar.isPending} onCreate={criarFunil} error={erro?.id === null ? erro.texto : null} createdPipeline={createdPipeline} />;
 
   if (funis.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        {formularioDeCriacao}
-        {novo === null && (
-          // ⚠️ O BOTÃO CRIA AQUI MESMO. O texto anterior mandava "Ir para
-          // Configurações", e lá a tela de funis mandava de volta para o quadro:
-          // pingue-pongue fechado, com o usuário procurando um botão que não
-          // existia em lugar nenhum. Este é o estado de toda instalação em que o
-          // gatilho de seed não rodou.
-          <EmptyPipeline
-            primary={
-              podeGerenciar
-                ? { label: t("Criar meu primeiro funil"), onClick: () => setNovo("") }
-                : undefined
-            }
-          />
-        )}
+        {wizard}
+        <EmptyPipeline primary={podeGerenciar ? { label: t("Criar meu primeiro funil"), onClick: abrirCriacao } : undefined} />
         {erro && (
           <p className="text-sm text-destructive" data-testid="erro-geral">
             {erro.texto}
@@ -195,6 +159,7 @@ export function FunisClient({
 
   return (
     <div className="flex flex-col gap-4">
+      {wizard}
       {(podeGerenciar || podeImportar) && (
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           {/* A porta da importação fica AQUI, e não numa tela própria: é desta
@@ -202,15 +167,13 @@ export function FunisClient({
               Uma rota nova exigiria um item de menu para uma coisa que se faz
               uma vez por mês — ruído permanente para um gesto ocasional. */}
           {podeImportar ? <ImportarLeads funis={funis} /> : null}
-          {podeGerenciar && novo === null ? (
-            <Button onClick={() => setNovo("")} disabled={ocupado} data-testid="novo-funil" className="w-full sm:w-auto">
+          {podeGerenciar ? (
+            <Button onClick={abrirCriacao} disabled={ocupado} data-testid="novo-funil" className="w-full sm:w-auto">
               <Plus size={16} className="mr-2" aria-hidden /> {t("Novo funil")}
             </Button>
           ) : null}
         </div>
       )}
-
-      {formularioDeCriacao}
 
       {erro?.id === null && (
         <p className="text-sm text-destructive" data-testid="erro-geral">
