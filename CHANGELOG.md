@@ -9,6 +9,12 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [1.1.1] — 2026-09-29
+
+### Corrigido
+
+- **Continue a atualização pelo sistema após um rollback** Quando uma tentativa antiga falhar, a tela preserva o erro e permite iniciar pelo sistema uma release Striva diferente que já foi verificada. Ela não oferece repetição automática da mesma release que falhou.
+
 ## [1.1.0] — 2026-09-29
 
 ### Alterado
@@ -57,7 +63,8 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 <!-- release-base: 0.0.0 -->
 
-[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.0...HEAD
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.1...HEAD
+[1.1.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.0...striva-v1.1.1
 [1.1.0]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.2...striva-v1.1.0
 [1.0.2]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.1...striva-v1.0.2
 [1.0.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.0...striva-v1.0.1
