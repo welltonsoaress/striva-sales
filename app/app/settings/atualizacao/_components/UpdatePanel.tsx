@@ -128,8 +128,8 @@ export function UpdatePanel() {
   const alvo = semV(data.run?.to_version);
   const anterior = semV(data.run?.from_version);
   // Um run guarda o alvo que falhou, mas a versão publicada pode ter mudado
-  // desde então. Depois da transição do Deskcomm para Striva, por exemplo,
-  // uma tentativa legada de 1.19.0 pode coexistir com a release Striva 1.1.0.
+  // desde então. Depois de uma troca de distribuição, por exemplo, uma
+  // tentativa legada de 1.19.0 pode coexistir com a release atual 1.1.0.
   // Preserve o diagnóstico antigo sem esconder uma release diferente que o
   // agente verificou e que o endpoint de atualização aceita.
   const outraReleaseDisponivel = Boolean(
@@ -155,7 +155,7 @@ export function UpdatePanel() {
           <div className="mt-6 border-t pt-4">
             <p className="text-sm">
               {t("A tentativa anterior falhou na versão")} <strong>{alvo}</strong>. {" "}
-              {t("Uma release Striva diferente está disponível:")} <strong>{nova}</strong>. {" "}
+              {t("Uma release diferente está disponível:")} <strong>{nova}</strong>. {" "}
               {t("Você pode tentar essa atualização pelo sistema; vou guardar outra cópia de segurança antes.")}
             </p>
             <div className="mt-4">
@@ -490,7 +490,7 @@ function BotaoAtualizar({
  * Repetir a mesma release que falhou não troca a imagem: o código já está
  * naquela tag, então `update.sh` pode responder "já está na versão mais
  * recente". Por isso a tentativa só reaparece como botão quando uma release
- * Striva diferente foi verificada; para a mesma release, a saída manual abaixo
+ * diferente foi verificada; para a mesma release, a saída manual abaixo
  * continua disponível.
  */
 function Saida({

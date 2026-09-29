@@ -3987,7 +3987,7 @@ export const DICIONARIO: Traducoes = {
   "A atualização para a versão": { es: "La actualización a la versión" },
   "não deu certo": { es: "no funcionó" },
   "A tentativa anterior falhou na versão": { es: "El intento anterior falló en la versión" },
-  "Uma release Striva diferente está disponível:": { es: "Hay disponible otra versión de Striva:" },
+  "Uma release diferente está disponível:": { es: "Hay disponible otra versión:" },
   "Você pode tentar essa atualização pelo sistema; vou guardar outra cópia de segurança antes.": {
     es: "Puedes intentar esta actualización desde el sistema; guardaré otra copia de seguridad antes.",
   },
