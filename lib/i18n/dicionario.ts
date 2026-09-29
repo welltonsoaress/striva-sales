@@ -3986,6 +3986,11 @@ export const DICIONARIO: Traducoes = {
   },
   "A atualização para a versão": { es: "La actualización a la versión" },
   "não deu certo": { es: "no funcionó" },
+  "A tentativa anterior falhou na versão": { es: "El intento anterior falló en la versión" },
+  "Uma release diferente está disponível:": { es: "Hay disponible otra versión:" },
+  "Você pode tentar essa atualização pelo sistema; vou guardar outra cópia de segurança antes.": {
+    es: "Puedes intentar esta actualización desde el sistema; guardaré otra copia de seguridad antes.",
+  },
   "Voltei o sistema para a versão": { es: "Volví el sistema a la versión" },
   "que é a que está no ar agora, e os seus dados estão intactos. O banco de dados já tinha sido atualizado e permanece assim — isso é seguro, a versão": {
     es: "que es la que está activa ahora, y tus datos están intactos. La base de datos ya había sido actualizada y sigue así — eso es seguro, la versión",
