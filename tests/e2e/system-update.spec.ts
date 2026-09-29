@@ -473,7 +473,7 @@ test("rollback de uma atualização legada não esconde uma release Striva difer
     page.getByRole("heading", { name: /a atualização para a versão 1\.19\.0 não deu certo/i }),
   ).toBeVisible();
   await expect(page.getByText(/uma release diferente está disponível/i)).toBeVisible();
-  await expect(page.getByText(/1\.1\.0/)).toBeVisible();
+  await expect(page.locator("strong").filter({ hasText: /^1\.1\.0$/ })).toBeVisible();
   await expect(page.getByText("bash hostgator-setup-kit/update.sh --force")).toHaveCount(0);
   await page.screenshot({
     path: ".superpowers/evidence/final-6-retry-release-diferente.png",
