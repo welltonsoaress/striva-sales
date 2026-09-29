@@ -7,6 +7,8 @@ export interface SystemVersion {
   current_version: string;
   is_owner: boolean;
   latest_version?: string;
+  /** Tag Striva exata da release verificada; ausente em estado não confiável. */
+  latest_release_tag?: string;
   update_available?: boolean;
   /** As notas da release não têm evidência verificável no repositório próprio. */
   notes_unavailable?: boolean;

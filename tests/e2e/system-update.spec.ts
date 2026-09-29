@@ -431,6 +431,65 @@ test("quando a atualização falha, a tela nomeia a versão certa, mostra o log 
   await page.screenshot({ path: ".superpowers/evidence/final-4-sem-passo-reportado.png" });
 });
 
+test("rollback de uma atualização legada não esconde uma release Striva diferente", async ({
+  page,
+  request,
+}) => {
+  resetEstado();
+  await heartbeat(request, {
+    current_version: "c2954fa2",
+    latest_version: "1.19.0",
+    runtime_verified: false,
+  });
+  await loginWithTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
+  await page.goto("/app/settings/atualizacao");
+  await page.getByRole("button", { name: /atualizar agora/i }).click();
+  await page.getByRole("button", { name: "Confirmar atualização", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /atualizando para a versão 1\.19\.0/i })).toBeVisible();
+
+  const falhaLegada = await heartbeat(request, {
+    current_version: "1.19.0",
+    latest_version: "1.19.0",
+    runtime_verified: false,
+  });
+  expect(falhaLegada.data.update_requested).toBe(true);
+  await runResult(
+    request,
+    falhaLegada.data.run_id!,
+    "failed_rolled_back",
+    "Error response from daemon: No such image: ghcr.io/welltonsoaress/deskcommcrm:1.19.0",
+  );
+
+  // A falha anterior continua visível, mas não pode bloquear a tentativa da
+  // release Striva 1.1.0, diferente e verificada pelo agente.
+  await heartbeat(request, {
+    current_version: "1.19.0",
+    latest_version: "1.1.0",
+    runtime_verified: false,
+  });
+  await page.reload();
+
+  await expect(
+    page.getByRole("heading", { name: /a atualização para a versão 1\.19\.0 não deu certo/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/uma release Striva diferente está disponível/i)).toBeVisible();
+  await expect(page.getByText(/1\.1\.0/)).toBeVisible();
+  await expect(page.getByText("bash hostgator-setup-kit/update.sh --force")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /atualizar agora/i }).click();
+  await page.getByRole("button", { name: "Confirmar atualização", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /atualizando para a versão 1\.1\.0/i })).toBeVisible();
+
+  const novaTentativa = await heartbeat(request, {
+    current_version: "1.19.0",
+    latest_version: "1.1.0",
+    runtime_verified: false,
+  });
+  expect(novaTentativa.data.update_requested).toBe(true);
+  const status = await page.request.get("/api/v1/system/version");
+  expect((await status.json()).data.run.to_version).toBe("1.1.0");
+});
+
 test("quando o host não conseguiu comparar, a tela não diz que está em dia", async ({
   page,
   request,

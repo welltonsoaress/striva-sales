@@ -127,6 +127,16 @@ export function UpdatePanel() {
   // tentativa; a identidade atual vem do contêiner, separada do checkout.
   const alvo = semV(data.run?.to_version);
   const anterior = semV(data.run?.from_version);
+  // Um run guarda o alvo que falhou, mas a versão publicada pode ter mudado
+  // desde então. Depois da transição do Deskcomm para Striva, por exemplo,
+  // uma tentativa legada de 1.19.0 pode coexistir com a release Striva 1.1.0.
+  // Preserve o diagnóstico antigo sem esconder uma release diferente que o
+  // agente verificou e que o endpoint de atualização aceita.
+  const outraReleaseDisponivel = Boolean(
+    data.update_available &&
+      data.latest_release_tag &&
+      data.latest_release_tag !== distributionTag(semV(data.run?.to_version)),
+  );
 
   if (data.run?.status === "failed_rolled_back") {
     return (
@@ -141,14 +151,31 @@ export function UpdatePanel() {
           <code>bash hostgator-setup-kit/restore.sh</code>).
         </p>
         <DetalhesTecnicos texto={data.run.log_tail} />
-        <Saida
-          botao={false}
-          mutate={() => atualizar.mutate()}
-          isPending={atualizar.isPending}
-          erro={erro}
-          texto={`${t("Para deixar o servidor inteiro de volta na versão")} ${anterior} ${t("— inclusive o código, que já foi trocado —, quem tem acesso pode rodar:")}`}
-          comando={comandoDeVolta(data.run.from_version)}
-        />
+        {outraReleaseDisponivel ? (
+          <div className="mt-6 border-t pt-4">
+            <p className="text-sm">
+              {t("A tentativa anterior falhou na versão")} <strong>{alvo}</strong>. {" "}
+              {t("Uma release Striva diferente está disponível:")} <strong>{nova}</strong>. {" "}
+              {t("Você pode tentar essa atualização pelo sistema; vou guardar outra cópia de segurança antes.")}
+            </p>
+            <div className="mt-4">
+              <BotaoAtualizar
+                mutate={() => atualizar.mutate()}
+                isPending={atualizar.isPending}
+                erro={erro}
+              />
+            </div>
+          </div>
+        ) : (
+          <Saida
+            botao={false}
+            mutate={() => atualizar.mutate()}
+            isPending={atualizar.isPending}
+            erro={erro}
+            texto={`${t("Para deixar o servidor inteiro de volta na versão")} ${anterior} ${t("— inclusive o código, que já foi trocado —, quem tem acesso pode rodar:")}`}
+            comando={comandoDeVolta(data.run.from_version)}
+          />
+        )}
       </Layout>
     );
   }
@@ -460,13 +487,11 @@ function BotaoAtualizar({
 /**
  * A saída de um estado ruim — e ela nunca é só o botão.
  *
- * Depois de uma tentativa que falhou, o código do servidor já está na versão
- * nova (o `git checkout` deu certo; quem não subiu foi o container). Um novo
- * pedido pelo botão faria o agente rodar `update.sh --to <mesma tag>`, que
- * responde "você já está na versão mais recente", sai com sucesso e reportaria
- * um desfecho BOM sem ter trocado imagem nenhuma. Por isso o botão fica
- * desligado nos estados de falha: o que resolve ali é `--force`, e é o comando
- * — sempre presente — que leva a pessoa a ele.
+ * Repetir a mesma release que falhou não troca a imagem: o código já está
+ * naquela tag, então `update.sh` pode responder "já está na versão mais
+ * recente". Por isso a tentativa só reaparece como botão quando uma release
+ * Striva diferente foi verificada; para a mesma release, a saída manual abaixo
+ * continua disponível.
  */
 function Saida({
   botao,
