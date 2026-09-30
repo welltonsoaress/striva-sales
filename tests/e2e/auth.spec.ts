@@ -1,7 +1,21 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 
 test.describe("auth flow", () => {
+  test("Entrar abre login para visitante e retoma o sistema com sessão ativa", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Mais vendas");
+    await page.getByRole("link", { name: "Entrar", exact: true }).click();
+    await expect(page.locator("#email")).toBeVisible();
+    await loginComoAdmin(page, lerCreds());
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Mais vendas");
+    await page.getByRole("link", { name: "Entrar", exact: true }).click();
+    await expect(page).toHaveURL(/\/app(?:\/|$)/);
+    await expect(page.locator("#email")).toHaveCount(0);
+  });
+
   test("anon GET /app/inbox redirects to /login", async ({ page }) => {
     await page.goto("/app/inbox");
     // Either we land on /login (with optional ?next=) or middleware sends us elsewhere

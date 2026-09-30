@@ -189,7 +189,7 @@ interface LinhaDoOrcamento {
  * tranquilizadora sozinha é o que faz um defeito viver meses.
  */
 async function aplicarOrcamento(d: {
-  db: pg.Pool;
+  db: Pick<pg.Pool, 'query'>;
   organizationId: string;
   /** Só para o atalho de custo. A decisão usa o snapshot de `SQL_ORCAMENTO`. */
   orcamentoDaConfig: OrcamentoDaOrg;
@@ -308,7 +308,7 @@ async function aplicarOrcamento(d: {
   throw erro;
 }
 
-export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunModelCallInput, deps: RunModelCallDeps = {}) {
+export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfig, input: RunModelCallInput, deps: RunModelCallDeps = {}) {
   const registry = deps.registry ?? createDefaultRegistry();
   const purpose = input.purpose ?? 'agent_turn';
 
@@ -636,7 +636,7 @@ export function redigirMensagemDoProvedor(bruto: string): string {
  * é "não sei", nunca "de graça" — mesma doutrina da coluna `cost_cents`.
  */
 async function registrarFalha(
-  db: pg.Pool,
+  db: Pick<pg.Pool, 'query'>,
   d: {
     input: RunModelCallInput;
     purpose: string;

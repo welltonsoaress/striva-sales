@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Entrada comercial", "subtitle": "Visitante entende o produto e escolhe seu próximo passo", "output": "landing-comercial.html" },
+  "lanes": [{ "id": "entrada", "label": "Entrada pública" }, { "id": "interface", "label": "Comunicação" }, { "id": "saida", "label": "Próximo passo" }],
+  "mainPath": ["visitante", "landing", "demonstracao"],
+  "nodes": [
+    { "id": "visitante", "lane": "entrada", "col": 0, "type": "actor", "label": "Visitante", "sublabel": "GET / já é público em lib/auth/public-paths.ts" },
+    { "id": "produto", "lane": "entrada", "col": 1, "type": "document", "label": "Produto e marca", "sublabel": "PRODUCT.md; nova marca comercial em public/brand/; recursos confirmados em código" },
+    { "id": "landing", "lane": "interface", "col": 2, "type": "frontend", "label": "Landing comercial", "sublabel": "app/page.tsx → components/marketing/LandingPage.tsx; demonstrações fictícias locais" },
+    { "id": "demonstracao", "lane": "saida", "col": 3, "type": "external", "label": "Conversa comercial", "sublabel": "Link wa.me para o número confirmado pelo proprietário; envio depende do visitante" },
+    { "id": "login", "lane": "saida", "col": 4, "type": "frontend", "label": "Acesso à plataforma", "sublabel": "Entrar → /login para visitante; /app com sessão validada por getUser no servidor" }
+  ],
+  "edges": [
+    { "id": "entrada-landing", "from": "visitante", "to": "landing", "label": "Visita pública" },
+    { "id": "verdade-landing", "from": "produto", "to": "landing", "label": "Capacidades e identidade" },
+    { "id": "landing-demonstracao", "from": "landing", "to": "demonstracao", "label": "Solicitar demonstração" },
+    { "id": "landing-login", "from": "landing", "to": "login", "label": "Entrar" }
+  ]
+}

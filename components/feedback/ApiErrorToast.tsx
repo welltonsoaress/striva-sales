@@ -116,6 +116,10 @@ function toastFor(err: unknown, t: (texto: string) => string): void {
   if (err instanceof ApiError) {
     const entry = COPY[err.code];
     const description = err.requestId ? `ID: ${err.requestId}` : undefined;
+    // Leituras em várias telas e retentativas podem falhar juntas. O mesmo
+    // código atualiza um aviso visível, com o ID da última requisição, sem
+    // empilhar um popup por tentativa. Códigos diferentes continuam separados.
+    const id = `api-error:${err.status}:${err.code}`;
     if (entry) {
       const fn =
         entry.variant === "warning"
@@ -128,13 +132,13 @@ function toastFor(err: unknown, t: (texto: string) => string): void {
       // `t()` do mesmo jeito: o texto da rota é pt-BR literal (ver a seção
       // "Mensagens literais de `fail()`" em lib/i18n/dicionario.ts), e sem
       // tradução aqui chegaria em português na tela de quem escolheu espanhol.
-      fn(entry.msg ? t(entry.msg) : t(err.message ?? err.code), { description });
+      fn(entry.msg ? t(entry.msg) : t(err.message ?? err.code), { id, description });
       return;
     }
-    toast.error(t(err.message) || err.code, { description });
+    toast.error(t(err.message) || err.code, { id, description });
     return;
   }
-  toast.error(t("Erro inesperado. Tente novamente."));
+  toast.error(t("Erro inesperado. Tente novamente."), { id: "api-error:unexpected" });
 }
 
 /**

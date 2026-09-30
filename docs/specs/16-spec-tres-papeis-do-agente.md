@@ -107,7 +107,7 @@ capacidade de mexer na operação."*
   ligado, inclusive quando o Conversador não declarou nada. Turno que morre antes do
   fechamento não gera Operador naquela tentativa; se o job morre de vez, o laço fecha
   pelo `job_dead` crítico na Central.
-- **Vê:** estado do lead, a declaração, o histórico, as 51 capacidades do catálogo.
+- **Vê:** estado do lead, a declaração, o histórico e as capacidades permitidas do catálogo. O briefing inclui até seis negócios abertos do contato, seus IDs e as etapas ativas dos funis autorizados pela versão publicada (`operator-funnel-context.ts`). A organização vem do job. O contexto orienta a escolha; a ferramenta canônica revalida antes de escrever. Contatos com múltiplos negócios não autorizam movimentação de todos.
 - **Tools:** as de escrita do catálogo MCP + as nativas de operação (`update_lead_state`,
   `schedule_followup`, `save_lead_note`, `open_human_case`, `provide_case_update`).
 - **Não tem canal.** `send_message` não existe no toolset dele. Não é regra de prompt — é ausência.

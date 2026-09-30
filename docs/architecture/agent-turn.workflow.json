@@ -256,6 +256,22 @@
       "sublabel": "lead_checkpoints.declaracao — ausente ≠ vazia"
     },
     {
+      "id": "operator_context",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "Contexto do funil",
+      "sublabel": "operator-funnel-context.ts · até 6 negócios abertos do contato, org e pipeline_ids publicados"
+    },
+    {
+      "id": "crm_context",
+      "lane": "operacao",
+      "col": 3,
+      "type": "database",
+      "label": "crm_leads + crm_stages",
+      "sublabel": "IDs e critérios das etapas ativas; sem dados pessoais do contato"
+    },
+    {
       "id": "operador",
       "lane": "operacao",
       "col": 5,
@@ -587,6 +603,24 @@
       "toSide": "right",
       "route": "outside-right",
       "labelDy": 68
+    },
+    {
+      "id": "crm-operator-context",
+      "from": "crm_context",
+      "to": "operator_context",
+      "label": "organização + contato do job"
+    },
+    {
+      "id": "scope-operator-context",
+      "from": "capacidades",
+      "to": "operator_context",
+      "label": "pipeline_ids publicados"
+    },
+    {
+      "id": "context-operador",
+      "from": "operator_context",
+      "to": "operador",
+      "label": "negócios e destinos reais; a tool revalida a escrita"
     },
     {
       "id": "capacidades-operador",

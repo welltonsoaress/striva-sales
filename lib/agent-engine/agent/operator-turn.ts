@@ -44,6 +44,7 @@ import type { InboundTurnDeps } from './inbound-turn';
 import { checkpointDoJob } from './inbound-turn';
 import { declaracaoDoTurnoSchema, promessasEmAberto, type DeclaracaoDoTurno } from './declaracao';
 import { loadPublishedAgentConfigById } from './agent-config';
+import { loadOperatorFunnelContext } from './operator-funnel-context';
 import { isLeadInHandoff } from './human-handoff';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
@@ -490,6 +491,9 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
     let saida: Awaited<ReturnType<typeof runModelCall>> | null = null;
     try {
       if (mcp !== null) {
+        const funnelContext = await loadOperatorFunnelContext(pool, {
+          organizationId: tenantId, contactId: leadId, pipelineIds: agentConfig.pipelineIds,
+        });
         saida = await runModelCall(
           pool,
           deps.llmCfg,
@@ -501,6 +505,7 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
             // como se fosse conversa, e "quanto custa ligar o papel?" — a
             // pergunta que o dono do negócio vai fazer — não teria resposta.
             purpose: 'operator_turn',
+            agentId: agentConfig.agentId,
             system: SYSTEM_DO_OPERADOR,
             messages: [
               {
@@ -508,6 +513,7 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
                 content: `Contato deste turno: ${leadId}. Consulte os negócios deste contato; ` +
                   `o ID do contato não é o ID do lead no funil.\n` +
                   `Funis autorizados: ${agentConfig.pipelineIds.join(', ') || 'nenhum'}.\n\n` +
+                  `${funnelContext}\n\n` +
                   renderBriefingDoOperador(
                   declaracao,
                   promessas,

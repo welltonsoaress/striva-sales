@@ -31,8 +31,9 @@ docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml \
 ```
 
 Sem proxy externo, use apenas `docker-compose.prod.yml`. Confira depois o
-endpoint `/api/v1/health`, a saúde dos três serviços, o roteamento do domínio e
-a conexão do WhatsApp. Uma falha de pull interrompe o update antes do banco;
+endpoint `/api/v1/health`, a saúde dos três serviços e a conexão do WhatsApp.
+Na raiz do domínio, confira a landing comercial (HTTP 200) e o botão Entrar:
+visitante vai ao login; com sessão válida, entra no sistema. Uma falha de pull interrompe o update antes do banco;
 não a contorne com build local na VPS.
 
 ## Mudança de diretório de uma instalação legada

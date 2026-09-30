@@ -43,10 +43,16 @@ não existe vínculo e nada é enviado.
 
 ## Resumo e avisos
 
-O resumo diário usa a data e o fuso da organização. Conta oportunidades criadas
-no dia, negócios abertos, avisos abertos da Central e agendamentos confirmados
-no dia. O Radar compartilha a própria varredura limitada e declara essa
-cobertura; sua contagem não é um total irrestrito da base.
+O relatório diário usa a data e o fuso da organização e declara que a atividade
+é parcial até a medição. Organiza visão geral, movimento, pontos de atenção,
+prioridades e régua da leitura. Conta oportunidades criadas, ganhos/perdidos
+por encerramento e estado atual, mudanças de etapa, mensagens recebidas e
+enviadas, follow-ups encerrados com resposta e chamadas de IA com seus erros.
+Agenda confirmada cobre o dia inteiro; negócios abertos, Central, tarefas
+vencidas e Radar são o retrato atual. As consultas de contagem são exatas e
+filtram a organização; falha ou contagem indisponível recusa o relatório em
+vez de apresentar zero. O Radar declara sua varredura limitada, sem afirmar
+total irrestrito. Prioridades são sugestões determinísticas, sem executar ações.
 
 Os avisos implementados são `central_critical` e `radar_critical`, escolhidos
 na configuração e limitados por empresa/dia. Um aviso da Central só sai se

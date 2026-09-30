@@ -9,12 +9,14 @@
 
 ## Objetivo do projeto
 
-Striva Sales é um sistema operacional de vendas open source com agentes de IA nativos, multi-nicho,
-WhatsApp como canal primário (via WAHA). Multi-tenant com RLS desde o dia 1, LGPD
-nativa. Monetização = self-host em VPS, não assinatura. Posicionamento: [`VISION.md`](VISION.md).
+Striva Sales é um produto comercial fechado com atendimento digital, CRM, follow-up e agenda, multi-nicho,
+WhatsApp como canal primário. Multi-tenant com RLS e recursos de LGPD. O cliente contrata a solução;
+a equipe responsável opera a plataforma. Preço e periodicidade dependem da oferta contratada.
+Posicionamento confirmado em 30/09/2026: [`VISION.md`](VISION.md) e [`PRODUCT.md`](PRODUCT.md).
+A licença MIT da base herdada permanece preservada.
 
-**Consequência que muda como você trabalha:** o produto é distribuído como código.
-Quem instala numa VPS **é** o usuário. Uma mudança que funciona na máquina do dev e
+**Consequência que muda como você trabalha:** a equipe operadora precisa de artefatos instaláveis.
+A instalação numa VPS é parte da operação da plataforma. Uma mudança que funciona na máquina do dev e
 quebra no clone fresco é um bug de produto, não um detalhe de ambiente.
 
 ## Stack (CONFIRMADO em `package.json`)
