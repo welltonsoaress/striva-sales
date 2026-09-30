@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/LoginForm";
 import { marcaDaSaida } from "@/lib/branding/saida";
@@ -27,10 +26,6 @@ export default async function LoginPage({
   const idioma = normalizarIdioma(
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
-  // Entrar na landing também serve para retomar uma sessão já validada.
-  // O layout do sistema continua aplicando organização, onboarding e MFA.
-  // Retornos de convite/recuperação precisam conservar seu diagnóstico.
-  if (user && !error && reset !== "success") redirect("/app");
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (

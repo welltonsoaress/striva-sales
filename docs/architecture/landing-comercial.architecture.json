@@ -9,7 +9,7 @@
     { "id": "produto", "lane": "entrada", "col": 1, "type": "document", "label": "Produto e marca", "sublabel": "PRODUCT.md; nova marca comercial em public/brand/; recursos confirmados em código" },
     { "id": "landing", "lane": "interface", "col": 2, "type": "frontend", "label": "Landing comercial", "sublabel": "app/page.tsx → components/marketing/LandingPage.tsx; demonstrações fictícias locais" },
     { "id": "demonstracao", "lane": "saida", "col": 3, "type": "external", "label": "Conversa comercial", "sublabel": "Link wa.me para o número confirmado pelo proprietário; envio depende do visitante" },
-    { "id": "login", "lane": "saida", "col": 4, "type": "frontend", "label": "Acesso à plataforma", "sublabel": "Entrar → /login; autenticação existente" }
+    { "id": "login", "lane": "saida", "col": 4, "type": "frontend", "label": "Acesso à plataforma", "sublabel": "Entrar → /login para visitante; /app com sessão validada por getUser no servidor" }
   ],
   "edges": [
     { "id": "entrada-landing", "from": "visitante", "to": "landing", "label": "Visita pública" },

@@ -1070,7 +1070,7 @@ const faqs = [
   ],
 ];
 
-export function LandingPage({ name }: { name: string }) {
+export function LandingPage({ name, loginHref = "/login" }: { name: string; loginHref?: "/login" | "/app" }) {
   const ready = useInteractiveReady();
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -1089,7 +1089,7 @@ export function LandingPage({ name }: { name: string }) {
           <a href="#para-quem">Para quem</a>
         </nav>
         <div className={styles.headerActions}>
-          <Link href="/login" className={styles.loginLink}>
+          <Link href={loginHref} className={styles.loginLink}>
             Entrar
           </Link>
           <span className={styles.desktopCta}>
@@ -1431,7 +1431,7 @@ export function LandingPage({ name }: { name: string }) {
             Fale com nossa equipe
             <ArrowSquareOut size={17} aria-hidden />
           </a>
-          <Link href="/login">
+          <Link href={loginHref}>
             Acessar a plataforma
             <ArrowRight size={17} aria-hidden />
           </Link>

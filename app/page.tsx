@@ -3,6 +3,7 @@ import { Manrope } from "next/font/google";
 import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { LandingPage } from "@/components/marketing/LandingPage";
 import styles from "@/components/marketing/landing.module.css";
+import { createClient } from "@/lib/supabase/server";
 
 const manrope = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-commercial" });
 
@@ -21,10 +22,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   return (
     <div className={`${manrope.variable} ${styles.landing}`}>
-      <LandingPage name={DEFAULT_APP_NAME} />
+      <LandingPage name={DEFAULT_APP_NAME} loginHref={user ? "/app" : "/login"} />
     </div>
   );
 }
