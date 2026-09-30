@@ -180,9 +180,9 @@ export function formatManagementWeeklyComparison(report: Awaited<ReturnType<type
 }
 
 export function formatManagementSummary(snapshot: ManagementSnapshot): string {
-  const day = new Intl.DateTimeFormat("pt", { timeZone: snapshot.timezone, dateStyle: "short" })
+  const day = new Intl.DateTimeFormat(tagDeIdioma(IDIOMA_PADRAO), { timeZone: snapshot.timezone, dateStyle: "short" })
     .format(new Date(snapshot.period_start));
-  const hour = new Intl.DateTimeFormat("pt-BR", { timeZone: snapshot.timezone, hour: "2-digit", minute: "2-digit" })
+  const hour = new Intl.DateTimeFormat(tagDeIdioma(IDIOMA_PADRAO), { timeZone: snapshot.timezone, hour: "2-digit", minute: "2-digit" })
     .format(new Date(snapshot.measured_at));
   const a = snapshot.activity;
   const entries = snapshot.new_leads === 0 ? "Nenhuma nova oportunidade registrada até agora."

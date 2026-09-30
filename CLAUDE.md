@@ -208,8 +208,9 @@ roteamento; o Traefik da hospedagem deixa de enxergá-lo e **o domínio inteiro
 responde `404 page not found`** — com o contêiner `healthy`, porque o
 healthcheck é um probe TCP interno e não sabe nada de roteamento.
 
-Depois de qualquer deploy, confirme que o domínio responde **307** (redireciona
-pro login) e não 404. Verificações e o caso de build local em
+Depois de qualquer deploy, confirme que a raiz do domínio responde **200** com a
+landing comercial e que **Entrar** abre o login para visitante ou o sistema para
+uma sessão válida. Verificações e o caso de build local em
 `docs/runbooks/deploy.md`.
 
 O caminho normal **não constrói nada na VPS**: commit → push → PR → merge na

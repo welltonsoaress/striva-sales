@@ -26,7 +26,7 @@ Os recursos dependem de configuração da operação. Não prometer receita, con
 
 ## Brand Commitments
 
-Preservar o nome do produto e a afinidade com o violeta da plataforma. Correção do proprietário: a marca comercial atual é a fita violeta facetada com duas esferas, enviada em `Captura de tela 2026-09-29 071905.png`. Ela substitui a geometria antiga de `lib/branding/desenho.ts` na landing. A configuração de marca própria da operação permanece independente. Voz clara, comercial e brasileira. Explicar benefícios sem jargão de infraestrutura.
+Preservar o nome do produto e a afinidade com o violeta da plataforma. Correção do proprietário: a marca comercial atual é a fita violeta facetada com duas esferas, enviada em imagem de referência enviada em 29/09/2026. Ela substitui a geometria antiga de `lib/branding/desenho.ts` na landing. A configuração de marca própria da operação permanece independente. Voz clara, comercial e brasileira. Explicar benefícios sem jargão de infraestrutura.
 
 Direção comercial confirmada: funcionário comercial com IA que atende, vende, agenda e atualiza o CRM, sob controle do gestor em uma plataforma completa. Atendimento 24/7 é uma possibilidade de configuração da operação, não um SLA. Integração Google Agenda e relatórios diários/semanais são capacidades confirmadas em `lib/agenda/google/` e `lib/management/{report,schedule,delivery}.ts`. Inteligência comercial refere-se aos dados da própria operação; não há fonte de pesquisa externa de mercado confirmada.
 
