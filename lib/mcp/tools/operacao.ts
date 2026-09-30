@@ -74,7 +74,7 @@ const listStagesShape = {
 export const crmListStages: McpToolDefinition<typeof listStagesShape> = {
   name: "crm_list_stages",
   description:
-    "Lista as etapas ativas de um pipeline, na ordem do quadro, com id, name, slug, position, " +
+    "Lista as etapas ativas de um pipeline, na ordem do quadro, com id, name, propósito/critério de entrada (purpose), slug, position, " +
     "is_won/is_lost e a autoria da última mudança de configuração (last_change_actor_kind: user|ai|system). " +
     "Use antes de mover um lead ou de criar etapa nova, para não duplicar coluna existente.",
   inputSchema: listStagesShape,

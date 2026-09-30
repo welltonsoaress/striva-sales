@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -82,6 +83,47 @@ describe("POST /api/v1/pipelines", () => {
     expect(etapas.map((e) => e.name)).toEqual(["Novo", "Em andamento", "Ganho", "Perdido"]);
     expect(etapas.filter((e) => e.is_won)).toHaveLength(1);
     expect(etapas.every((e) => e.organization_id === ORG_ID)).toBe(true);
+  });
+
+  it("cria o modelo de clínica com orientações e destinos de agenda revisados por etapa", async () => {
+    authOk();
+    const db = makeDb({ pipelines: umFunil() });
+    const { POST } = await import("./route");
+    const pacote = PACOTES.find((p) => p.id === "clinica")!;
+    const res = await POST(reqPost({
+      name: "Agenda clínica",
+      template_id: pacote.id,
+      stages: pacote.proposta.etapas.map(({ nome, ...etapa }) => ({ name: nome, ...etapa })),
+      event_stage_keys: { appointment_pending: null, appointment_confirmed: "escolhendo_horario", human_handoff: null },
+    }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(201);
+    const pipeline = db.tabelas.crm_pipelines.find((p) => p.name === "Agenda clínica")!;
+    const pipelineId = String(pipeline.id);
+    const stages = db.tabelas.crm_stages.filter((s) => s.pipeline_id === pipelineId);
+    expect(stages.map((s) => s.agent_stage_hint)).toEqual(pacote.proposta.etapas.map((s) => s.passo));
+    const flow = (pipeline.settings as { flow: { stage_guidance: Record<string, { purpose: string }>; event_stage_ids: Record<string, string | null>; template_id: string } }).flow;
+    const etapaEscolhida = stages.find((s) => s.name === "Escolhendo horário")!;
+    const etapaEscolhidaId = String(etapaEscolhida.id);
+    expect(flow.template_id).toBe("clinica");
+    expect(flow.stage_guidance[etapaEscolhidaId]?.purpose).toContain("horário foi solicitado");
+    expect(flow.event_stage_ids).toMatchObject({ appointment_pending: null, appointment_confirmed: etapaEscolhidaId, human_handoff: null });
+    expect(etapaEscolhida.id).not.toBe("consulta_marcada");
+  });
+
+  it("recusa destino de agenda que não pertence às etapas enviadas", async () => {
+    authOk();
+    const db = makeDb({ pipelines: umFunil() });
+    const { POST } = await import("./route");
+    const pacote = PACOTES.find((p) => p.id === "clinica")!;
+    const res = await POST(reqPost({
+      name: "Agenda clínica",
+      template_id: pacote.id,
+      stages: pacote.proposta.etapas.map(({ nome, ...etapa }) => ({ name: nome, ...etapa })),
+      event_stage_keys: { appointment_pending: "etapa_de_outro_funil", appointment_confirmed: null },
+    }));
+    expect(res.status).toBe(422);
+    expect(db.escritas).toEqual([]);
   });
 
   it("as etapas entram DEPOIS do funil — antes não haveria pipeline_id para elas", async () => {

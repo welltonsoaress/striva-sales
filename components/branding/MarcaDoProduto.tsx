@@ -5,17 +5,9 @@ import { cn } from "@/lib/utils";
  * A marca do PRODUTO desenhada em SVG inline — o que a tela mostra quando
  * ninguém configurou marca própria (`marcaEhADoProduto`, em `lib/branding.ts`).
  *
- * Inline, e não `<img src="/algo.svg">`, por três motivos:
- *  - as cores seguem o TEMA: violeta mais claro e nome em creme no escuro;
- *  - nada em `public/`: um `.svg` fixo ali seria servido na instalação de um
- *    revendedor que configurou a marca dele (ver `lib/branding/desenho.ts`);
- *  - a barra lateral já usa `<img>` para o logo CONFIGURADO, e o e2e
- *    `marca-logo.spec.ts` mede "barra sem `<img>`" como "sem logo do
- *    revendedor". Um `<img>` do produto ali faria a spec medir a coisa errada.
- *
- * O texto alternativo é o `nome` que a tela já resolveu — nunca uma string
- * fixa, para que a catraca de marca (`tests/unit/branding.test.ts`) continue
- * contando ZERO ocorrências fora de `lib/branding.ts`.
+ * Inline, e não `<img src="/algo.svg">`, porque as cores acompanham o tema e
+ * um SVG estático em `public/` vazaria para instalações white-label. O mesmo
+ * desenho é usado na fachada, na navegação e no ícone padrão da aba.
  */
 
 type Props = {
@@ -25,18 +17,19 @@ type Props = {
   readonly decorativo?: boolean;
 };
 
-const SIMBOLO_CLARO_ESCURO = "fill-[#7c3aed] dark:fill-[#a78bfa]";
-const MODULO_CLARO_ESCURO = "fill-[#a78bfa] dark:fill-[#7c3aed]";
-const NOME_CLARO_ESCURO = "stroke-[#1c1a16] dark:stroke-[#f5f4ef]";
-const SUFIXO_CLARO_ESCURO = "stroke-[#5d594f] dark:stroke-[#8e8b7f]";
+const SIMBOLO_CLARO_ESCURO = "stroke-[#7c3aed] dark:stroke-[#a78bfa]";
+const PONTA_CLARO_ESCURO = "fill-[#7c3aed] dark:fill-[#a78bfa]";
+const PONTO_CLARO_ESCURO = "fill-[#a78bfa] dark:fill-[#7c3aed]";
+const NOME_CLARO_ESCURO = "fill-[#1c1a16] dark:fill-[#f5f4ef]";
+const SUFIXO_CLARO_ESCURO = "fill-[#7c3aed] dark:fill-[#a78bfa]";
+const DIVISOR_CLARO_ESCURO = "stroke-[#d2cdbf] dark:stroke-[#46433b]";
 
-// As classes acima repetem os hexes de `CORES_DA_MARCA` porque o Tailwind só
-// gera utilitário para valor LITERAL no fonte. Quem impede os dois de divergirem
-// é `tests/unit/marca-do-produto.test.tsx`, que compara as classes à paleta —
-// e não uma asserção em runtime: um throw aqui derrubaria a casca inteira.
+// Os hexes literais alimentam o Tailwind; `marca-do-produto.test.tsx` confere
+// que continuem sincronizados com `CORES_DA_MARCA`.
 export const CLASSES_DE_COR = {
   simbolo: SIMBOLO_CLARO_ESCURO,
-  modulo: MODULO_CLARO_ESCURO,
+  ponta: PONTA_CLARO_ESCURO,
+  ponto: PONTO_CLARO_ESCURO,
   nome: NOME_CLARO_ESCURO,
   sufixo: SUFIXO_CLARO_ESCURO,
 } as const;
@@ -47,6 +40,25 @@ function acessibilidade(nome: string, decorativo: boolean) {
     : ({ role: "img", "aria-label": nome } as const);
 }
 
+function MarcaVetorial({ transform }: { readonly transform?: string }) {
+  return (
+    <g transform={transform}>
+      <path
+        d={SIMBOLO.d}
+        fill="none"
+        strokeWidth={SIMBOLO.larguraDaFita}
+        strokeLinecap="butt"
+        strokeLinejoin="round"
+        className={SIMBOLO_CLARO_ESCURO}
+      />
+      <path d={SIMBOLO.pontaSuperior} className={PONTA_CLARO_ESCURO} />
+      <path d={SIMBOLO.pontaInferior} className={PONTA_CLARO_ESCURO} />
+      <circle {...SIMBOLO.pontoSuperior} className={PONTO_CLARO_ESCURO} />
+      <circle {...SIMBOLO.pontoInferior} className={SIMBOLO_CLARO_ESCURO} />
+    </g>
+  );
+}
+
 /** O símbolo sozinho — para a barra recolhida, avatar e cantos apertados. */
 export function SimboloDoProduto({ nome, className, decorativo = false }: Props) {
   return (
@@ -55,15 +67,12 @@ export function SimboloDoProduto({ nome, className, decorativo = false }: Props)
       className={cn("shrink-0", className)}
       {...acessibilidade(nome, decorativo)}
     >
-      <g className={SIMBOLO_CLARO_ESCURO} transform={SIMBOLO.transform}>
-        <path d={SIMBOLO.d} />
-        <rect {...SIMBOLO.modulo} className={MODULO_CLARO_ESCURO} />
-      </g>
+      <MarcaVetorial />
     </svg>
   );
 }
 
-/** Símbolo + nome — para a barra aberta e a fachada de entrada. */
+/** Símbolo + divisor + nome — assinatura horizontal das telas principais. */
 export function LogotipoDoProduto({ nome, className, decorativo = false }: Props) {
   return (
     <svg
@@ -71,32 +80,31 @@ export function LogotipoDoProduto({ nome, className, decorativo = false }: Props
       className={cn("shrink-0", className)}
       {...acessibilidade(nome, decorativo)}
     >
-      <g className={SIMBOLO_CLARO_ESCURO} transform={LOGOTIPO.simbolo.transform}>
-        <path d={LOGOTIPO.simbolo.d} />
-        <rect {...LOGOTIPO.simbolo.modulo} className={MODULO_CLARO_ESCURO} />
-      </g>
-      <g
+      <MarcaVetorial transform={LOGOTIPO.simbolo.transform} />
+      <line {...LOGOTIPO.divisor} className={DIVISOR_CLARO_ESCURO} strokeWidth={1.25} />
+      <text
+        x={LOGOTIPO.nome.x}
+        y={LOGOTIPO.nome.y}
+        fontFamily="var(--font-atkinson), Arial, sans-serif"
+        fontSize={LOGOTIPO.nome.fontSize}
+        fontWeight={700}
+        letterSpacing={LOGOTIPO.nome.letterSpacing}
         className={NOME_CLARO_ESCURO}
-        fill="none"
-        strokeWidth={8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
       >
-        {LOGOTIPO.nome.map((g) => (
-          <path key={g.transform} transform={g.transform} d={g.d} />
-        ))}
-      </g>
-      <g
+        Striva
+      </text>
+      <text
+        x={LOGOTIPO.sufixo.x}
+        y={LOGOTIPO.sufixo.y}
+        textAnchor="middle"
+        fontFamily="var(--font-atkinson), Arial, sans-serif"
+        fontSize={LOGOTIPO.sufixo.fontSize}
+        fontWeight={700}
+        letterSpacing={LOGOTIPO.sufixo.letterSpacing}
         className={SUFIXO_CLARO_ESCURO}
-        fill="none"
-        strokeWidth={4.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
       >
-        {LOGOTIPO.sufixo.map((g) => (
-          <path key={g.transform} transform={g.transform} d={g.d} />
-        ))}
-      </g>
+        SALES
+      </text>
     </svg>
   );
 }

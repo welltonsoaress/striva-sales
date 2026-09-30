@@ -3,6 +3,7 @@
 import { useT } from "@/hooks/i18n/useT";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,6 +23,7 @@ import { customFieldSchema, type CustomFieldDef } from "@/lib/schemas/settings";
 import { Plus, Trash } from "@/lib/ui/icons";
 import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
 import { StagesSection, ancoraDasEtapas } from "./_stages";
+import { FlowConfigSection } from "./_flow";
 
 export interface PipelineRow {
   id: string;
@@ -71,15 +73,10 @@ export function PipelinesClient({
 }) {
   const t = useT();
   if (pipelines.length === 0) {
-    // ⚠️ NÃO PROMETA UM CAMINHO QUE NÃO EXISTE. Criar funil não é feito por
-    // nenhuma tela, rota ou action deste produto — só por script de instalação;
-    // e como o instalador não provisiona funil, ESTE é o estado de toda
-    // instalação nova. O texto anterior mandava "crie um no quadro", e o quadro
-    // vazio manda "Ir para Configurações": pingue-pongue fechado, com o usuário
-    // procurando um botão que não existe em lugar nenhum.
     return (
-      <Card className="p-6 text-sm leading-relaxed text-muted-foreground">
-        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
+      <Card className="space-y-3 p-6 text-sm leading-relaxed text-muted-foreground">
+        <p>{t("Você ainda não tem um funil ativo. Crie um a partir de um modelo do seu negócio ou comece pelas etapas básicas. Depois, escolha o que o agente e a agenda podem movimentar.")}</p>
+        <Button asChild><Link href="/app/kanban">{t("Criar funil")}</Link></Button>
       </Card>
     );
   }
@@ -97,6 +94,9 @@ export function PipelinesClient({
               primeira coisa que o dono da clínica vê é um mapeamento sobre
               colunas de e-commerce que ele nem sabia que dava para trocar. */}
           <StagesSection pipelineId={p.id} ancoraMapeamento={ancoraDoMapeamento(p.id)} />
+          <div className="border-t border-border pt-6">
+            <FlowConfigSection pipelineId={p.id} />
+          </div>
           <div className="border-t border-border pt-6">
             <AgentMappingSection pipelineId={p.id} ancoraEtapas={ancoraDasEtapas(p.id)} />
           </div>

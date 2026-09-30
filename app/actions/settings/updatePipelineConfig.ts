@@ -1,6 +1,7 @@
 "use server";
 
 import { supportWriteError } from "@/lib/impersonate/support";
+import { savePipelineSettings } from "@/lib/pipelines/save-settings";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -44,7 +45,7 @@ export async function updatePipelineConfig(
 
   const { data: row, error: readErr } = await supabase
     .from("crm_pipelines")
-    .select("vocabulary, settings, organization_id")
+    .select("vocabulary, settings, organization_id, updated_at")
     .eq("id", pipelineId)
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
@@ -62,11 +63,12 @@ export async function updatePipelineConfig(
   if (parsed.data.fields !== undefined) nextSettings.fields = parsed.data.fields;
   if (parsed.data.lost_reasons !== undefined) nextSettings.lost_reasons = parsed.data.lost_reasons;
 
-  const { error } = await supabase
-    .from("crm_pipelines")
-    .update({ vocabulary: nextVocabulary, settings: nextSettings })
-    .eq("id", pipelineId);
-  if (error) return { ok: false, error: error.message };
+  try {
+    const saved = await savePipelineSettings(supabase, { organizationId: activeOrg.orgId, pipelineId, expectedUpdatedAt: row.updated_at, settings: nextSettings, vocabulary: nextVocabulary });
+    if (!saved) return { ok: false, error: "As configurações mudaram enquanto você editava. Atualize a página e revise antes de salvar." };
+  } catch {
+    return { ok: false, error: "Não consegui salvar as configurações. Tente novamente." };
+  }
 
   await audit({
     action: "pipeline.config_updated",

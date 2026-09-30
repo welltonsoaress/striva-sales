@@ -891,6 +891,14 @@ jobs:
             test-results/
           retention-days: 7
 
+      - uses: actions/upload-artifact@v7
+        if: always() && matrix.parte == 1
+        with:
+          name: evidencia-atualizacao-rollback
+          path: .superpowers/evidence/final-6-retry-release-diferente.png
+          if-no-files-found: ignore
+          retention-days: 7
+
   # O NOME DESTE JOB É O CHECK OBRIGATÓRIO, e é por isso que ele existe.
   #
   # A branch protection da `main` exige um check chamado exatamente `e2e`

@@ -29,6 +29,10 @@ import { chaveDeNome } from "@/lib/leads/stage-editing";
 export interface EtapaProposta {
   /** O que aparece no topo da coluna. */
   nome: string;
+  /** Identificador estável dentro do modelo, usado por integrações configuradas no pacote. */
+  chave?: string;
+  /** Critério de entrada legível para a equipe e para o agente. */
+  orientacao?: string;
   /**
    * Quando o funcionário move o cliente para cá. `null` = coluna que só pessoas
    * movem, e isso é resposta, não pendência: "Em separação" não tem equivalente
@@ -84,16 +88,21 @@ export function normalizarProposta(bruta: {
 
   for (const item of etapasBrutas) {
     if (etapas.length >= MAX_ETAPAS) break;
-    const registro = (item ?? {}) as { nome?: unknown; passo?: unknown };
+    const registro = (item ?? {}) as {
+      nome?: unknown;
+      passo?: unknown;
+      chave?: unknown;
+      orientacao?: unknown;
+    };
 
     const nome = limpar(registro.nome);
     if (!nome) continue;
     // Duas colunas que a pessoa leria como a mesma ("Pós-venda" e "Pos venda")
     // viram uma. A segunda não é renomeada com sufixo: um quadro com "Proposta"
     // e "Proposta 2" é pior que um quadro com uma "Proposta".
-    const chave = chaveDeNome(nome);
-    if (nomesUsados.has(chave)) continue;
-    nomesUsados.add(chave);
+    const chaveNome = chaveDeNome(nome);
+    if (nomesUsados.has(chaveNome)) continue;
+    nomesUsados.add(chaveNome);
 
     // Passo repetido: o índice `uniq_crm_stages_pipeline_hint` é uma etapa por
     // passo. Fica com a PRIMEIRA — a ordem da proposta é a ordem do funil, e o
@@ -102,7 +111,11 @@ export function normalizarProposta(bruta: {
     if (passo && passosUsados.has(passo)) passo = null;
     if (passo) passosUsados.add(passo);
 
-    etapas.push({ nome, passo });
+    const chave = typeof registro.chave === "string" && /^[a-z][a-z0-9_]{0,39}$/.test(registro.chave)
+      ? registro.chave
+      : undefined;
+    const orientacao = limpar(registro.orientacao).slice(0, 280) || undefined;
+    etapas.push({ nome, passo, ...(chave ? { chave } : {}), ...(orientacao ? { orientacao } : {}) });
   }
 
   return { nome: limpar(bruta.nome), etapas };

@@ -25,6 +25,7 @@ interface Resposta {
 }
 interface Cenario {
   lead: Resposta;
+  pipeline: Resposta;
   etapaDestino: Resposta;
   update: Resposta;
   rpcError?: { message: string } | null;
@@ -33,6 +34,7 @@ interface Cenario {
 function cenario(over: Partial<Cenario> = {}): Cenario {
   return {
     lead: { data: LEAD, error: null },
+    pipeline: { data: { settings: null }, error: null },
     etapaDestino: { data: ETAPA_HANDOFF, error: null },
     update: { data: [{ id: LEAD.id }], error: null },
     ...over,
@@ -61,6 +63,7 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
         _update: false,
         _select: false,
         _eqKeys: [] as string[],
+        _eqValues: [] as unknown[],
         select: () => {
           b._select = true;
           return b;
@@ -69,13 +72,15 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
           b._update = true;
           return b;
         },
-        eq: (key: string) => {
+        eq: (key: string, value: unknown) => {
           b._eqKeys.push(key);
+          b._eqValues.push(value);
           return b;
         },
         maybeSingle: () => {
           if (tabela === "crm_leads") return Promise.resolve(c.lead);
-          if (b._eqKeys.includes("slug")) return Promise.resolve(c.etapaDestino);
+          if (tabela === "crm_pipelines") return Promise.resolve(c.pipeline);
+          if (b._eqKeys.includes("slug") || (b._eqKeys.includes("id") && b._eqValues.includes("s-alvo-configurado"))) return Promise.resolve(c.etapaDestino);
           return Promise.resolve({ data: ETAPA_ORIGEM, error: null });
         },
         then(onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) {
@@ -122,6 +127,22 @@ describe("moverLeadParaEtapaDeHandoff", () => {
 
   it("pipeline sem etapa 'chamar-humano': no-op, sem mover nem gravar atividade", async () => {
     const r = await mover(cenario({ etapaDestino: { data: null, error: null } }));
+    expect(r).toEqual({ moveu: false, motivo: "sem_etapa_de_handoff" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
+  it("usa o destino de handoff escolhido na configuração do funil", async () => {
+    const r = await mover(cenario({
+      pipeline: { data: { settings: { flow: { event_stage_ids: { human_handoff: "s-alvo-configurado" } } } }, error: null },
+      etapaDestino: { data: { id: "s-alvo-configurado", name: "Precisa de atendimento" }, error: null },
+    }));
+    expect(r).toEqual({ moveu: true, motivo: "movido" });
+  });
+
+  it("null explícito deixa o handoff sem movimentação e não usa o slug legado", async () => {
+    const r = await mover(cenario({
+      pipeline: { data: { settings: { flow: { event_stage_ids: { human_handoff: null } } } }, error: null },
+    }));
     expect(r).toEqual({ moveu: false, motivo: "sem_etapa_de_handoff" });
     expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
   });
@@ -204,4 +225,13 @@ it("handoff derivado mantém a continuação do canal A sem observar/iniciar B",
   });
   expect(rpcs.map((call) => call.fn)).not.toContain("fn_service_observe_command");
   expect(rpcs.map((call) => call.fn)).not.toContain("fn_service_begin");
+});
+
+
+it.each(["is_won", "is_lost"])("handoff recusa etapa que passou a encerrar o negócio: %s", async (campo) => {
+  const rpcs: ChamadaRpc[] = [];
+  const admin = fakeAdmin(cenario({ etapaDestino: { data: { ...ETAPA_HANDOFF, [campo]: true }, error: null } }), rpcs);
+  const result = await moverLeadParaEtapaDeHandoff(admin, { organizationId: ORG, leadId: LEAD.id, reason: "requested_human" });
+  expect(result).toEqual({ moveu: false, motivo: "destino_invalido" });
+  expect(rpcs).toEqual([]);
 });

@@ -28,6 +28,7 @@ interface Resposta {
 }
 interface Cenario {
   lead: Resposta;
+  pipeline: Resposta;
   etapaDestino: Resposta;
   update: Resposta;
   rpcError?: { message: string } | null;
@@ -36,6 +37,7 @@ interface Cenario {
 function cenario(over: Partial<Cenario> = {}): Cenario {
   return {
     lead: { data: LEAD, error: null },
+    pipeline: { data: { settings: null }, error: null },
     etapaDestino: { data: ETAPA_AGENDADO, error: null },
     update: { data: [{ id: LEAD.id }], error: null },
     ...over,
@@ -59,6 +61,7 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
         _update: false,
         _select: false,
         _eqKeys: [] as string[],
+        _eqValues: [] as unknown[],
         select: () => {
           b._select = true;
           return b;
@@ -67,13 +70,15 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
           b._update = true;
           return b;
         },
-        eq: (key: string) => {
+        eq: (key: string, value: unknown) => {
           b._eqKeys.push(key);
+          b._eqValues.push(value);
           return b;
         },
         maybeSingle: () => {
           if (tabela === "crm_leads") return Promise.resolve(c.lead);
-          if (b._eqKeys.includes("slug")) return Promise.resolve(c.etapaDestino);
+          if (tabela === "crm_pipelines") return Promise.resolve(c.pipeline);
+          if (b._eqKeys.includes("slug") || (b._eqKeys.includes("id") && b._eqValues.includes("s-alvo-configurado"))) return Promise.resolve(c.etapaDestino);
           return Promise.resolve({ data: ETAPA_ORIGEM, error: null });
         },
         then(onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) {
@@ -137,6 +142,23 @@ describe("moverLeadParaEtapaDeAgendamento", () => {
     expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
   });
 
+  it("usa o destino configurado por id mesmo quando o nome interno da etapa é diferente", async () => {
+    const c = cenario({
+      pipeline: { data: { settings: { flow: { event_stage_ids: { appointment_confirmed: "s-alvo-configurado" } } } }, error: null },
+      etapaDestino: { data: { id: "s-alvo-configurado", name: "Consulta marcada" }, error: null },
+    });
+    const r = await mover(c);
+    expect(r).toEqual({ moveu: true, motivo: "movido" });
+  });
+
+  it("configuração explícita sem destino desativa o fallback legado por slug", async () => {
+    const r = await mover(cenario({
+      pipeline: { data: { settings: { flow: { event_stage_ids: { appointment_confirmed: null } } } }, error: null },
+    }));
+    expect(r).toEqual({ moveu: false, motivo: "sem_etapa_mapeada" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
   it("lead já está na etapa alvo: não move de novo", async () => {
     const r = await mover(
       cenario({ lead: { data: { ...LEAD, stage_id: ETAPA_AGENDADO.id }, error: null } }),
@@ -177,4 +199,17 @@ describe("moverLeadParaEtapaDeAgendamento", () => {
       confirmed: "agendado",
     });
   });
+});
+
+
+it.each(["pending", "confirmed"] as const)("recusa destino de perda reconfigurado para %s", async (transicao) => {
+  const { r, eventos } = await moverObservando(cenario({ etapaDestino: { data: { ...ETAPA_AGENDADO, is_lost: true }, error: null } }), transicao);
+  expect(r).toEqual({ moveu: false, motivo: "destino_invalido" });
+  expect(eventos).toEqual([]);
+});
+it("solicitação não encerra como ganho; confirmação em ganho emite status coerente", async () => {
+  const c = cenario({ etapaDestino: { data: { ...ETAPA_AGENDADO, is_won: true }, error: null } });
+  expect(await mover(c, "pending")).toEqual({ moveu: false, motivo: "destino_invalido" });
+  const { eventos } = await moverObservando(c, "confirmed");
+  expect(eventos[0]?.args.p_payload).toMatchObject({ status: "won" });
 });

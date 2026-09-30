@@ -70,6 +70,7 @@ export function negocio(id: string, stageId: string, over: Partial<LeadRow> = {}
 }
 
 export interface PipelineRow {
+  updated_at: string;
   id: string;
   name: string;
   slug: string;
@@ -85,6 +86,7 @@ export function funilRow(over: Partial<PipelineRow> & { id: string; name: string
     slug: over.id,
     description: null,
     position: 1000,
+    updated_at: "2026-09-28T00:00:00Z",
     is_default: false,
     is_archived: false,
     organization_id: ORG_ID,
@@ -111,6 +113,8 @@ export interface DbOpts {
   webhookSources?: Array<Record<string, unknown>>;
   /** Automações — `actions` é jsonb cru, sem FK para o funil. */
   automationRules?: Array<Record<string, unknown>>;
+  /** Compromissos da agenda associados aos contatos do funil. */
+  calendarAppointments?: Array<Record<string, unknown>>;
   /** Erro do banco na n-ésima escrita (1-based), como o PostgREST devolveria. */
   writeError?: (n: number, table: string) => { code: string; message: string } | null;
 }
@@ -139,6 +143,7 @@ export interface Registro {
     crm_lead_activities: Linha[];
     webhook_sources: Linha[];
     automation_rules: Linha[];
+    calendar_appointments: Linha[];
   };
 }
 
@@ -158,6 +163,7 @@ export function makeDb(opts: DbOpts = {}): Registro {
       crm_lead_activities: [],
       webhook_sources: (opts.webhookSources ?? []) as Linha[],
       automation_rules: (opts.automationRules ?? []) as Linha[],
+      calendar_appointments: (opts.calendarAppointments ?? []) as Linha[],
     },
   };
   const tables = registro.tabelas as unknown as Record<string, Linha[] | undefined>;
@@ -237,9 +243,14 @@ export function makeDb(opts: DbOpts = {}): Registro {
         return r.error ? r : { ...r, data: alvos.map((l) => ({ ...l })) };
       }
       if (patch) {
-        const alvos = casam();
+        let alvos: Linha[] = [];
         const r = await escreve("update", patch, () => {
-          for (const linha of alvos) Object.assign(linha, patch);
+          alvos = casam();
+          for (const linha of alvos) {
+            Object.assign(linha, patch);
+            // O trigger crm_pipelines_updated_at renova a revisão em toda escrita.
+            if (table === "crm_pipelines") linha.updated_at = `revisao-${nEscrita}`;
+          }
         });
         return r.error ? r : { ...r, data: alvos.map((l) => ({ ...l })) };
       }

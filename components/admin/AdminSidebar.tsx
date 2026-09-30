@@ -17,7 +17,7 @@ import {
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
+import { LogotipoDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import { useT } from "@/hooks/i18n/useT";
@@ -65,6 +65,7 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
   // injetar a marca do BANCO as duas divergem — o nome renderizado no SSR não
   // batia com o hidratado, que é hydration mismatch. Ver `lib/branding/contexto.tsx`.
   const marca = useMarcaDaInstalacao();
+  const marcaDoProduto = marcaEhADoProduto(marca);
 
   return (
     <aside
@@ -74,21 +75,25 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
       )}
     >
       <div className="flex h-14 items-center gap-3 border-b px-4">
-        {/* O nome já está escrito ao lado — o símbolo é reforço, não legenda. */}
-        {marcaEhADoProduto(marca) && (
-          <SimboloDoProduto nome={marca.name} decorativo className="h-8 w-8" />
+        {marcaDoProduto ? (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <LogotipoDoProduto nome={marca.name} decorativo className="h-7 w-auto" />
+            <span className="text-[10px] leading-none font-semibold text-muted-foreground">
+              {t("Admin Plataforma")}
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            <span className="text-xs tracking-wider text-muted-foreground uppercase">
+              {marca.name}
+            </span>
+            <span className="text-sm font-semibold tracking-tight">{t("Admin Plataforma")}</span>
+          </div>
         )}
-        <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            {marca.name}
-          </span>
-          <span className="text-sm font-semibold tracking-tight">{t("Admin Plataforma")}</span>
-        </div>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação plataforma")}>
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           return (
             <Link
