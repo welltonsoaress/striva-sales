@@ -24,3 +24,9 @@ it("visitante sem sessão continua recebendo a tela de login", async () => {
   expect(await LoginPage({ searchParams: Promise.resolve({}) })).toBeTruthy();
   expect(redirect).not.toHaveBeenCalled();
 });
+
+it("sessão criada pela confirmação de um convite inválido preserva o aviso de acesso", async () => {
+  getUser.mockResolvedValue({ data: { user: { id: "convidado-ficticio" } } });
+  expect(await LoginPage({ searchParams: Promise.resolve({ error: "convite_invalido" }) })).toBeTruthy();
+  expect(redirect).not.toHaveBeenCalled();
+});

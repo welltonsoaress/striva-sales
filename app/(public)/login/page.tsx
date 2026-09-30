@@ -29,7 +29,8 @@ export default async function LoginPage({
   );
   // Entrar na landing também serve para retomar uma sessão já validada.
   // O layout do sistema continua aplicando organização, onboarding e MFA.
-  if (user) redirect("/app");
+  // Retornos de convite/recuperação precisam conservar seu diagnóstico.
+  if (user && !error && reset !== "success") redirect("/app");
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
