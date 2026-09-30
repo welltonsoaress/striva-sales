@@ -27,7 +27,7 @@ import {
 
 /** Lê o binding de um ponto. `null` = o operador não configurou este ponto. */
 export async function carregarBinding(
-  db: pg.Pool,
+  db: Pick<pg.Pool, 'query'>,
   organizationId: string,
   purpose: string,
 ): Promise<LinhaDeBinding | null> {
@@ -62,7 +62,7 @@ export interface EntradaDoSeam {
  * que aquele modelo foi usado.
  */
 export async function decidirParaOSeam(
-  db: pg.Pool,
+  db: Pick<pg.Pool, 'query'>,
   entrada: EntradaDoSeam,
   deps: { log?: { warn: (msg: string, meta?: Record<string, unknown>) => void } } = {},
 ): Promise<DecisaoDeBinding> {

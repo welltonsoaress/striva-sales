@@ -51,7 +51,7 @@ interface OutcomeStatRow {
   terminal: string;
 }
 
-export async function aggregateFollowupOutcomes(pool: pg.Pool, orgId: string): Promise<FlowOutcomeStat[]> {
+export async function aggregateFollowupOutcomes(pool: Pick<pg.Pool, 'query'>, orgId: string): Promise<FlowOutcomeStat[]> {
   const { rows } = await pool.query<OutcomeStatRow>(
     `select
        e.pointer_id,

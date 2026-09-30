@@ -125,7 +125,7 @@ function cenario(over: Partial<Cenario> = {}): Cenario {
   return {
     leads: { data: [LEAD], error: null },
     stages: { data: STAGES, error: null },
-    update: { data: [{ id: LEAD.id }], error: null },
+    update: { data: [{ id: LEAD.id, status: "open" }], error: null },
     ...over,
   };
 }
@@ -251,6 +251,19 @@ describe("sincronizaEstagioDoAgente", () => {
  */
 describe("sincronizaEstagioDoAgente — o evento que aciona automação e follow-up", () => {
   beforeEach(() => vi.mocked(emitLeadActivity).mockClear());
+
+  it.each(["won", "lost"])("o evento anuncia %s devolvido pelo trigger, sem conservar o estado open anterior", async (status) => {
+    const rpcs: ChamadaRpc[] = [];
+    const c = cenario({
+      stages: { data: [{ id: 'terminal', name: 'Encerrado', agent_stage_hint: status, is_archived: false }], error: null },
+      update: { data: [{ id: LEAD.id, status }], error: null },
+    });
+    const r = await sincronizaEstagioDoAgente(fakeAdmin(c, rpcs), {
+      organizationId: ORG, contactId: CONTATO, passo: status,
+    });
+    expect(r.moveu).toBe(true);
+    expect(rpcs.find((rpc) => rpc.fn === 'emit_event')?.args.p_payload).toMatchObject({ status });
+  });
 
   it("movimento do assistente emite lead.stage_changed, com entity_kind que o motor de automação lê", async () => {
     const { r, eventos } = await sincronizaObservando(cenario());

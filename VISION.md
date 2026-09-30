@@ -1,6 +1,8 @@
 # Visão — Striva Sales
 
-Striva Sales é um CRM open source e independente para operações comerciais que atendem pelo WhatsApp. Agentes de IA, atendentes e automações trabalham sobre os mesmos contatos, conversas, funis e casos, com hospedagem própria e dados sob controle de quem instala.
+Striva Sales é um produto comercial fechado para organizar atendimento, vendas e acompanhamento pelo WhatsApp. O cliente contrata a solução; a equipe responsável opera a plataforma e sua infraestrutura. Um funcionário comercial digital, atendentes e automações trabalham sobre os mesmos contatos, conversas, funis, agenda e casos.
+
+Posicionamento confirmado pelo proprietário em 30/09/2026, na conversa “Criar landing page comercial”: substitui a oferta anterior de código aberto para instalação pelo cliente. Preço, periodicidade e condições da oferta dependem da contratação. Créditos e licença MIT da base herdada permanecem preservados; a proposta comercial não revoga direitos já concedidos por essa licença.
 
 O produto atende diferentes segmentos — de clínicas e imobiliárias a lojas, cursos, agências e prestadores de serviço. A configuração por organização permite adaptar agentes, etapas, regras e identidade visual sem misturar dados entre clientes.
 
@@ -15,7 +17,7 @@ O produto atende diferentes segmentos — de clínicas e imobiliárias a lojas, 
 
 ## Posicionamento
 
-> Striva Sales é um sistema open source de vendas com CRM, agentes de IA e WhatsApp, multi-organização e hospedagem própria.
+> Seu comercial, sempre presente: atendimento, follow-up, agenda e CRM conectados, com controle do gestor e relatórios sobre a própria operação.
 
 ## Independência da distribuição
 

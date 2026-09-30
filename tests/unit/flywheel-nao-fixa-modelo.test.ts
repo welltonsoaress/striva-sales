@@ -68,12 +68,36 @@ function poolFalso() {
     }
     return { rows: [], rowCount: 0 };
   });
-  return { pool: { query } as never, inserts };
+  const client = { query: vi.fn(async (sql: string, params: unknown[] = []) =>
+    sql.includes('pg_try_advisory_lock') ? { rows: [{ locked: true }], rowCount: 1 } : query(sql, params)), release: vi.fn() };
+  return { pool: { query, connect: vi.fn(async () => client) } as never, inserts, client, query };
 }
 
 const LOG = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as never;
 
 describe("flywheel vivo", () => {
+  it("outra rodada segura o lock: não paga outra avaliação nem coleta material", async () => {
+    chamadas.length = 0;
+    const { pool, client, query } = poolFalso();
+    client.query.mockResolvedValueOnce({ rows: [{ locked: false }], rowCount: 1 });
+    const { runFlywheelOnce } = await import("../../lib/agent-engine/flywheel/live");
+    expect(await runFlywheelOnce(pool, {} as never, { limit: 1, log: LOG })).toMatchObject({ judged: 0, proposals: 0 });
+    expect(chamadas).toHaveLength(0);
+    expect(query).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("seleção sem turnos novos encerra sem chamar modelo e libera o lock", async () => {
+    chamadas.length = 0;
+    const { pool, client, query } = poolFalso();
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const { runFlywheelOnce } = await import("../../lib/agent-engine/flywheel/live");
+    await runFlywheelOnce(pool, {} as never, { limit: 1, log: LOG });
+    expect(chamadas).toHaveLength(0);
+    expect(client.query).toHaveBeenLastCalledWith('select pg_advisory_unlock(344415, 1)');
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
   it("não pede modelo nenhum: deixa a instalação resolver, nos DOIS pontos", async () => {
     chamadas.length = 0;
     const { pool } = poolFalso();

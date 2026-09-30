@@ -244,7 +244,7 @@ export interface LlmResolveOverride {
 }
 
 export async function resolveOrgLlmConfig(
-  db: pg.Pool,
+  db: Pick<pg.Pool, 'query'>,
   cfg: LlmEdgeConfig,
   organizationId: string,
   override?: LlmResolveOverride,

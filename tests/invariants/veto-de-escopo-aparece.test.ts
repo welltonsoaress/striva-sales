@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 import { sincronizaEstagioDoAgente } from "@/lib/leads/agent-stage-sync";
+import { loadOperatorFunnelContext } from "@/lib/agent-engine/agent/operator-funnel-context";
 
 import { pgComoSupabase } from "../pg-como-supabase";
 
@@ -97,6 +98,23 @@ afterAll(async () => {
 });
 
 describe("o negócio de um funil que o assistente NÃO cuida", () => {
+  it("briefing do Operador inclui negócio e etapas reais somente da organização e funil autorizados", async () => {
+    const context = await loadOperatorFunnelContext(pool, {
+      organizationId: ORG, contactId: contatoNoFunilDele, pipelineIds: [funilDele],
+    });
+    const leads = JSON.parse(context.split('\n')[1]!) as Array<{ id: string; stages: Array<{ name: string }> }>;
+    expect(leads).toHaveLength(1);
+    expect(leads[0]?.id).toBeTruthy();
+    expect(leads[0]?.stages.map((s) => s.name)).toEqual(['Entrada', 'Qualificando']);
+    for (const input of [
+      { organizationId: ORG, contactId: contatoNoFunilAlheio, pipelineIds: [funilDele] },
+      { organizationId: '7e707e00-0000-4000-8000-000000000002', contactId: contatoNoFunilDele, pipelineIds: [funilDele] },
+    ]) {
+      const forbidden = await loadOperatorFunnelContext(pool, input);
+      expect(JSON.parse(forbidden.split('\n')[1]!)).toEqual([]);
+    }
+  });
+
   it("controle: o cenário tem dois funis com etapas mapeadas", async () => {
     // Sem mapeamento, o motivo seria `sem_mapeamento` e o teste passaria por
     // um caminho que não é o que se quer medir.

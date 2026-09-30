@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "Avaliação de atendimento sem chamadas repetidas", "subtitle": "Veredito antes de nova coleta; proposta sob revisão humana", "output": "avaliacao-atendimento.html", "quality_profile": "standard" },
+  "lanes": [{ "id": "worker", "label": "Worker e seam" }, { "id": "dados", "label": "Artefatos duráveis" }, { "id": "pessoa", "label": "Revisão humana" }],
+  "mainPath": ["loop", "lock", "collect", "judge", "verdict", "distiller", "proposals", "review"],
+  "nodes": [
+    { "id": "loop", "lane": "worker", "col": 0, "type": "service", "label": "runFlywheelLoop / rodada manual" },
+    { "id": "lock", "lane": "worker", "col": 1, "type": "service", "label": "runFlywheelOnce / advisory lock na conexão" },
+    { "id": "jobs", "lane": "dados", "col": 1, "type": "database", "label": "job_queue done + llm_calls agent_turn" },
+    { "id": "collect", "lane": "worker", "col": 2, "type": "service", "label": "collectRecentTurns / exclui vereditos antes do LIMIT" },
+    { "id": "judge", "lane": "worker", "col": 3, "type": "service", "label": "runModelCall / flywheel_judge" },
+    { "id": "verdict", "lane": "dados", "col": 4, "type": "database", "label": "flywheel_judge_verdicts / live, trace, memory_hygiene" },
+    { "id": "distiller", "lane": "worker", "col": 4, "type": "service", "label": "flywheel_distiller / veredito no recém-gravado" },
+    { "id": "calls", "lane": "dados", "col": 3, "type": "database", "label": "llm_calls / uso e falha" },
+    { "id": "proposals", "lane": "dados", "col": 5, "type": "database", "label": "flywheel_distiller_proposals" },
+    { "id": "review", "lane": "pessoa", "col": 5, "type": "ui", "label": "Revisão humana de melhorias" },
+    { "id": "runs", "lane": "pessoa", "col": 4, "type": "ui", "label": "/app/ai/runs / Execuções de IA" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "loop", "to": "lock", "label": "uma rodada por vez" },
+    { "id": "e2", "from": "lock", "to": "collect", "label": "mesma conexão, sem segunda vaga" },
+    { "id": "e3", "from": "jobs", "to": "collect", "label": "turnos concluídos com chamada de atendimento" },
+    { "id": "e4", "from": "verdict", "to": "collect", "label": "NOT EXISTS / avaliado não entra novamente" },
+    { "id": "e5", "from": "collect", "to": "judge", "label": "somente elegíveis, material da mesma organização" },
+    { "id": "e6", "from": "judge", "to": "verdict", "label": "resultado durável e unique de reserva" },
+    { "id": "e7", "from": "verdict", "to": "distiller", "label": "no e inserted, sem autopublicar" },
+    { "id": "e8", "from": "distiller", "to": "proposals", "label": "delta mínimo e evidências" },
+    { "id": "e9", "from": "proposals", "to": "review", "label": "humano revisa" },
+    { "id": "e10", "from": "judge", "to": "calls", "label": "contabiliza no seam" },
+    { "id": "e11", "from": "distiller", "to": "calls", "label": "contabiliza no seam" },
+    { "id": "e12", "from": "calls", "to": "runs", "label": "resultado e causa de falha" }
+  ]
+}

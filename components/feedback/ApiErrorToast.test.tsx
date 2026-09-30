@@ -80,6 +80,16 @@ describe("ApiErrorToast", () => {
   it("calls toast.error with generic message for non-ApiError", () => {
     showApiError(new Error("oops"));
     expect(toast.error).toHaveBeenCalledTimes(1);
-    expect(toast.error).toHaveBeenCalledWith("Erro inesperado. Tente novamente.");
+    expect(toast.error).toHaveBeenCalledWith("Erro inesperado. Tente novamente.", { id: "api-error:unexpected" });
+  });
+
+  it("retentativas atualizam o mesmo aviso e mantêm o último ID para diagnóstico", () => {
+    showApiError(new ApiError(503, "internal_error", undefined, "req-primeira"));
+    showApiError(new ApiError(503, "internal_error", undefined, "req-ultima"));
+    const calls = vi.mocked(toast.error).mock.calls;
+    expect(calls[0]?.[1]?.id).toBe(calls[1]?.[1]?.id);
+    expect(calls[1]?.[1]?.description).toBe("ID: req-ultima");
+    showApiError(new ApiError(500, "another_error", undefined, "req-outra"));
+    expect(vi.mocked(toast.error).mock.calls[2]?.[1]?.id).not.toBe(calls[0]?.[1]?.id);
   });
 });

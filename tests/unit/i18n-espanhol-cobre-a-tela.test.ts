@@ -57,15 +57,18 @@ const AREAS = ["app", "components"];
 const PASTAS_IGNORADAS = new Set(["api", "node_modules"]);
 
 /**
- * Telas que NÃO são produto — vitrines internas de desenvolvimento, ambas com
+ * Superfícies fora da operação com seletor de idioma. As vitrines internas têm
  * `robots: noindex`, ambas fora de `lib/navigation/registry.ts` e portanto sem
  * porta na navegação do cliente. Quem as abre é quem desenvolve o design
  * system, digitando a URL. Traduzi-las custaria manutenção para ninguém.
  *
- * Esta lista SÓ ENCOLHE: entrada nova aqui precisa do mesmo argumento — a tela
- * não é alcançável por quem usa o produto.
+ * Exceção comercial: a landing pública é uma campanha em pt-BR dirigida ao
+ * mercado brasileiro, conforme decisão do proprietário. Isso não dispensa
+ * tradução nas telas da operação autenticada.
  */
 const FORA_DO_PRODUTO: Record<string, string> = {
+  "components/marketing/LandingPage.tsx":
+    "campanha comercial pública em pt-BR para o mercado brasileiro, definida pelo proprietário; não usa o seletor de idioma da operação autenticada",
   "app/design": "vitrine do design system: rota noindex, sem porta na navegação",
   "app/vitrine-agenda": "vitrine do kit visual da Agenda: dado de mentira, noindex",
 };

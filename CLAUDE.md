@@ -14,7 +14,7 @@
 
 ## Visão (1 parágrafo)
 
-Striva Sales é um sistema operacional de vendas open source com agentes de IA nativos — multi-nicho (e-commerce, clínicas, imobiliárias, infoprodutos, serviços), com WhatsApp como canal primário (via WAHA). Agentes com RAG por tenant atendem, qualificam e movem o funil junto com humanos; CRM inteiro exposto via MCP. Monetização = self-host em VPS (parceria HostGator), não assinatura. Arquitetura multi-tenant com RLS desde o dia 1; LGPD nativa. Posicionamento completo: `VISION.md`.
+Striva Sales é um produto comercial fechado com atendimento digital, CRM, follow-up e agenda — multi-nicho, com WhatsApp como canal primário. O cliente contrata a solução e a equipe responsável opera a plataforma; instalação em VPS é infraestrutura da operação, não a proposta comercial. Preço e periodicidade não estão definidos aqui. Agentes com RAG por tenant atendem, qualificam e movem o funil junto com humanos; CRM exposto via MCP. Arquitetura multi-tenant com RLS e recursos de LGPD. Posicionamento confirmado em 30/09/2026: `VISION.md` e `PRODUCT.md`; a licença da base herdada permanece preservada.
 
 ---
 

@@ -21,6 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { conferirContratoWaha, lerRoteamentoWaha } from "@/lib/waha/envelope";
 import { dispatchWahaEvent } from "@/lib/waha/ingest";
 import { authenticateWahaWebhook } from "@/lib/waha/webhook-auth";
+import { loadWahaSessionSecret } from "@/lib/waha/session-secret";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -107,15 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // Autenticação fail-closed — regras e o porquê em lib/waha/webhook-auth.ts.
   const sigHeader = req.headers.get("x-webhook-hmac") ?? req.headers.get("X-Webhook-Hmac");
-  let sessionSecret: string | null = null;
-  try {
-    const dec = await admin.rpc("fn_decrypt_oauth", {
-      ciphertext: session.webhook_secret_encrypted,
-    });
-    if (!dec.error && typeof dec.data === "string") sessionSecret = dec.data;
-  } catch {
-    sessionSecret = null;
-  }
+  const sessionSecret = await loadWahaSessionSecret(admin, session.webhook_secret_encrypted);
 
   const auth = authenticateWahaWebhook({ rawBody, signatureHeader: sigHeader, sessionSecret });
   if (!auth.ok) {

@@ -210,6 +210,7 @@ export async function sincronizaEstagioDoAgente(
   const { data: stageRows, error: erroStages } = await admin
     .from("crm_stages")
     .select("id, name, agent_stage_hint, is_archived")
+    .eq("organization_id", input.organizationId)
     .eq("pipeline_id", lead.pipeline_id);
   // Mesmo motivo do SELECT acima: sem esta linha, banco fora = pipeline sem
   // hint nenhum = "sem_mapeamento", e o incidente se disfarça de configuração.
@@ -232,6 +233,7 @@ export async function sincronizaEstagioDoAgente(
   const { data: origem } = await admin
     .from("crm_stages")
     .select("name")
+    .eq("organization_id", input.organizationId)
     .eq("id", lead.stage_id)
     .maybeSingle();
 
@@ -239,6 +241,7 @@ export async function sincronizaEstagioDoAgente(
   const { data: atualizadas, error } = await admin
     .from("crm_leads")
     .update({ stage_id: destino.stageId })
+    .eq("organization_id", input.organizationId)
     .eq("id", lead.id)
     // Trava otimista pelo estágio de ORIGEM: se um humano arrastou o card entre
     // a leitura e a escrita, o agente não atropela a decisão dele.
@@ -247,7 +250,7 @@ export async function sincronizaEstagioDoAgente(
     // afetadas" não é erro nenhum e o código seguiria emitindo a atividade de
     // um movimento que não aconteceu — história fabricada na timeline do
     // cliente, que é pior que não mover.
-    .select("id");
+    .select("id, status");
   if (error) {
     return { moveu: false, motivo: "falha_de_escrita", leadId: lead.id, detalhe: error.message };
   }
@@ -316,7 +319,9 @@ export async function sincronizaEstagioDoAgente(
       pipeline_id: lead.pipeline_id,
       from_stage_id: lead.stage_id,
       to_stage_id: destino.stageId,
-      status: lead.status,
+      // Etapa de ganho/perda muda status no trigger do banco. Consumidores
+      // devem receber o resultado da escrita, não o 'open' lido antes dela.
+      status: atualizadas![0]!.status,
     },
     // Quem moveu vai no metadata, como nas rotas — lá é `actor_user_id`, aqui é
     // o assistente. Sem isto, um evento sem ator nenhum se parece com um bug de

@@ -6,6 +6,14 @@ const cfg = { supabase: {} as never };
 const db = {} as never;
 
 describe('mirrorLeadStageToCrm', () => {
+  it('preserva inclusive escopo vazio: a ponte não amplia a permissão do agente', async () => {
+    const sync = vi.fn().mockResolvedValue({ moveu: false, motivo: 'fora_do_escopo' });
+    await mirrorLeadStageToCrm(db, cfg as never,
+      { tenantId: 'o', leadId: 'c', toStage: 'contacted', pipelineIds: [] }, { sync });
+    expect(sync).toHaveBeenCalledWith(cfg.supabase, {
+      organizationId: 'o', contactId: 'c', passo: 'contacted', escopoDeFunis: [],
+    });
+  });
   it('move o card quando o pipeline declara destino para o passo', async () => {
     const sync = vi.fn().mockResolvedValue({
       moveu: true, motivo: 'movido', leadId: 'lead-1', stageName: 'Negociação',

@@ -35,20 +35,26 @@ interface TraceMaterial {
   rollingSummary: string;
 }
 
-async function collectRecentTurns(pool: pg.Pool, limit: number): Promise<TurnRow[]> {
+async function collectRecentTurns(pool: Pick<pg.Pool, 'query'>, limit: number): Promise<TurnRow[]> {
   const { rows } = await pool.query<TurnRow>(
     `select j.id as job_id, j.organization_id, j.contact_id
      from job_queue j
      where j.kind = 'inbound_turn' and j.status = 'done' and j.contact_id is not null
-       and exists (select 1 from llm_calls c where c.job_id = j.id and c.purpose = 'agent_turn')
+       and exists (select 1 from llm_calls c where c.organization_id = j.organization_id
+         and c.job_id = j.id and c.purpose = 'agent_turn')
+       and not exists (
+         select 1 from flywheel_judge_verdicts v
+         where v.organization_id = j.organization_id and v.dataset = $2
+           and v.trace_id = j.id::text and v.dimension = $3
+       )
      order by j.created_at desc
      limit $1`,
-    [limit],
+    [limit, DATASET, DIMENSION],
   );
   return rows;
 }
 
-async function buildMaterial(pool: pg.Pool, turn: TurnRow): Promise<TraceMaterial> {
+async function buildMaterial(pool: Pick<pg.Pool, 'query'>, turn: TurnRow): Promise<TraceMaterial> {
   const { rows: msgs } = await pool.query<{ direction: string; body: string | null }>(
     `select direction, body from messages
      where organization_id = $1 and contact_id = $2 and body is not null
@@ -135,6 +141,36 @@ export interface FlywheelRunResult {
 
 export async function runFlywheelOnce(
   pool: pg.Pool,
+  llmCfg: LlmEdgeConfig,
+  opts: { limit: number; log: Logger },
+): Promise<FlywheelRunResult> {
+  // O lease é da conexão: protege também duas réplicas/rodadas manuais.
+  // A unique do veredito só deduplica a escrita; depois da IA é tarde para
+  // poupar a chamada. A seleção abaixo exclui o que já foi avaliado ANTES dela.
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    const { rows } = await client.query<{ locked: boolean }>(
+      'select pg_try_advisory_lock(344415, 1) as locked',
+    );
+    locked = rows[0]?.locked === true;
+    if (!locked) return { runId: crypto.randomUUID(), judged: 0, proposals: 0, followupOutcomes: [] };
+    // A rodada usa a própria conexão do lock: não reserva uma segunda vaga
+    // nem trava para sempre quando DB_POOL_MAX=1.
+    return await runFlywheelLocked(client, llmCfg, opts);
+  } finally {
+    try {
+      if (locked) await client.query('select pg_advisory_unlock(344415, 1)');
+      client.release();
+    } catch {
+      // Conexão com lock incerto nunca volta ao pool; o fechamento libera o lock.
+      client.release(true);
+    }
+  }
+}
+
+async function runFlywheelLocked(
+  pool: Pick<pg.Pool, 'query'>,
   llmCfg: LlmEdgeConfig,
   opts: { limit: number; log: Logger },
 ): Promise<FlywheelRunResult> {
@@ -246,14 +282,16 @@ export async function runFlywheelLoop(
   signal: AbortSignal,
 ): Promise<void> {
   while (!signal.aborted) {
-    // dorme PRIMEIRO: no boot os turnos recentes já foram julgados pela rodada
-    // anterior (dedup pela unique), e subir o worker não deve custar LLM.
+    // Dorme primeiro para não disparar trabalho auxiliar no boot. A seleção
+    // exclui vereditos existentes antes de pagar novas chamadas de IA.
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, opts.intervalMs);
-      signal.addEventListener('abort', () => {
+      const finish = () => {
         clearTimeout(timer);
+        signal.removeEventListener('abort', finish);
         resolve();
-      }, { once: true });
+      };
+      const timer = setTimeout(finish, opts.intervalMs);
+      signal.addEventListener('abort', finish, { once: true });
     });
     if (signal.aborted) return;
     try {
