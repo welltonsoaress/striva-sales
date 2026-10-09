@@ -386,7 +386,7 @@ describe("sendMessageHandler — os 6 desfechos do envio", () => {
     expect(body.session).toBe("default");
   });
 
-  it("6. envio lança: failed/waha_error com a mensagem do erro", async () => {
+  it("6. erro 500 do canal: failed/delivery_unknown conserva a mensagem para reconciliar", async () => {
     wahaConfigured(true);
     vi.stubGlobal(
       "fetch",
@@ -396,7 +396,7 @@ describe("sendMessageHandler — os 6 desfechos do envio", () => {
     const msg = await sendMessageHandler(makeSupabase(conversationRow()), ctx, textInput());
 
     expect(msg.status).toBe("failed");
-    expect(msg.error_code).toBe("waha_error");
+    expect(msg.error_code).toBe("delivery_unknown");
     expect(msg.error_message).toBe("waha_500");
     expect(msg.external_id).toBeNull();
   });

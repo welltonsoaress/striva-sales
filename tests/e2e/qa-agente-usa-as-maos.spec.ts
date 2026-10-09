@@ -37,6 +37,7 @@ interface Creds {
   password: string;
   users: Record<string, { email: string }>;
   admin_totp?: { factor_id: string; secret: string };
+  dono_totp?: { factor_id: string; secret: string };
 }
 
 function loadCreds(): Creds {
@@ -297,12 +298,12 @@ const CENARIOS = [
  * cérebro do assistente. Um manager configura a operação; publicar o que a IA
  * pensa é do dono.
  */
-async function login(page: Page): Promise<void> {
-  const secret = creds.admin_totp?.secret;
+async function login(page: Page, identity: "admin" | "dono" = "admin"): Promise<void> {
+  const secret = (identity === "dono" ? creds.dono_totp : creds.admin_totp)?.secret;
   expect(secret, "o seed precisa gravar admin_totp em .e2e-creds.json").toBeTruthy();
 
   await page.goto(`${APP_URL}/login`);
-  await page.locator("#email").fill(creds.users.admin!.email);
+  await page.locator("#email").fill(creds.users[identity]!.email);
   await page.locator("#password").fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/login\/mfa/);
@@ -415,7 +416,9 @@ test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
     test.setTimeout(600_000);
     fs.mkdirSync(SAIDA, { recursive: true });
     fs.mkdirSync(TURNOS, { recursive: true });
-    await login(page);
+    // A plataforma prepara a conexão; os testes do agente continuam com o
+    // admin puro do tenant. Não promover o usuário compartilhado de teste.
+    await login(page, "dono");
 
     const agentesRes = await page.request.get(`${APP_URL}/api/v1/ai/agents`);
     const agentes = (await agentesRes.json()) as { data?: Array<{ id: string; name: string }> };
@@ -423,6 +426,8 @@ test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
     expect(agenteId, "a org de E2E precisa de um agente").toBeTruthy();
 
     const versaoId = await versaoComAsCapacidades(page.request, agenteId!);
+    await page.context().clearCookies();
+    await login(page);
     console.info(`[QA] versão de teste ${versaoId} com ${CAPACIDADES.length} capacidades`);
 
     /**

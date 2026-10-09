@@ -36,9 +36,9 @@ As tentativas iniciais de build/E2E foram interrompidas durante disputa de memó
 
 Evidências locais (ignoradas pelo Git, sem dados de clientes):
 
-- [Clínicas em desktop](../../.superpowers/evidence/saas-ia-incluida/clinicas-desktop.png) e [celular](../../.superpowers/evidence/saas-ia-incluida/clinicas-mobile.png).
-- [Planos em desktop](../../.superpowers/evidence/inicio-primeiros-passos/planos-landing-desktop.png) e [celular](../../.superpowers/evidence/inicio-primeiros-passos/planos-landing-mobile.png).
-- [Saldo e extras no faturamento](../../.superpowers/evidence/saas-ia-incluida/creditos-faturamento-desktop.png) e [configuração dos extras no admin](../../.superpowers/evidence/saas-ia-incluida/creditos-admin-desktop.png).
+- Clínicas em desktop: `.superpowers/evidence/saas-ia-incluida/clinicas-desktop.png` (registro local) e celular: `.superpowers/evidence/saas-ia-incluida/clinicas-mobile.png` (registro local).
+- Planos em desktop: `.superpowers/evidence/inicio-primeiros-passos/planos-landing-desktop.png` (registro local) e celular: `.superpowers/evidence/inicio-primeiros-passos/planos-landing-mobile.png` (registro local).
+- Saldo e extras no faturamento: `.superpowers/evidence/saas-ia-incluida/creditos-faturamento-desktop.png` (registro local) e configuração dos extras no admin: `.superpowers/evidence/saas-ia-incluida/creditos-admin-desktop.png` (registro local).
 - Logs finais em `.superpowers/credits-build-final.txt`, `credits-db-relevant-final.txt`, `credits-e2e-final.txt`, `credits-foc-final.txt`, `credits-i18n-final.txt` e `credits-lint-final.txt`.
 
 ## Revisão adicional — 08/10/2026
@@ -65,3 +65,5 @@ Ativação real com Turnstile, número verificado e fornecedor de IA continua pe
 Cliente pago sem dez créditos vê a renovação e o caminho de extras; durante teste encerrado vê contratação. Saldo recomposto resolve a pendência de créditos, sem transferir conversas humanas. Oferta incompleta fica explicada no faturamento. Publicação fica no admin de IA e exige motivo; recibos e eventos permanecem acessíveis para reconciliação.
 
 Contrato e checklist de Sistema Vivo: [spec](../specs/creditos-e-clinicas.md). Fluxo de configuração: [runbook](../runbooks/saas-ia-incluida.md). Arquitetura: `docs/architecture/saas-ia-incluida.architecture.json`.
+
+As capturas mencionadas nesta revisão são registros locais fora do versionamento, não arquivos entregues pelo clone. Para evidência reproduzível da release, consulte os artefatos de E2E do [PR #18](https://github.com/welltonsoaress/striva-sales/pull/18).

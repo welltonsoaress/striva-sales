@@ -1,5 +1,9 @@
 /** IA incluída, ativação e operação comercial. As chaves preservam o português. */
 export const TEXTOS_SAAS: Record<string, { es: string }> = {
+  "Abrir faturamento": { es: "Abrir facturación" },
+  "Confira o vencimento e a situação do pagamento.": {
+    es: "Revisa el vencimiento y el estado del pago.",
+  },
   "7 dias ou 1.000 créditos, o que terminar primeiro. Um usuário e um WhatsApp. Ao terminar o teste, escolha um plano para continuar operando. Consulta, exportação, suporte e contratação permanecem acessíveis.":
     {
       es: "7 días o 1.000 créditos, lo que ocurra primero. Un usuario y un WhatsApp. Al terminar la prueba, elige un plan para seguir operando. Consulta, exportación, soporte y contratación siguen disponibles.",

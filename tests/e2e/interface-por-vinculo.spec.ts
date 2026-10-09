@@ -86,10 +86,21 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     const other = await otherContext.newPage();
     const guest = await guestContext.newPage();
     const realtime: string[] = [];
+    let subscriptionReady = false;
+    const realtimeStates: string[] = [];
     member.on("websocket", (ws) =>
       ws.on("framereceived", (event) => {
-        const payload = event.payload.toString();
-        if (payload.includes('"table":"user_organizations"')) realtime.push(payload);
+        const raw = event.payload.toString();
+        try {
+          const frame = JSON.parse(raw);
+          const kind = Array.isArray(frame) ? frame[3] : frame.event;
+          const payload = Array.isArray(frame) ? frame[4] : frame.payload;
+          if (kind === "phx_reply" && payload?.response?.postgres_changes?.some((change: { table?: string }) => change.table === "user_organizations")) {
+            subscriptionReady = payload.status === "ok";
+            realtimeStates.push(`subscription:${payload.status}`);
+          }
+          if (kind === "postgres_changes" && payload?.data?.table === "user_organizations") realtime.push(raw);
+        } catch { /* Quadros alheios à assinatura não são prova de entrega. */ }
       }),
     );
     await login(page, emails[0]!);
@@ -98,11 +109,13 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await member.goto("/app/settings/profile");
     await member.getByLabel("Nome completo").fill("Rascunho não salvo");
     await login(other, emails[2]!);
+    await member.bringToFront();
+    await expect.poll(() => subscriptionReady, { timeout: 20_000, message: "assinatura de interface não foi confirmada" }).toBe(true);
     await expect(nav(member).getByRole("link", { name: "Radar", exact: true })).toBeVisible();
     const framesBefore = realtime.length;
     await customize(page, emails[1]!);
     // Evento real precisa chegar; polling não pode aprovar a observação em tempo real.
-    await expect.poll(() => realtime.length, { timeout: 15_000 }).toBeGreaterThan(framesBefore);
+    await expect.poll(() => realtime.length, { timeout: 15_000, message: `entrega da interface ausente (${realtimeStates.join(",")})` }).toBeGreaterThan(framesBefore);
     await expect(nav(member).getByRole("link", { name: "Radar", exact: true })).toHaveCount(0);
     await expect(nav(other).getByRole("link", { name: "Radar", exact: true })).toBeVisible();
     await expect(member.getByLabel("Nome completo")).toHaveValue("Rascunho não salvo");

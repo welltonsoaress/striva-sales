@@ -4,8 +4,8 @@ import AxeBuilder from "@axe-core/playwright";
 // Superfície pública: não semeia banco nem envia mensagem ao canal comercial.
 test("visitante entende a jornada e encontra uma demonstração", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Mais vendas");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Menos oportunidades");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Seu comercial.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Com próximo passo.");
   await expect(page.getByRole("heading", { level: 1 })).not.toContainText(/\bIA\b/);
   await expect(page.locator("header img").first()).toBeVisible();
   expect(

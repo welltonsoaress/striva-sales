@@ -680,7 +680,7 @@ export async function createMcpAgentAction(
   const admin = createAdminClient();
 
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
-  if (await guardNewAgentCredential(parsed.data.version.credential_id))
+  if (await guardNewAgentCredential(parsed.data.version.credential_id, activeOrg.orgId, parsed.data.version))
     return { ok: false, error: "forbidden", message: "A conexão de IA é administrada pela plataforma." };
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")

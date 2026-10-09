@@ -68,6 +68,7 @@ import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow, Provider } from "@/hooks/ai/useCredentials";
 import { credentialStatus } from "@/hooks/ai/useCredentials";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
+import type { InheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 
 /**
  * O canal oferecido no seletor é exatamente o que `listSelectableChannels`
@@ -89,6 +90,7 @@ interface BaseProps {
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
   credentialEditingAllowed?: boolean;
+  inheritedConnection?: InheritedAgentConnection | null;
 }
 
 interface EditProps extends BaseProps {
@@ -186,17 +188,18 @@ const DEFAULT_TRIGGER: TriggerValue = {
 function buildState(args: {
   agent?: AgentRow;
   version: AgentVersionRow | null;
+  inheritedConnection?: InheritedAgentConnection | null;
 }): FormState {
-  const { agent, version } = args;
+  const { agent, version, inheritedConnection } = args;
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
     priority: agent?.priority ?? 0,
-    provider: (version?.provider as Provider) ?? "anthropic",
-    model: version?.model ?? "",
+    provider: (version?.provider as Provider) ?? (inheritedConnection?.provider as Provider) ?? "anthropic",
+    model: version?.model ?? inheritedConnection?.model ?? "",
     // `null` gravado = a versão usa a chave da instalação. Sem esta tradução,
     // reabrir o agente mostraria o campo em branco e pediria para escolher de novo.
-    credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : CHAVE_DA_INSTALACAO,
+    credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : (inheritedConnection?.credential_id ?? CHAVE_DA_INSTALACAO),
     channel_session_id: version?.channel_session_id ?? "",
     system_prompt:
       version?.system_prompt ??
@@ -299,7 +302,7 @@ export function AgentForm(props: Props) {
       const ref = props.base ?? props.draft ?? props.published;
       return buildState({ agent: props.agent, version: ref });
     }
-    return buildState({ version: null });
+    return buildState({ version: null, inheritedConnection: props.inheritedConnection });
   }, [isEdit, props]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
@@ -365,7 +368,7 @@ export function AgentForm(props: Props) {
     // tem seria publicar um agente que morre em toda mensagem. A mesma recusa
     // existe no servidor (rota de versões); aqui ela chega antes do clique.
     if (
-      form.credential_id === CHAVE_DA_INSTALACAO &&
+      props.credentialEditingAllowed && form.credential_id === CHAVE_DA_INSTALACAO &&
       !(props.provedoresDaInstalacao ?? []).includes(form.provider)
     )
       errors.credential_id = `${t("Esta instalação não tem chave de")} ${form.provider}. ${t("Escolha outra empresa de IA ou cadastre uma chave.")}`;
@@ -384,7 +387,7 @@ export function AgentForm(props: Props) {
       }
     }
     return errors;
-  }, [form, props.provedoresDaInstalacao, t]);
+  }, [form, props.provedoresDaInstalacao, props.credentialEditingAllowed, t]);
 
   const isValid = Object.keys(validation).length === 0;
 

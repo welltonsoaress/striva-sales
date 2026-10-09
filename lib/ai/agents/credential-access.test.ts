@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ admin: vi.fn(), eq: vi.fn(), current: "current", error: false }));
+const mock = vi.hoisted(() => ({ admin: vi.fn(), inherited: vi.fn(), eq: vi.fn(), current: "current", error: false }));
+vi.mock("./inherited-connection", () => ({ inheritedAgentConnection: mock.inherited }));
 vi.mock("@/lib/auth/require-ai-platform-admin", () => ({ requireAiPlatformAdmin: mock.admin }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => {
   const query = { select: () => query, eq: mock.eq.mockImplementation(() => query), order: () => query,
@@ -28,4 +29,16 @@ it("criação aceita conexão administrada pelo servidor, mas não chave escolhi
 it("erro de leitura não permite alterar a conexão", async () => {
   mock.error = true;
   expect((await guardAgentCredential("org-a", "agent-a", "current"))?.status).toBe(503);
+});
+it("novo agente reutiliza somente a conexão padrão conferida no servidor", async () => {
+  mock.inherited.mockResolvedValue({ credential_id: "current", provider: "anthropic", model: "configured" });
+  expect(await guardNewAgentCredential("current", "org-a", { provider: "anthropic", model: "configured" })).toBeNull();
+  expect(mock.inherited).toHaveBeenCalledWith("org-a");
+  expect(mock.admin).not.toHaveBeenCalled();
+  expect((await guardNewAgentCredential("other", "org-a", { provider: "anthropic", model: "configured" }))?.status).toBe(403);
+  expect((await guardNewAgentCredential("current", "org-a", { provider: "openai", model: "forged" }))?.status).toBe(403);
+});
+it("falha ao conferir a conexão herdada fecha a criação", async () => {
+  mock.inherited.mockRejectedValue(new Error("database unavailable"));
+  expect((await guardNewAgentCredential("current", "org-a", { provider: "anthropic", model: "configured" }))?.status).toBe(503);
 });

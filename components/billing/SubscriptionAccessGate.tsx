@@ -16,8 +16,11 @@ export function SubscriptionAccessGate({ required, paywall, children }: {
     let active = true;
     const check = async () => {
       try {
-        const result = await apiClient.get<{ paywall_required: boolean }>("/api/v1/billing/access");
-        if (active) setBlocked(result.paywall_required);
+        const result = await apiClient.get<{ data: { paywall_required: boolean } }>("/api/v1/billing/access");
+        // O client conserva o envelope canônico. Resposta ausente/malformada
+        // nunca transforma um bloqueio confirmado em acesso operacional.
+        if (active && typeof result.data?.paywall_required === "boolean")
+          setBlocked(result.data.paywall_required);
       } catch { /* Uma falha de consulta nunca libera um bloqueio confirmado. */ }
     };
     void check();

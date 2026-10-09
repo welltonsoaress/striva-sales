@@ -50,13 +50,15 @@ Todas as capturas abaixo usam dados de teste. Os e-mails são prévias renderiza
 
 | Tela | Captura |
 |---|---|
-| Configuração inicial | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/configuracao-inicial.png) |
-| Dashboard desktop | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/inicio-desktop.png) |
-| Dashboard celular | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/inicio-mobile.png) |
-| Progresso após preencher o negócio | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/progresso-configuracao.png) |
-| Configuração do agente | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/configuracao-agente.png) |
-| Perfil e avatares | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/perfil-avatares.png) |
-| E-mail de confirmação | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/email-confirmation.png) |
-| E-mail de recuperação | [Abrir](C:/Users/fullg/OneDrive/Documentos/striva-sales/.superpowers/evidence/inicio-primeiros-passos/email-recovery.png) |
+| Configuração inicial | Abrir: `.superpowers/evidence/inicio-primeiros-passos/configuracao-inicial.png` (registro local) |
+| Dashboard desktop | Abrir: `.superpowers/evidence/inicio-primeiros-passos/inicio-desktop.png` (registro local) |
+| Dashboard celular | Abrir: `.superpowers/evidence/inicio-primeiros-passos/inicio-mobile.png` (registro local) |
+| Progresso após preencher o negócio | Abrir: `.superpowers/evidence/inicio-primeiros-passos/progresso-configuracao.png` (registro local) |
+| Configuração do agente | Abrir: `.superpowers/evidence/inicio-primeiros-passos/configuracao-agente.png` (registro local) |
+| Perfil e avatares | Abrir: `.superpowers/evidence/inicio-primeiros-passos/perfil-avatares.png` (registro local) |
+| E-mail de confirmação | Abrir: `.superpowers/evidence/inicio-primeiros-passos/email-confirmation.png` (registro local) |
+| E-mail de recuperação | Abrir: `.superpowers/evidence/inicio-primeiros-passos/email-recovery.png` (registro local) |
 
 Outras capturas anteriores, vinculadas ao relatório de revisão, documentam planos, faturamento e suporte. A galeria acima foi produzida nesta rodada.
+
+As capturas mencionadas nesta revisão são registros locais fora do versionamento, não arquivos entregues pelo clone. Para evidência reproduzível da release, consulte os artefatos de E2E do [PR #18](https://github.com/welltonsoaress/striva-sales/pull/18).

@@ -118,7 +118,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     const input = parsed.data;
     const v = input.version;
-    const credentialDenied = await guardNewAgentCredential(v.credential_id);
+    const credentialDenied = await guardNewAgentCredential(v.credential_id, activeOrg.orgId, v);
     if (credentialDenied) return credentialDenied;
 
     // Insert agent first (no published_version_id yet).

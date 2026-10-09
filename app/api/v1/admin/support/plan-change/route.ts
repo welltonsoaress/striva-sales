@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   try {
     const result = await preparePlanChangeCheckout(getRequestPool(), input.data.thread_id, user.id);
     if (!result.duplicate) await audit({ action: "billing.change_quote_created", actorUserId: user.id, organizationId: result.organization_id,
-      resourceType: "support_thread", resourceId: input.data.thread_id });
+      resourceType: "support_thread", resourceId: input.data.thread_id,
+    });
     return ok({ checkout_url: result.checkout_url, duplicate: result.duplicate });
   } catch (error) {
     if (error instanceof SupportWriteError) return fail(error.code, error.message, error.code === "conflict" ? 409 : 404);

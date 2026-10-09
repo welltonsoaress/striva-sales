@@ -165,6 +165,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Collect safe headers (strip sensitive ones) for the log
   const safeHeaders: Record<string, string> = {};
   req.headers.forEach((value, key) => {
+    // O token que autentica o proxy é credencial, nunca evidência de captura.
+    if (key.toLowerCase() === "x-platform-proxy-token") return;
     const k = key.toLowerCase();
     if (k === "authorization" || k === "cookie") return;
     safeHeaders[key] = value;

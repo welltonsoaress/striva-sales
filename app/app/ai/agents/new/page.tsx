@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
+import { inheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -53,6 +54,7 @@ export default async function NewAgentPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <AgentForm credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
+        inheritedConnection={await inheritedAgentConnection(activeOrg.orgId)}
         mode="create"
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}

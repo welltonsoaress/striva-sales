@@ -100,7 +100,7 @@ export function ChaveDeConhecimento({ estado, onChaveCadastrada }: Props) {
     estado.credenciais_openai.some((c) => c.is_active && !c.validated_at && !c.validation_error);
 
   if (!estado.pode_indexar && (!user?.is_platform_admin || user.support)) {
-    return <p role="status" className="rounded-lg border border-amber-500/40 p-4 text-sm">{t("A conexão para preparar o conhecimento precisa de atenção da equipe da plataforma.")} <Link className="text-primary underline" href="/app/ajuda">{t("Abrir ajuda")}</Link></p>;
+    return <p data-testid="conhecimento-ajuda-plataforma" role="status" className="rounded-lg border border-amber-500/40 p-4 text-sm">{t("A conexão para preparar o conhecimento precisa de atenção da equipe da plataforma.")} <Link className="text-primary underline" href="/app/ajuda">{t("Abrir ajuda")}</Link></p>;
   }
 
   if (conferindo) {

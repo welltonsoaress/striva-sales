@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { configuracaoDoGoogle } from "@/lib/agenda/google/config";
+import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { Button } from "@/components/ui/button";
 import { traduzir } from "@/lib/i18n/dicionario";
 import type { Idioma } from "@/lib/i18n/idiomas";
@@ -12,7 +13,7 @@ export async function GoogleCalendarOptional({ organizationId, userId, idioma, r
   const [configuration, connections] = await Promise.all([
     configuracaoDoGoogle(),
     createAdminClient().from("calendar_connections").select("id,status")
-      .eq("organization_id", organizationId).eq("user_id", userId).eq("provider", "google"),
+      .eq("organization_id", organizationId).eq("user_id", userId).eq("provider", PROVEDOR_GOOGLE),
   ]);
   const connected = connections.data?.some(connection => connection.status === "healthy");
   return <section className="space-y-3 rounded-xl border p-5" aria-labelledby="onboarding-google">

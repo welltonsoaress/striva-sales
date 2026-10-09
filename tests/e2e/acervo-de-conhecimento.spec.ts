@@ -160,19 +160,18 @@ test.describe("acervo de conhecimento", () => {
     await contexto?.close();
   });
 
-  test("sem chave de embedding, a tela DIZ — e oferece o conserto ali mesmo", async () => {
+  test("conexão de conhecimento informa o estado e encaminha o tenant à plataforma", async () => {
     await page.goto("/app/ai/knowledge/sources");
 
     // Um dos dois tem de estar na tela; qual, depende de a organização já ter
     // chave. Afirmar só o negativo passaria com a tela em branco.
-    const semChave = page.getByTestId("conhecimento-sem-chave");
+    const semChave = page.getByTestId("conhecimento-ajuda-plataforma");
     const comChave = page.getByTestId("conhecimento-chave-ok");
     await expect(semChave.or(comChave)).toBeVisible();
 
     if (await semChave.isVisible()) {
-      // O aviso não é um beco: o conserto abre na própria tela.
-      await page.getByTestId("conhecimento-cadastrar-chave").click();
-      await expect(page.getByTestId("conhecimento-chave-input")).toBeVisible();
+      await expect(semChave.getByRole("link", { name: "Abrir ajuda" })).toHaveAttribute("href", "/app/ajuda");
+      await expect(page.getByTestId("conhecimento-cadastrar-chave")).toHaveCount(0);
     }
   });
 
@@ -188,12 +187,12 @@ test.describe("acervo de conhecimento", () => {
     // exatamente assim nesta bateria.
     const semChaveLoc = page.getByTestId("conhecimento-sem-chave");
     await expect(
-      semChaveLoc.or(page.getByTestId("conhecimento-chave-ok")).or(
+      semChaveLoc.or(page.getByTestId("conhecimento-ajuda-plataforma")).or(page.getByTestId("conhecimento-chave-ok")).or(
         page.getByTestId("conhecimento-chave-conferindo"),
       ),
     ).toBeVisible({ timeout: 30_000 });
 
-    const semChave = await semChaveLoc.isVisible();
+    const semChave = await semChaveLoc.isVisible() || await page.getByTestId("conhecimento-ajuda-plataforma").isVisible();
     test.skip(
       !semChave,
       "esta organização já tem chave de embedding — o estado 'esperando' não é alcançável aqui",

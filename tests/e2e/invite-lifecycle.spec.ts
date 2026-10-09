@@ -205,7 +205,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     await page.goto(tokenPath(acceptUrl));
     await expect(page.getByRole("heading", { name: /Aceitar convite/i })).toBeVisible();
     await page.getByRole("button", { name: /Aceitar convite/i }).click();
-    await page.waitForURL(/\/app\/inbox/);
+    await page.waitForURL(/\/app\/inicio/);
 
     // depois do aceite: membership agent criada
     expect(await membershipCount()).toBe(1);

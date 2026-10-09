@@ -27,6 +27,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 
 const toastErro = vi.fn();
 const toastOk = vi.fn();
+const auth = vi.hoisted(() => ({ user: { is_platform_admin: true, support: false } }));
+vi.mock("@/hooks/auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("sonner", () => ({
   toast: {
     success: (m: string) => toastOk(m),
@@ -96,6 +98,7 @@ const CHAVE_OK: EstadoDaChave = {
 };
 
 beforeEach(() => {
+  auth.user = { is_platform_admin: true, support: false };
   toastErro.mockReset();
   toastOk.mockReset();
 });
@@ -276,6 +279,12 @@ describe("KnowledgeSourceCard — só oferece controle onde existe ação", () =
 });
 
 describe("ChaveDeConhecimento — o beco vira saída", () => {
+  it("cliente sem chave recebe ajuda da plataforma, sem formulário de credenciais", () => {
+    auth.user.is_platform_admin = false;
+    render(<ChaveDeConhecimento estado={{ ...CHAVE_OK, pode_indexar: false }} onChaveCadastrada={() => {}} />);
+    expect(screen.getByRole("link", { name: "Abrir ajuda" })).toHaveAttribute("href", "/app/ajuda");
+    expect(screen.queryByTestId("conhecimento-cadastrar-chave")).toBeNull();
+  });
   it("sem chave, avisa E oferece cadastrar ali mesmo", () => {
     render(
       <ChaveDeConhecimento
