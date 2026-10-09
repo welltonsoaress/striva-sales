@@ -32,6 +32,14 @@ do $$ declare tbl text; begin
 end $$;
 
 -- Acesso direto também não pode escolher outro modelo/chave no agente.
+-- O preparo pode anteceder o QR code. Versões publicadas continuam tendo canal.
+alter table public.ai_agent_versions alter column channel_session_id drop not null;
+do $$ begin
+  if not exists(select 1 from pg_constraint where conrelid='public.ai_agent_versions'::regclass and conname='ai_agent_versions_channel_required_when_published') then
+    alter table public.ai_agent_versions add constraint ai_agent_versions_channel_required_when_published
+      check(status='draft' or channel_session_id is not null);
+  end if;
+end $$;
 create or replace function public.fn_guard_agent_credential() returns trigger
 language plpgsql security definer set search_path='' as $$
 declare previous public.ai_agent_versions; connection_provider text; connection_model text; connection_credential uuid; begin
@@ -53,7 +61,7 @@ declare previous public.ai_agent_versions; connection_provider text; connection_
   end if;
   return new;
 end $$;
-revoke all on function public.fn_guard_agent_credential() from public,anon,authenticated,service_role;
+revoke execute on function public.fn_guard_agent_credential() from public,anon,authenticated,service_role;
 drop trigger if exists trg_guard_agent_credential on public.ai_agent_versions;
 create trigger trg_guard_agent_credential before insert or update of provider,model,credential_id,operator_model on public.ai_agent_versions
  for each row execute function public.fn_guard_agent_credential();
@@ -89,11 +97,11 @@ declare templates uuid[]:=array[gen_random_uuid(),gen_random_uuid(),gen_random_u
   insert into public.followup_flow_pointers(organization_id,name,status,draft_graph,handoff_policy,trigger_config,surface)
     values(p_org,'Recuperação de leads','draft',jsonb_build_object('nodes',nodes,'edges',edges),'pause','{"kind":"manual","cancel_on_reply":true}','followup');
 end $$;
-revoke all on function public.fn_seed_lead_recovery(uuid) from public,anon,authenticated;
+revoke execute on function public.fn_seed_lead_recovery(uuid) from public,anon,authenticated;
 grant execute on function public.fn_seed_lead_recovery(uuid) to service_role;
 create or replace function public.fn_seed_lead_recovery_trigger() returns trigger
 language plpgsql security definer set search_path='' as $$ begin perform public.fn_seed_lead_recovery(new.id); return new; end $$;
-revoke all on function public.fn_seed_lead_recovery_trigger() from public,anon,authenticated,service_role;
+revoke execute on function public.fn_seed_lead_recovery_trigger() from public,anon,authenticated,service_role;
 drop trigger if exists trg_seed_lead_recovery on public.organizations;
 create trigger trg_seed_lead_recovery after insert on public.organizations for each row execute function public.fn_seed_lead_recovery_trigger();
 do $$ declare org uuid; begin for org in select id from public.organizations loop perform public.fn_seed_lead_recovery(org); end loop; end $$;
@@ -129,7 +137,7 @@ declare a public.organization_ai_accounts; plan public.commercial_plans; allowan
   insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata)
     values(p_org,p_actor,'platform_admin.plan_changed','organization',p_org,jsonb_build_object('old_plan_id',a.plan_id,'plan_id',p_plan,'access_until',p_until,'reason',p_reason,'reference',p_reference));
 end $$;
-revoke all on function public.fn_admin_set_commercial_plan(uuid,uuid,uuid,timestamptz,text,uuid) from public,anon,authenticated;
+revoke execute on function public.fn_admin_set_commercial_plan(uuid,uuid,uuid,timestamptz,text,uuid) from public,anon,authenticated;
 grant execute on function public.fn_admin_set_commercial_plan(uuid,uuid,uuid,timestamptz,text,uuid) to service_role;
 notify pgrst,'reload schema';
 
@@ -151,6 +159,6 @@ language plpgsql set search_path='' as $$ declare org uuid; begin
   end loop;
   if p_org is not null and not found then raise exception 'membership_not_found'; end if;
 end $$;
-revoke all on function public.fn_admin_manage_user_access(uuid,uuid,uuid,text,boolean) from public,anon,authenticated;
+revoke execute on function public.fn_admin_manage_user_access(uuid,uuid,uuid,text,boolean) from public,anon,authenticated;
 grant execute on function public.fn_admin_manage_user_access(uuid,uuid,uuid,text,boolean) to service_role;
 notify pgrst,'reload schema';

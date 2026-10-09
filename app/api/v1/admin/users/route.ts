@@ -31,17 +31,21 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (error) return fail("unavailable", "Não foi possível consultar a empresa.", 503);
   if (!org) return fail("not_found", "Empresa não encontrada.", 404);
-  const invite = await issueInvite({
-    email: parsed.data.email,
-    role: parsed.data.role,
-    organizationId: parsed.data.organization_id,
-    orgName: org.display_name,
-    inviterId: auth.user.id,
-    inviterName: String(auth.user.user_metadata?.full_name ?? "Administração"),
-    requestId: randomUUID(),
-    interfaceSettings: { preset: "simplificada" },
-  });
-  return ok(invite, { status: 201 });
+  try {
+    const invite = await issueInvite({
+      email: parsed.data.email,
+      role: parsed.data.role,
+      organizationId: parsed.data.organization_id,
+      orgName: org.display_name,
+      inviterId: auth.user.id,
+      inviterName: String(auth.user.user_metadata?.full_name ?? "Administração"),
+      requestId: randomUUID(),
+      interfaceSettings: { preset: "simplificada" },
+    });
+    return ok(invite, { status: 201 });
+  } catch {
+    return fail("unavailable", "Não foi possível criar o convite. Tente novamente.", 503);
+  }
 }
 
 // ---------------------------------------------------------------------------

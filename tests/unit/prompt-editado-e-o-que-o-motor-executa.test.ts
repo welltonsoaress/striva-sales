@@ -150,12 +150,12 @@ describe("PATCH /api/v1/ai/agents/:id — conteúdo de versão publicada não se
     expect(r.corpo.error.code).toBe("state_conflict");
   });
 
-  it("recusa também o modelo — ele é conteúdo de versão do mesmo jeito", async () => {
+  it("recusa a escolha do modelo, administrado pela plataforma", async () => {
     const r = await patch(
       { model: "anthropic/claude-haiku-4-5" },
       agente({ published_version_id: VERSAO }),
     );
-    expect(r.status, JSON.stringify(r.corpo)).toBe(409);
+    expect(r.status, JSON.stringify(r.corpo)).toBe(403);
     expect(gravado).toBeNull();
   });
 
@@ -163,10 +163,15 @@ describe("PATCH /api/v1/ai/agents/:id — conteúdo de versão publicada não se
     // Antes da primeira publicação o cadastro ainda preserva o prompt a ser
     // reconciliado. Depois dela, somente o editor de versões altera o texto
     // executável; o worker legado não volta a responder por esta permissão.
-    const r = await patch({ system_prompt: "Texto novo do atendente, com pelo menos vinte caracteres." }, agente({ published_version_id: null }));
+    const r = await patch(
+      { system_prompt: "Texto novo do atendente, com pelo menos vinte caracteres." },
+      agente({ published_version_id: null }),
+    );
 
     expect(r.status, JSON.stringify(r.corpo)).toBe(200);
-    expect(gravado).toMatchObject({ system_prompt: "Texto novo do atendente, com pelo menos vinte caracteres." });
+    expect(gravado).toMatchObject({
+      system_prompt: "Texto novo do atendente, com pelo menos vinte caracteres.",
+    });
   });
 
   it("o que NÃO é conteúdo de versão continua editável com versão publicada", async () => {
@@ -184,7 +189,13 @@ describe("PATCH /api/v1/ai/agents/:id — conteúdo de versão publicada não se
 });
 
 function elementosDaPagina(fonte: string) {
-  const ast = ts.createSourceFile("page.tsx", fonte, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const ast = ts.createSourceFile(
+    "page.tsx",
+    fonte,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   const elements: ts.JsxSelfClosingElement[] = [];
   const calls: ts.CallExpression[] = [];
   const visit = (node: ts.Node) => {
@@ -197,26 +208,35 @@ function elementosDaPagina(fonte: string) {
 }
 function recoveryGuard(fonte: string): ts.Expression {
   const { elements } = elementosDaPagina(fonte);
-  const recovery = elements.filter(n => n.tagName.getText() === "LegacyRecovery");
+  const recovery = elements.filter((n) => n.tagName.getText() === "LegacyRecovery");
   expect(recovery).toHaveLength(1);
   let parent: ts.Node | undefined = recovery[0]!.parent;
   while (parent && !ts.isJsxExpression(parent)) parent = parent.parent;
-  if (!parent || !ts.isJsxExpression(parent) || !parent.expression) throw new Error("recuperação sem condição");
+  if (!parent || !ts.isJsxExpression(parent) || !parent.expression)
+    throw new Error("recuperação sem condição");
   return parent.expression;
 }
 /** Evaluate only the Boolean UI guard, not arbitrary source or component code. */
-function mostraRecuperacao(node: ts.Expression, agent: { kind: string | null; published_version_id: string | null }): unknown {
+function mostraRecuperacao(
+  node: ts.Expression,
+  agent: { kind: string | null; published_version_id: string | null },
+): unknown {
   if (ts.isParenthesizedExpression(node)) return mostraRecuperacao(node.expression, agent);
   if (ts.isJsxSelfClosingElement(node)) return true;
   if (ts.isStringLiteral(node)) return node.text;
-  if (ts.isPropertyAccessExpression(node) && node.expression.getText() === "agent") return agent[node.name.text as keyof typeof agent];
-  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) return !mostraRecuperacao(node.operand, agent);
+  if (ts.isPropertyAccessExpression(node) && node.expression.getText() === "agent")
+    return agent[node.name.text as keyof typeof agent];
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken)
+    return !mostraRecuperacao(node.operand, agent);
   if (ts.isBinaryExpression(node)) {
     const left = mostraRecuperacao(node.left, agent);
     switch (node.operatorToken.kind) {
-      case ts.SyntaxKind.QuestionQuestionToken: return left ?? mostraRecuperacao(node.right, agent);
-      case ts.SyntaxKind.AmpersandAmpersandToken: return left && mostraRecuperacao(node.right, agent);
-      case ts.SyntaxKind.ExclamationEqualsEqualsToken: return left !== mostraRecuperacao(node.right, agent);
+      case ts.SyntaxKind.QuestionQuestionToken:
+        return left ?? mostraRecuperacao(node.right, agent);
+      case ts.SyntaxKind.AmpersandAmpersandToken:
+        return left && mostraRecuperacao(node.right, agent);
+      case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+        return left !== mostraRecuperacao(node.right, agent);
     }
   }
   throw new Error(`Condição não reconhecida pelo instrumento: ${node.getText()}`);
@@ -227,16 +247,18 @@ describe("a TELA usa o editor de versões e limita recuperação ao legado não 
 
   it("editor de versões recebe a seleção baseada no pointer publicado", () => {
     const { elements, calls } = elementosDaPagina(fonte);
-    const tabs = elements.filter(n => n.tagName.getText() === "AgentTabs");
+    const tabs = elements.filter((n) => n.tagName.getText() === "AgentTabs");
     expect(tabs).toHaveLength(1);
     const attrs = tabs[0]!.attributes.properties.filter(ts.isJsxAttribute);
     for (const name of ["agent", "draft", "published", "base", "versions"])
-      expect(attrs.find(a => a.name.getText() === name)?.initializer?.getText()).toBe(`{${name}}`);
-    const selector = calls.filter(c => c.expression.getText() === "escolherVersoesDaTela");
+      expect(attrs.find((a) => a.name.getText() === name)?.initializer?.getText()).toBe(
+        `{${name}}`,
+      );
+    const selector = calls.filter((c) => c.expression.getText() === "escolherVersoesDaTela");
     expect(selector).toHaveLength(1);
     expect(selector[0]!.arguments[0]!.getText()).toBe("versions");
     expect(selector[0]!.arguments[1]!.getText()).toContain("agent.published_version_id");
-    expect(elements.some(n => n.tagName.getText() === "AgentEditorClient")).toBe(false);
+    expect(elements.some((n) => n.tagName.getText() === "AgentEditorClient")).toBe(false);
   });
 
   it("agente publicado de qualquer kind não volta à recuperação; legado sem versão continua alcançável", () => {
@@ -250,13 +272,15 @@ describe("a TELA usa o editor de versões e limita recuperação ao legado não 
   it("controle negativo: ignorar o pointer volta a oferecer recuperação a um agente publicado", () => {
     const sabotado = fonte.replace(/&&\s*!agent\.published_version_id/, "");
     expect(sabotado).not.toBe(fonte);
-    expect(mostraRecuperacao(recoveryGuard(sabotado), { kind: "rag_bot", published_version_id: VERSAO })).toBe(true);
+    expect(
+      mostraRecuperacao(recoveryGuard(sabotado), { kind: "rag_bot", published_version_id: VERSAO }),
+    ).toBe(true);
   });
 });
 
 // Este teste isola o handler; autoridade de suporte é exercitada na suíte própria.
 vi.mock("@/lib/impersonate/support", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/lib/impersonate/support")>(),
+  ...(await importOriginal<typeof import("@/lib/impersonate/support")>()),
   requireSupportWrite: vi.fn(async () => null),
   authenticatedSessionId: vi.fn(async () => "f2200000-0000-4000-8000-000000000099"),
 }));

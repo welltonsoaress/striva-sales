@@ -256,7 +256,7 @@ function toVersionPayload(s: FormState) {
     credential_id: s.credential_id === CHAVE_DA_INSTALACAO ? null : s.credential_id,
     tool_ids: s.tool_ids,
     trigger_config: s.trigger_config,
-    channel_session_id: s.channel_session_id,
+    channel_session_id: s.channel_session_id || null,
     max_steps: s.max_steps,
     token_budget: s.token_budget,
     cost_budget_cents: s.cost_budget_cents,

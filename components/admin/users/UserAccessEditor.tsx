@@ -53,7 +53,9 @@ export function UserAccessEditor({
             required
           />
         </label>
-        <Button disabled={pending}>{t("Salvar nome")}</Button>
+        <Button type="submit" disabled={pending}>
+          {t("Salvar nome")}
+        </Button>
       </form>
       <div className="divide-y">
         {memberships
@@ -79,7 +81,7 @@ export function UserAccessEditor({
                   <option value="viewer">{t("Leitura")}</option>
                 </select>
               </label>
-              <Button variant="outline" disabled={pending}>
+              <Button type="submit" variant="outline" disabled={pending}>
                 {t("Salvar acesso")}
               </Button>
               <Button asChild variant="ghost">

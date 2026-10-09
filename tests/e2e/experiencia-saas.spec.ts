@@ -27,11 +27,14 @@ function checked<T extends { data: unknown; error: { message: string } | null }>
   return r.data;
 }
 async function login(page: Page, index = 0) {
-  await page.goto("/login");
+  await visit(page, "/login");
   await page.locator("#email").fill(users[index]!.email);
   await page.locator("#password").fill(password);
   await page.getByRole("button", { name: /^Entrar$/ }).click();
   await page.waitForURL(/\/app(?:\/|$)/, { timeout: 90000 });
+}
+async function visit(page: Page, path: string) {
+  await page.goto(path, { waitUntil: "domcontentloaded" });
 }
 test.describe.configure({ mode: "serial", timeout: 180000 });
 test.beforeAll(async () => {
@@ -223,8 +226,13 @@ test("cadastro exige aceite e oferece páginas legais", async ({ page }) => {
   );
   await capture(page, "signup");
   for (const path of ["terms", "privacy"]) {
-    await page.goto(`/legal/${path}`);
-    await expect(page.locator("h1")).toBeVisible();
+    await visit(page, `/legal/${path}`);
+    await expect(
+      page.getByRole("heading", {
+        name: path === "terms" ? "Termos de Uso" : "Política de Privacidade",
+        exact: true,
+      }),
+    ).toBeVisible();
   }
 });
 test("menu da conta, plano e restrições do cliente", async ({ page }) => {
@@ -300,7 +308,9 @@ test("desempenho mostra dados reais e gráficos em desktop e celular", async ({ 
   await login(page);
   await page.goto("/app/metrics");
   await expect(page.getByRole("heading", { name: "Inteligência comercial" })).toBeVisible();
-  await expect(page.getByText("50%", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Inteligência comercial" }).getByText("50%", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("Gráfico de negócios por etapa")).toBeVisible();
   await expect(page.getByLabel("Gráfico de resultados por atendente")).toBeVisible();
   await capture(page, "desempenho");

@@ -5,7 +5,12 @@ import { flowGraphSchema } from "@/lib/followup/graph-schema";
 import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 
 const db = new pg.Pool({
-  connectionString: `postgresql://postgres:postgres@127.0.0.1:${process.env.TEST_DB_PORT}/postgres`,
+  // Credenciais públicas do Postgres efêmero criado pelo runner; nunca lê a instalação.
+  host: "127.0.0.1",
+  port: Number(process.env.TEST_DB_PORT),
+  user: "postgres",
+  password: "postgres",
+  database: "postgres",
 });
 const org = randomUUID(),
   other = randomUUID(),
@@ -155,6 +160,12 @@ it("acesso direto do tenant não escolhe outro modelo ou organizador", async () 
     "insert into ai_agent_versions(id,organization_id,agent_id,version_number,provider,model,system_prompt,status) values($1,$2,$3,1,'openai','gpt-6.1-sol','Atendimento fictício','draft')",
     [version, org, agent],
   );
+  await expect(
+    db.query("update ai_agent_versions set status='published' where organization_id=$1 and id=$2", [
+      org,
+      version,
+    ]),
+  ).rejects.toMatchObject({ code: "23514" });
   await expect(
     asUser(
       owner,

@@ -88,7 +88,9 @@ export function InviteUser({ tenants }: { tenants: { id: string; display_name: s
             </select>
           </label>
           <div className="self-end">
-            <Button disabled={pending}>{pending ? t("Enviando…") : t("Enviar convite")}</Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? t("Enviando…") : t("Enviar convite")}
+            </Button>
           </div>
           {message && (
             <p role="status" className="text-sm sm:col-span-2">

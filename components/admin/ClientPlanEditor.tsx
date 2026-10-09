@@ -101,7 +101,7 @@ export function ClientPlanEditor({
             {t("Motivo da concessão ou alteração")}
             <Input name="reason" minLength={10} maxLength={1000} required />
           </label>
-          <Button disabled={pending} className="justify-self-start">
+          <Button type="submit" disabled={pending} className="justify-self-start">
             {t("Aplicar plano")}
           </Button>
         </form>

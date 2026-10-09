@@ -502,7 +502,7 @@ export type Database = {
         Row: {
           agent_id: string;
           cases_enabled: boolean;
-          channel_session_id: string;
+          channel_session_id: string | null;
           cost_budget_cents: number;
           created_at: string;
           created_by: string | null;
@@ -541,7 +541,7 @@ export type Database = {
         Insert: {
           agent_id: string;
           cases_enabled?: boolean;
-          channel_session_id: string;
+          channel_session_id?: string | null;
           cost_budget_cents?: number;
           created_at?: string;
           created_by?: string | null;
@@ -579,7 +579,7 @@ export type Database = {
         Update: {
           agent_id?: string;
           cases_enabled?: boolean;
-          channel_session_id?: string;
+          channel_session_id?: string | null;
           cost_budget_cents?: number;
           created_at?: string;
           created_by?: string | null;

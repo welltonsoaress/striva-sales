@@ -42,8 +42,15 @@ const triggerConfigSchema = z
           .optional()
           .default(null),
       })
-      .default({ ignore_groups: true, ignore_self: true, keyword_regex: null, business_hours: null }),
-    concurrency: z.enum(["one_per_conversation", "one_per_contact"]).default("one_per_conversation"),
+      .default({
+        ignore_groups: true,
+        ignore_self: true,
+        keyword_regex: null,
+        business_hours: null,
+      }),
+    concurrency: z
+      .enum(["one_per_conversation", "one_per_contact"])
+      .default("one_per_conversation"),
   })
   .strict();
 
@@ -94,12 +101,12 @@ const versionShapeSchema = z
       // ver `lib/mcp/tools/selecao-por-pacote.ts` para o porquê do número.
       .max(TETO_TOOLS_POR_AGENTE)
       .default([])
-      .refine(
-        (ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)),
-        { message: "tool_id_invalid" },
-      ),
+      .refine((ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)), {
+        message: "tool_id_invalid",
+      }),
     trigger_config: triggerConfigSchema.optional(),
-    channel_session_id: UUID,
+    // Rascunho não precisa de WhatsApp conectado. A publicação valida o canal.
+    channel_session_id: UUID.nullable().default(null),
     max_steps: z.number().int().min(1).max(25).default(10),
     token_budget: z.number().int().min(1000).max(500000).default(50000),
     cost_budget_cents: z.number().int().min(1).max(10000).default(50),
@@ -140,10 +147,9 @@ const versionShapeSchema = z
       .array(z.string().min(1).max(80))
       .max(TETO_TOOLS_POR_AGENTE)
       .default([])
-      .refine(
-        (ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)),
-        { message: "tool_id_invalid" },
-      ),
+      .refine((ids) => ids.every((id) => (VALID_TOOL_IDS as readonly string[]).includes(id)), {
+        message: "tool_id_invalid",
+      }),
     /**
      * Funis em que este agente pode ESCREVER (spec 17 passo 3). Vazio = NENHUM.
      *
@@ -232,9 +238,7 @@ export const runsListQuerySchema = z
   .object({
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(25),
-    status: z
-      .enum(["pending", "running", "completed", "failed", "aborted", "handoff"])
-      .optional(),
+    status: z.enum(["pending", "running", "completed", "failed", "aborted", "handoff"]).optional(),
   })
   .strict();
 

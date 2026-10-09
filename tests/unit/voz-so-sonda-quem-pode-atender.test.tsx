@@ -89,11 +89,19 @@ beforeEach(() => {
 });
 
 describe("a sessão de chamada de voz só existe para quem pode atender", () => {
-  it("atendente sonda o histórico e assina a tabela", async () => {
-    const { unmount } = montar(usuario(), org("agent"));
+  it("operador da plataforma sonda o histórico e assina a tabela", async () => {
+    const { unmount } = montar({ ...usuario(), is_platform_admin: true }, org("agent"));
     await waitFor(() => expect(espiao.get).toHaveBeenCalledTimes(1));
     expect(espiao.get.mock.calls[0]?.[0]).toContain("/api/v1/voice/calls/history");
     expect(assinaturasLigadas()).toBeGreaterThan(0);
+    unmount();
+  });
+
+  it("atendente comum não sonda nem assina chamadas de voz", async () => {
+    const { unmount } = montar(usuario(), org("agent"));
+    await waitFor(() => expect(espiao.realtime).toHaveBeenCalled());
+    expect(espiao.get).not.toHaveBeenCalled();
+    expect(assinaturasLigadas()).toBe(0);
     unmount();
   });
 
