@@ -755,6 +755,7 @@ test("jornada comercial: troca solicitada no app preserva saldo e cria chamado h
   expect(pack.status()).toBe(503);
   await page.screenshot({ path: `${evidence}/troca-plano-faturamento.png`, fullPage: true });
   await page.goto("/app/ajuda");
+  await page.getByRole("button", { name: "Suporte", exact: true }).click();
   await expect(page.getByText(/Troca de plano:/).first()).toBeVisible();
 });
 

@@ -55,11 +55,12 @@ export function SupportChat() {
       setLoading(false);
     }
   }, [t]);
-  useEffect(() => {
-    if (!open) return;
-    const timer = setTimeout(() => void reload(), 0);
-    return () => clearTimeout(timer);
-  }, [open, reload]);
+  function changeOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    // Bloqueia a digitação na mesma abertura, antes de montar o formulário.
+    // Adiar o carregamento permitia digitar entre a montagem e o bloqueio.
+    if (nextOpen) void reload();
+  }
   useEffect(() => {
     scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
   }, [history.messages]);
@@ -131,7 +132,7 @@ export function SupportChat() {
   const human =
     history.thread?.status === "waiting_human" || history.thread?.status === "human_active";
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"

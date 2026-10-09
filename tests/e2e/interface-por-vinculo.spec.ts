@@ -134,15 +134,17 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(member.getByRole("heading", { name: /Radar/ }).first()).toBeVisible();
     await member.goto("/app/settings/profile");
     await customize(page, emails[1]!, "Produtos");
-    await expect(nav(member).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
+    await expect(nav(member).getByRole("link", { name: "Conversas", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
     await nav(member).getByRole("link", { name: "Ver tudo em CRM" }).click();
     await expect(member.getByRole("link", { name: /Produtos/ }).last()).toBeVisible();
     await expect(member.getByRole("link", { name: /Contatos/ })).toHaveCount(0);
     await member.keyboard.press("ControlOrMeta+k");
+    await member.getByRole("combobox", { name: "Buscar telas do sistema…" }).fill("Produtos");
     await expect(member.getByRole("option").filter({ hasText: "Produtos" })).toBeVisible();
-    await expect(member.getByRole("option").filter({ hasText: "Inbox" })).toHaveCount(0);
+    await member.getByRole("combobox", { name: "Buscar telas do sistema…" }).fill("Conversas");
+    await expect(member.getByRole("option").filter({ hasText: "Conversas" })).toHaveCount(0);
     await member.keyboard.press("Escape");
     mkdirSync(evidence, { recursive: true });
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });
@@ -170,7 +172,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await guest.goto(link);
     await guest.getByRole("button", { name: /aceitar/i }).click();
     await guest.waitForURL("**/app/tasks");
-    await expect(nav(guest).getByRole("link", { name: "Inbox", exact: true })).toHaveCount(0);
+    await expect(nav(guest).getByRole("link", { name: "Conversas", exact: true })).toHaveCount(0);
     await expect(nav(guest).getByRole("link", { name: "Tarefas", exact: true })).toBeVisible();
     await expect(guest.getByRole("heading", { name: "Tarefas", exact: true })).toBeVisible();
     await expect(guest.getByText("Nenhuma tarefa por aqui", { exact: true })).toBeVisible();
