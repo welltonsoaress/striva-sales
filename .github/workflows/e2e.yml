@@ -454,7 +454,7 @@ jobs:
       # Continua sendo a P0 da doutrina de QA Visual: `e2e` verde NÃO prova a
       # jornada de instalação fresca, que é o produto que se vende.
       #
-# As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
+      # As CINCO specs da missão "Follow-up Vivo" (`followup-linguagem`,
       # `followup-ramos`, `followup-dossie`, `followup-tempo-adaptativo`,
       # `gatilho-de-etapa`) entraram nas listas de execução, e não aqui, porque a
       # medição não dá motivo para excluí-las: grep de waha/resend/nuvemshop/redis
@@ -573,6 +573,7 @@ jobs:
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
+        experiencia-saas.spec.ts
         saas-ia-incluida.spec.ts
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
@@ -897,6 +898,14 @@ jobs:
         with:
           name: evidencia-atualizacao-rollback
           path: .superpowers/evidence/final-6-retry-release-diferente.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        if: always() && matrix.parte == 3
+        with:
+          name: evidencia-experiencia-saas
+          path: .superpowers/evidence/experiencia-saas/*.png
           if-no-files-found: ignore
           retention-days: 7
 

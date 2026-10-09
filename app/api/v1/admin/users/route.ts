@@ -5,6 +5,44 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
+import { requireAdminMutation } from "@/lib/auth/admin-mutation";
+import { issueInvite } from "@/lib/auth/issue-invite";
+import { requireSupportWrite } from "@/lib/impersonate/support";
+
+/** Convite usa a jornada existente: criar senha, aceitar termos e confirmar e-mail. */
+export async function POST(req: NextRequest) {
+  const support = await requireSupportWrite();
+  if (support) return support;
+  const parsed = z
+    .object({
+      email: z.email(),
+      organization_id: z.uuid(),
+      role: z.enum(["admin", "manager", "agent", "viewer"]),
+    })
+    .safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return fail("validation_failed", "Informe e-mail, empresa e papel de acesso.", 422);
+  const auth = await requireAdminMutation();
+  if (!auth.ok) return auth.response;
+  const { data: org, error } = await createAdminClient()
+    .from("organizations")
+    .select("display_name")
+    .eq("id", parsed.data.organization_id)
+    .maybeSingle();
+  if (error) return fail("unavailable", "Não foi possível consultar a empresa.", 503);
+  if (!org) return fail("not_found", "Empresa não encontrada.", 404);
+  const invite = await issueInvite({
+    email: parsed.data.email,
+    role: parsed.data.role,
+    organizationId: parsed.data.organization_id,
+    orgName: org.display_name,
+    inviterId: auth.user.id,
+    inviterName: String(auth.user.user_metadata?.full_name ?? "Administração"),
+    requestId: randomUUID(),
+    interfaceSettings: { preset: "simplificada" },
+  });
+  return ok(invite, { status: 201 });
+}
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -34,9 +72,7 @@ function encodeCursor(payload: CursorPayload): string {
 
 function decodeCursor(cursor: string): CursorPayload | null {
   try {
-    return JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf-8"),
-    ) as CursorPayload;
+    return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as CursorPayload;
   } catch {
     return null;
   }
@@ -56,9 +92,7 @@ export async function GET(req: NextRequest) {
     return fail("forbidden", "Platform admin required", 403, { requestId });
   }
 
-  const parsed = querySchema.safeParse(
-    Object.fromEntries(req.nextUrl.searchParams.entries()),
-  );
+  const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams.entries()));
   if (!parsed.success) {
     return fail("validation_error", "Invalid query params", 400, {
       requestId,
@@ -207,8 +241,7 @@ export async function GET(req: NextRequest) {
         email: u.email ?? null,
         last_sign_in_at: u.last_sign_in_at ?? null,
         created_at: u.created_at,
-        raw_user_meta_data:
-          (u.user_metadata as Record<string, unknown> | null) ?? null,
+        raw_user_meta_data: (u.user_metadata as Record<string, unknown> | null) ?? null,
       });
     }
 
@@ -272,8 +305,7 @@ export async function GET(req: NextRequest) {
         tenant_name: org.display_name,
         tenant_slug: org.slug,
         email: u.email ?? null,
-        full_name:
-          (u.raw_user_meta_data?.full_name as string | undefined) ?? null,
+        full_name: (u.raw_user_meta_data?.full_name as string | undefined) ?? null,
         last_sign_in_at: u.last_sign_in_at,
         created_at: u.created_at,
       },
@@ -284,9 +316,7 @@ export async function GET(req: NextRequest) {
   if (q) {
     const lq = q.toLowerCase();
     joined = joined.filter(
-      (r) =>
-        r.email?.toLowerCase().includes(lq) ||
-        r.full_name?.toLowerCase().includes(lq),
+      (r) => r.email?.toLowerCase().includes(lq) || r.full_name?.toLowerCase().includes(lq),
     );
   }
 
@@ -297,9 +327,7 @@ export async function GET(req: NextRequest) {
     }
     if (!a.last_sign_in_at) return 1;
     if (!b.last_sign_in_at) return -1;
-    const diff =
-      new Date(b.last_sign_in_at).getTime() -
-      new Date(a.last_sign_in_at).getTime();
+    const diff = new Date(b.last_sign_in_at).getTime() - new Date(a.last_sign_in_at).getTime();
     if (diff !== 0) return diff;
     const uid = a.user_id < b.user_id ? -1 : a.user_id > b.user_id ? 1 : 0;
     if (uid !== 0) return uid;
@@ -308,13 +336,9 @@ export async function GET(req: NextRequest) {
 
   // Step 7: apply cursor
   if (cursorPayload) {
-    const { last_sign_in_at: cLsi, user_id: cUid, organization_id: cOid } =
-      cursorPayload;
+    const { last_sign_in_at: cLsi, user_id: cUid, organization_id: cOid } = cursorPayload;
     const cursorIdx = joined.findIndex(
-      (r) =>
-        r.last_sign_in_at === cLsi &&
-        r.user_id === cUid &&
-        r.organization_id === cOid,
+      (r) => r.last_sign_in_at === cLsi && r.user_id === cUid && r.organization_id === cOid,
     );
     if (cursorIdx !== -1) {
       joined = joined.slice(cursorIdx + 1);

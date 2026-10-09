@@ -94,7 +94,12 @@ export async function signUp(
   if (await authRateLimited("signup", parsed.data.email, AUTH_LIMITS.signup)) {
     return { ok: false, error: "rate_limited" };
   }
-  if (!(await verifyTurnstile(captchaToken, "signup", ip))) return { ok: false, error: "validation_error", details: { captcha: ["Verifique que você é uma pessoa e tente novamente."] } };
+  if (!(await verifyTurnstile(captchaToken, "signup", ip)))
+    return {
+      ok: false,
+      error: "validation_error",
+      details: { captcha: ["Verifique que você é uma pessoa e tente novamente."] },
+    };
 
   // Só vira convite se o token verificar E for para este e-mail. Divergência
   // aqui não é erro do usuário — é tentativa de entrar em organização alheia
@@ -130,13 +135,19 @@ export async function signUp(
       data: convite
         ? {
             invite_token: convite,
+            legal_accepted_at: new Date().toISOString(),
+            legal_version: "2026-10-09",
             full_name: (parsed.data as SignupComConviteInput).full_name,
             avatar_url: avatarPresetUrl(parsed.data.avatar_id),
           }
         : {
             commercial_plan_hint: selectedPlanHint(selectedPlan),
+            legal_accepted_at: new Date().toISOString(),
+            legal_version: "2026-10-09",
             org_name: (parsed.data as SignupInput).org_name,
-            ...((parsed.data as SignupInput).business_segment ? {business_segment:(parsed.data as SignupInput).business_segment}:{}),
+            ...((parsed.data as SignupInput).business_segment
+              ? { business_segment: (parsed.data as SignupInput).business_segment }
+              : {}),
             avatar_url: avatarPresetUrl(parsed.data.avatar_id),
           },
     },
@@ -195,7 +206,11 @@ export async function signUp(
   await audit({
     action: "auth.signup_requested",
     actorUserId: data.user?.id ?? null,
-    metadata: { email_hash: hashEmail(parsed.data.email) },
+    metadata: {
+      email_hash: hashEmail(parsed.data.email),
+      legal_accepted: true,
+      legal_version: "2026-10-09",
+    },
     requestId,
     ip,
     userAgent,

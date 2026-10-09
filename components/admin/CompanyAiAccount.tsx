@@ -10,6 +10,8 @@ import { billingStatusLabel } from "@/lib/billing/hotmart";
 import { AiAccountActions } from "./AiAccountActions";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { currentCreditUnits } from "@/lib/billing/credits";
+import { ClientPlanEditor } from "./ClientPlanEditor";
+import { loadAdminCommercialPlans } from "@/lib/billing/admin";
 
 export async function CompanyAiAccount({ orgId }: { orgId: string }) {
   const { platformAdmin } = await requirePlatformAdmin();
@@ -49,9 +51,20 @@ export async function CompanyAiAccount({ orgId }: { orgId: string }) {
   if (renewed.error || account.error || !account.data)
     return <p role="alert">{t("Conta de IA indisponível. Recarregue para consultar.")}</p>;
   const a = account.data;
+  const catalog = await loadAdminCommercialPlans();
+  const currentPlan = catalog.plans.find((p) => p.id === a.plan_id);
   return (
     <section className="mt-6 space-y-4 rounded-xl border bg-card p-5">
       <h2 className="text-xl font-semibold">{t("Acesso, IA e créditos")}</h2>
+      <p className="text-sm">
+        {t("Plano atual:")} <strong>{currentPlan?.name ?? t("Sem plano vinculado")}</strong>
+      </p>
+      <ClientPlanEditor
+        orgId={orgId}
+        currentPlan={a.plan_id}
+        plans={catalog.plans.filter((p) => p.publication_state === "published")}
+        readOnly={platformAdmin.scope !== "full"}
+      />
       <div className="grid gap-3 sm:grid-cols-3">
         <p className="rounded-lg bg-primary/5 p-3 text-sm">
           {a.mode === "platform" ? t("IA incluída") : t("IA legada")} ·{" "}

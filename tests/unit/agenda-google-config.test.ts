@@ -21,6 +21,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGINAL = { ...process.env };
 
+// A ausência do banco é a precondição destes casos de instalação fresca.
+// O teste não deve consultar credenciais de uma instalação real do desenvolvedor.
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+    }),
+  }),
+}));
+
 async function importarComEnv(vars: Record<string, string>) {
   vi.resetModules();
   for (const [k, v] of Object.entries(vars)) process.env[k] = v;
@@ -28,6 +38,7 @@ async function importarComEnv(vars: Record<string, string>) {
 }
 
 beforeEach(() => {
+  globalThis.__memoDoAppDoGoogle = null;
   process.env.GOOGLE_CALENDAR_CLIENT_ID = "";
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "";
 });
@@ -79,7 +90,10 @@ describe("configuracaoDoAmbiente", () => {
   it("espaço em branco não conta como configurado", async () => {
     // `install.sh` grava a chave declarada mesmo quando o operador não
     // responde, então "vazio" chega como string — às vezes com espaço.
-    const { configuracaoDoAmbiente } = await importarComEnv({ ...COMPLETO, GOOGLE_CALENDAR_CLIENT_ID: "   " });
+    const { configuracaoDoAmbiente } = await importarComEnv({
+      ...COMPLETO,
+      GOOGLE_CALENDAR_CLIENT_ID: "   ",
+    });
     expect(configuracaoDoAmbiente()).toBeNull();
   });
 });
@@ -95,9 +109,15 @@ describe("enderecoDeRetorno", () => {
 
   it("não produz barra dupla nem barra final", async () => {
     const { enderecoDeRetorno } = await importarComEnv(COMPLETO);
-    expect(enderecoDeRetorno("https://crm.exemplo/")).toBe("https://crm.exemplo/api/v1/agenda/google/callback");
-    expect(enderecoDeRetorno("https://crm.exemplo///")).toBe("https://crm.exemplo/api/v1/agenda/google/callback");
-    expect(enderecoDeRetorno("https://crm.exemplo")).toBe("https://crm.exemplo/api/v1/agenda/google/callback");
+    expect(enderecoDeRetorno("https://crm.exemplo/")).toBe(
+      "https://crm.exemplo/api/v1/agenda/google/callback",
+    );
+    expect(enderecoDeRetorno("https://crm.exemplo///")).toBe(
+      "https://crm.exemplo/api/v1/agenda/google/callback",
+    );
+    expect(enderecoDeRetorno("https://crm.exemplo")).toBe(
+      "https://crm.exemplo/api/v1/agenda/google/callback",
+    );
   });
 });
 

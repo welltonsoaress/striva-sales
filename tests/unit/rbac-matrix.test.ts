@@ -166,16 +166,19 @@ describe("grupo team (read manager+, write admin)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// audit — manager+ (spec 13 §4 nota 8)
+// audit — reservado à administração da plataforma
 // ---------------------------------------------------------------------------
-describe("grupo audit (manager+)", () => {
-  it("GET /audit nega 403 para agent", async () => {
-    session("agent");
-    const { GET } = await import("@/app/api/v1/audit/route");
-    const res = await GET(req("/api/v1/audit"));
-    expect(res.status).toBe(403);
-    expect(await errorCode(res)).toBe("forbidden_role");
-  });
+describe("grupo audit (plataforma)", () => {
+  it.each(["viewer", "agent", "manager", "admin"] as Role[])(
+    "GET /audit nega 403 para %s do cliente",
+    async (role) => {
+      session(role);
+      const { GET } = await import("@/app/api/v1/audit/route");
+      const res = await GET(req("/api/v1/audit"));
+      expect(res.status).toBe(403);
+      expect(await errorCode(res)).toBe("forbidden");
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -32,7 +32,7 @@ export async function GET(): Promise<Response> {
 
   const authz = await requireRole("admin", {
     requestId,
-    resource: "channel_sessions",
+    resource: "voice_sessions",
     allowPlatformAdmin: true,
   });
   if (!authz.ok) return authz.response;

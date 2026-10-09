@@ -14,6 +14,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * Auth: cookie session. organization_id resolvido do JWT — nunca do body.
  */
 import { randomUUID } from "node:crypto";
+import { applyAgentConnection } from "@/lib/ai/agents/platform-connection";
 import { guardNewAgentCredential } from "@/lib/ai/agents/credential-access";
 import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
@@ -117,31 +118,16 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
     const input = parsed.data;
-    const v = input.version;
+    const v = await applyAgentConnection(activeOrg.orgId, input.version).catch(() => null);
+    if (!v)
+      return fail(
+        "state_conflict",
+        "A plataforma precisa configurar a conexão de IA antes de criar ou editar agentes.",
+        409,
+        { requestId },
+      );
     const credentialDenied = await guardNewAgentCredential(v.credential_id, activeOrg.orgId, v);
     if (credentialDenied) return credentialDenied;
-
-    // Insert agent first (no published_version_id yet).
-    const { data: agentRow, error: agentErr } = await admin
-      .from("ai_agents")
-      .insert({
-        organization_id: activeOrg.orgId,
-        name: input.name,
-        description: input.description ?? null,
-        model: `${v.provider}/${v.model}`,
-        system_prompt: v.system_prompt,
-        is_active: true,
-        is_default: false,
-        kind: "mcp_agent",
-        priority: input.priority,
-        created_by: authUser.id,
-      })
-      .select(AGENT_COLUMNS)
-      .single();
-
-    if (agentErr || !agentRow) {
-      return fail("internal_error", "Erro ao criar agent.", 500, { requestId });
-    }
 
     // O escopo aponta para coisas que EXISTEM nesta organização. Sem esta
     // conferência, um id de outra organização (ou de um material apagado) entra no
@@ -154,6 +140,29 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!escopo.ok) {
       return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
     }
+
+    // Insert agent first (no published_version_id yet).
+    const { data: agentRow, error: agentErr } = await admin
+      .from("ai_agents")
+      .insert({
+        organization_id: activeOrg.orgId,
+        name: input.name,
+        description: input.description ?? null,
+        model: `${v.provider}/${v.model}`,
+        system_prompt: v.system_prompt,
+        is_active: false,
+        is_default: false,
+        kind: "mcp_agent",
+        priority: input.priority,
+        created_by: authUser.id,
+      })
+      .select(AGENT_COLUMNS)
+      .single();
+
+    if (agentErr || !agentRow) {
+      return fail("internal_error", "Erro ao criar agent.", 500, { requestId });
+    }
+
     const { data: versionRow, error: versionErr } = await admin
       .from("ai_agent_versions")
       .insert({
@@ -199,7 +208,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       await admin
         .from("ai_agents")
         .update({ archived_at: new Date().toISOString() })
-        .eq("id", agentRow.id);
+        .eq("id", agentRow.id)
+        .eq("organization_id", activeOrg.orgId);
       return fail("internal_error", t("Erro ao criar versão inicial."), 500, {
         requestId,
         details: { agent_rolled_back: true, db_error: versionErr?.message },
@@ -228,6 +238,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   }
   const input = parsed.data;
+  const connection = await applyAgentConnection(activeOrg.orgId, {}).catch(() => null);
+  if (!connection)
+    return fail(
+      "state_conflict",
+      "A plataforma precisa configurar a conexão de IA antes de criar agentes.",
+      409,
+      { requestId },
+    );
 
   const { data, error } = await admin
     .from("ai_agents")
@@ -235,7 +253,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       organization_id: activeOrg.orgId,
       name: input.name,
       description: input.description ?? null,
-      model: input.model ?? "anthropic/claude-sonnet-5",
+      model: `${connection.provider}/${connection.model}`,
       system_prompt: input.system_prompt,
       is_active: true,
       is_default: false,

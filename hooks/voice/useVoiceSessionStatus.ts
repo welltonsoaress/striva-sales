@@ -1,6 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 
+import { useAuth } from "@/hooks/auth/AuthProvider";
 import { apiClient } from "@/lib/api/client";
 
 interface VoiceSessionStatus {
@@ -13,7 +14,9 @@ interface VoiceSessionStatus {
 
 /** Estado do pareamento de chamada de voz da org — decide se o discador aparece. */
 export function useVoiceSessionStatus() {
+  const { user } = useAuth();
   return useQuery({
+    enabled: user.is_platform_admin && !user.support,
     queryKey: ["voice", "session-status"],
     queryFn: () => apiClient.get<{ data: VoiceSessionStatus }>("/api/v1/voice/sessions/status"),
     // Feature opt-in: não vale a pena refetch agressivo, e um erro (feature

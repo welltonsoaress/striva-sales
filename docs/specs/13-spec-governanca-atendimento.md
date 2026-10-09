@@ -223,7 +223,7 @@ escopo `own` na RLS.
 | api_tokens | none | none | none ⁶ | org:read+write |
 | billing | none | none | none (admin-only; derivado: sem decisão explícita do dono, conservador) | org:read+write |
 | team (membros/papéis) | none | none | org:read ⁷ | org:read+write |
-| audit | none | none | org:read ⁸ | org:read |
+| audit | none | none | none | none (leitura técnica exclusiva da plataforma desde a experiência SaaS de 09/10/2026) |
 | métricas | none | own:read (decisão G1-06e: agent só as próprias) | org:read, incl. individuais de todos os atendentes (decisão G1-06e) | org:read |
 
 Notas:
@@ -250,8 +250,9 @@ Notas:
 6. Baseline já aplica `api_tokens_admin_only` (baseline.sql:3289) — manter.
 7. Manager lê a lista de membros para o painel de atendentes (G5-04); gestão de
    papéis (PATCH role) é admin-only (G2-02, "último admin não rebaixa").
-8. Hoje o baseline restringe select de `api_audit_log` a admin
-   (baseline.sql:3297); abrir `org:read` a manager é a mudança-alvo aplicada em G2.
+8. A experiência SaaS de 09/10/2026 restringe a leitura técnica de `api_audit_log`
+   à plataforma, por API e pela policy restritiva da migration 0254. Membros
+   continuam emitindo auditoria; a atividade comercial permanece nas telas de atendimento.
 9. Decisão **G1-06c**: o role `agent` existente É o atendente — sem role novo,
    sem rename de coluna. Decisão **G1-06d**: transferência é imediata (auditada
    via §3.1 + notificação ao destino), sem aceite — o write de transfer não tem
@@ -303,7 +304,7 @@ contacts operacionais etc.) não são "config" e ficam fora do alvo desta fase.
 | contacts | `tenant_isolation_contacts_all` (ALL) | qualquer membro | sim | não (agent tem org:write, nota 3; viewer-write fica pra G4 junto do escopo) | G4 |
 | crm_leads / crm_lead_activities / crm_lead_links | `tenant_isolation_*` (ALL) | qualquer membro | sim | não (operacional; escopo own é G4-01) | G4-01 |
 | channel_sessions, ai_*, orders, nuvemshop_products, idempotency_keys, warmup, storage_redaction_queue | `*_tenant_isolation_*` (ALL) | qualquer membro | sim | não classificado na matriz §4 | fora do escopo G2-03 |
-| api_audit_log | `audit_log_insert_tenant_member` (insert-only, append) | qualquer membro | por design | — | manter (select manager é read, não write) |
+| api_audit_log | `audit_log_insert_tenant_member` (insert-only, append) | qualquer membro | por design | — | manter append; leitura técnica restrita à plataforma pela migration 0254 |
 
 Resultado: as tabelas de **config org-flat** são `crm_pipelines` e `crm_stages`;
 a migration `20260716120000_0030_config_rls_role_policies.sql` aplica

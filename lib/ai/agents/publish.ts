@@ -6,6 +6,9 @@
  * with a stable error code, and unknown errors to 500.
  */
 import { chaveDePlataforma } from "@/lib/ai/runtime/agent";
+import { platformKeyServer } from "@/lib/billing/platform-credentials";
+import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
+import { env } from "@/lib/env";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   exigeEscopoDeFunilParaPublicar,
@@ -38,7 +41,12 @@ interface PublishRow {
 
 export async function publishAgentVersion(
   admin: SupabaseClient,
-  params: { orgId: string; agentId: string; versionId: string; expectedProvenance?: "onboarding" | "legacy_reconciliation" },
+  params: {
+    orgId: string;
+    agentId: string;
+    versionId: string;
+    expectedProvenance?: "onboarding" | "legacy_reconciliation";
+  },
 ): Promise<PublishResult> {
   const { data: version, error: readError } = await admin
     .from("ai_agent_versions")
@@ -49,22 +57,36 @@ export async function publishAgentVersion(
     .maybeSingle();
   if (readError || !version)
     return { ok: false, code: "version_not_found", message: "version_not_found" };
-  if (exigeEscopoDeFunilParaPublicar({
-    tool_ids: (version.tool_ids ?? []) as string[],
-    operator_enabled: version.operator_enabled === true,
-    operator_tool_ids: (version.operator_tool_ids ?? []) as string[],
-    pipeline_ids: (version.pipeline_ids ?? []) as string[],
-  })) {
+  if (
+    exigeEscopoDeFunilParaPublicar({
+      tool_ids: (version.tool_ids ?? []) as string[],
+      operator_enabled: version.operator_enabled === true,
+      operator_tool_ids: (version.operator_tool_ids ?? []) as string[],
+      pipeline_ids: (version.pipeline_ids ?? []) as string[],
+    })
+  ) {
     return { ok: false, code: "pipeline_scope_required", message: "pipeline_scope_required" };
   }
   const platform = version.credential_id === null;
-  if (platform && !chaveDePlataforma(version.provider))
-    return { ok: false, code: "credential_missing", message: "credential_missing" };
+  if (platform && !chaveDePlataforma(version.provider)) {
+    try {
+      await platformKeyServer(version.provider, llmEdgeConfigFromEnv(env));
+    } catch {
+      return { ok: false, code: "credential_missing", message: "credential_missing" };
+    }
+  }
   const { data, error } = await admin.rpc("fn_publish_ai_agent_version", {
     p_org_id: params.orgId,
     p_agent_id: params.agentId,
     p_version_id: params.versionId,
-    ...(params.expectedProvenance ? { p_platform_credential_verified: platform, p_expected_provenance: params.expectedProvenance } : platform ? { p_platform_credential_verified: true } : {}),
+    ...(params.expectedProvenance
+      ? {
+          p_platform_credential_verified: platform,
+          p_expected_provenance: params.expectedProvenance,
+        }
+      : platform
+        ? { p_platform_credential_verified: true }
+        : {}),
   });
 
   if (error) {

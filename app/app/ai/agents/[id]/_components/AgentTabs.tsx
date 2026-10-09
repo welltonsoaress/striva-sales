@@ -1,4 +1,5 @@
 "use client";
+import type { InheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 /**
  * Tabs do detalhe de agent. Wave 12 (S-13.12) entrega Test, Runs e History.
  */
@@ -39,6 +40,8 @@ interface Props {
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
   credentialEditingAllowed?: boolean;
+  showTechnicalLogs?: boolean;
+  inheritedConnection?: InheritedAgentConnection | null;
 }
 
 export function AgentTabs(props: Props) {
@@ -60,7 +63,7 @@ export function AgentTabs(props: Props) {
           {t("Teste")}
         </TabsTrigger>
         <TabsTrigger value="capacidades">{t("Capacidades")}</TabsTrigger>
-        <TabsTrigger value="runs">{t("Execuções")}</TabsTrigger>
+        {props.showTechnicalLogs && <TabsTrigger value="runs">{t("Execuções")}</TabsTrigger>}
         <TabsTrigger value="history">{t("Histórico")}</TabsTrigger>
         <TabsTrigger value="proposals">{t("Propostas")}</TabsTrigger>
       </TabsList>
@@ -68,6 +71,7 @@ export function AgentTabs(props: Props) {
       <TabsContent value="configuration" className="m-0">
         <AgentForm
           credentialEditingAllowed={props.credentialEditingAllowed}
+          inheritedConnection={props.inheritedConnection}
           mode="edit"
           agent={props.agent}
           draft={props.draft}
@@ -98,9 +102,11 @@ export function AgentTabs(props: Props) {
         <UsoDasCapacidades agentId={props.agent.id} active={tab === "capacidades"} />
       </TabsContent>
 
-      <TabsContent value="runs" className="m-0">
-        <RunsTable agentId={props.agent.id} active={tab === "runs"} />
-      </TabsContent>
+      {props.showTechnicalLogs && (
+        <TabsContent value="runs" className="m-0">
+          <RunsTable agentId={props.agent.id} active={tab === "runs"} />
+        </TabsContent>
+      )}
 
       <TabsContent value="proposals" className="m-0">
         <ProposalsPanel

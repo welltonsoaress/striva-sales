@@ -485,6 +485,7 @@ test("cadastro pela clínica sugere segmento editável, confirma e-mail e aparec
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Senha", { exact: true }).fill(password);
     await page.getByLabel("Confirmar senha", { exact: true }).fill(password);
+    await page.getByRole("checkbox", { name: /Termos de Uso/ }).check();
     await page.getByRole("button", { name: "Criar conta", exact: true }).click();
     await expect(page.getByText("Confirme seu e-mail", { exact: true })).toBeVisible();
     const { users: authUsers } = assertResult(await admin.auth.admin.listUsers({ perPage: 1000 }));
@@ -764,11 +765,9 @@ test("pacote preparado fica explicado, saldo esgotado mostra renovação e recup
 }) => {
   await login(page, 2);
   await page.goto("/admin/ai");
-  const packs = page
-    .locator("section")
-    .filter({
-      has: page.getByRole("heading", { name: "Pacotes de créditos extras", exact: true }),
-    });
+  const packs = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Pacotes de créditos extras", exact: true }),
+  });
   await packs.getByRole("button", { name: "Editar pacote", exact: true }).first().click();
   await expect(packs.getByLabel("Quantidade de créditos", { exact: true })).toHaveValue("1000");
   await expect(

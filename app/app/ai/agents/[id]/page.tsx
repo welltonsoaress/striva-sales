@@ -1,5 +1,5 @@
+import { inheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 import { notFound, redirect } from "next/navigation";
-import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -7,7 +7,6 @@ import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
-import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { LegacyRecovery } from "./_components/LegacyRecovery";
 import { AgentOperation } from "./_components/AgentOperation";
@@ -26,9 +25,6 @@ const AGENT_COLUMNS =
 
 const VERSION_COLUMNS =
   "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_prompt, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
-
-const CREDENTIAL_COLUMNS =
-  "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
 
 /**
  * Os provedores cuja chave veio na INSTALAÇÃO (`.env`), não da tela de
@@ -69,45 +65,40 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   const readOnly = ROLE_RANK[activeOrg.role] < ROLE_RANK.admin;
 
   // mcp_agent: busca versions + lookups.
-  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes] =
-    await Promise.all([
-      supabase
-        .from("ai_agent_versions")
-        .select(VERSION_COLUMNS)
-        .eq("organization_id", activeOrg.orgId)
-        .eq("agent_id", id)
-        .order("version_number", { ascending: false }),
-      supabase
-        .from("ai_provider_credentials_safe")
-        .select(CREDENTIAL_COLUMNS)
-        .eq("organization_id", activeOrg.orgId),
-      listSelectableChannels(supabase, activeOrg.orgId),
-      supabase
-        .from("ai_router_members")
-        .select("router_id, ai_routers(name)")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("agent_id", id)
-        .limit(1)
-        .maybeSingle(),
-      // Os funis vêm com a página, não por fetch no cliente: a marcação usa
-      // "nenhum funil" para dizer algo importante, e uma lista que chega vazia no
-      // primeiro render diria isso por engano.
-      supabase
-        .from("crm_pipelines")
-        .select("id, name, slug, description, position, is_default")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("is_archived", false)
-        .order("position"),
-      // O acervo vem com a página pelo mesmo motivo dos funis: a seção usa
-      // "nenhum material" para dizer algo importante, e uma lista que chega vazia
-      // no primeiro render diria isso por engano.
-      supabase
-        .from("ai_knowledge_sources")
-        .select("id, name, source_type, chunks_count, last_index_status")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
-    ]);
+  const [versionsRes, channelSessions, routerMemberRes, funisRes, acervoRes] = await Promise.all([
+    supabase
+      .from("ai_agent_versions")
+      .select(VERSION_COLUMNS)
+      .eq("organization_id", activeOrg.orgId)
+      .eq("agent_id", id)
+      .order("version_number", { ascending: false }),
+    listSelectableChannels(supabase, activeOrg.orgId),
+    supabase
+      .from("ai_router_members")
+      .select("router_id, ai_routers(name)")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("agent_id", id)
+      .limit(1)
+      .maybeSingle(),
+    // Os funis vêm com a página, não por fetch no cliente: a marcação usa
+    // "nenhum funil" para dizer algo importante, e uma lista que chega vazia no
+    // primeiro render diria isso por engano.
+    supabase
+      .from("crm_pipelines")
+      .select("id, name, slug, description, position, is_default")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_archived", false)
+      .order("position"),
+    // O acervo vem com a página pelo mesmo motivo dos funis: a seção usa
+    // "nenhum material" para dizer algo importante, e uma lista que chega vazia
+    // no primeiro render diria isso por engano.
+    supabase
+      .from("ai_knowledge_sources")
+      .select("id, name, source_type, chunks_count, last_index_status")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: true }),
+  ]);
 
   const versions = (versionsRes.data ?? []) as unknown as AgentVersionRow[];
   const funis = (funisRes.data ?? []) as unknown as FunilDaResposta[];
@@ -131,7 +122,6 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
     const c = coberturaDoFunil(etapasPorFunil.get(f.id) ?? []);
     cobertura[f.id] = { traduzidos: c.traduzidos, total: c.total, mudo: c.mudo };
   }
-  const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
   const routerMemberRow = routerMemberRes.data as {
     router_id: string;
     ai_routers: { name: string } | null;
@@ -158,10 +148,10 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
       <AgentOperation agent={agent} readOnly={readOnly} />
       {(agent.kind ?? "rag_bot") !== "mcp_agent" && !agent.published_version_id && (
         <LegacyRecovery
-          credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
+          credentialEditingAllowed={false}
           agent={agent}
           channels={channelSessions}
-          credentials={credentials}
+          credentials={[]}
           hasVersion={
             versions.length > 0 &&
             !(
@@ -174,14 +164,16 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
         />
       )}
       <AgentTabs
-        credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
+        inheritedConnection={await inheritedAgentConnection(activeOrg.orgId)}
+        showTechnicalLogs={user.is_platform_admin && !user.support}
+        credentialEditingAllowed={false}
         agent={agent}
         draft={draft}
         published={published}
         base={base}
         draftObsoleto={draftObsoleto}
         versions={versions}
-        credentials={credentials}
+        credentials={[]}
         provedoresDaInstalacao={provedoresDaInstalacao()}
         channelSessions={channelSessions}
         funis={funis}

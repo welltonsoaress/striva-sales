@@ -29,3 +29,21 @@ it("entrada negativa não é corrigida para um falso zero", () => {
     ),
   ).toBeNull();
 });
+it("contexto longo reajusta a chamada inteira, incluindo cache, somente acima do limiar", () => {
+  const price = {
+    input: 200,
+    output: 1000,
+    cache_read: 10,
+    cache_write: 250,
+    long_context: { threshold: 272000, input_multiplier: 2, output_multiplier: 1.5 },
+  };
+  const usage = {
+    inputTokens: 272000,
+    outputTokens: 1000,
+    cacheReadTokens: 72000,
+    cacheWriteTokens: 0,
+  };
+  expect(pricedUsage(price, usage)).toBeCloseTo(41.72);
+  expect(pricedUsage(price, { ...usage, inputTokens: 272001 })).toBeCloseTo(82.9404);
+  expect(pricedUsage({ ...price, long_context: { threshold: "272000" } }, usage)).toBeNull();
+});

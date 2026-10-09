@@ -9,13 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { GuardrailsEditor } from "@/components/ai/GuardrailsEditor";
 import { SystemPromptEditor } from "@/components/ai/SystemPromptEditor";
@@ -80,8 +73,7 @@ function diffPatch(initial: FormState, current: FormState): AgentPatch {
   }
   if (initial.is_active !== current.is_active) patch.is_active = current.is_active;
   if (initial.model !== current.model) patch.model = current.model;
-  if (initial.system_prompt !== current.system_prompt)
-    patch.system_prompt = current.system_prompt;
+  if (initial.system_prompt !== current.system_prompt) patch.system_prompt = current.system_prompt;
   if (JSON.stringify(initial.config) !== JSON.stringify(current.config)) {
     patch.config = current.config;
   }
@@ -194,7 +186,7 @@ export function AgentEditor({ agentId, initialData, readOnly = false }: Props) {
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">{t("Geral")}</TabsTrigger>
-          <TabsTrigger value="model">{t("Modelo")}</TabsTrigger>
+          <TabsTrigger value="model">{t("Atendimento")}</TabsTrigger>
           <TabsTrigger value="rag">RAG</TabsTrigger>
           <TabsTrigger value="guardrails">Guardrails</TabsTrigger>
         </TabsList>
@@ -233,32 +225,17 @@ export function AgentEditor({ agentId, initialData, readOnly = false }: Props) {
               <Label htmlFor="is_active">{t("Agent ativo")}</Label>
             </div>
             <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
-              <strong>{t("Default:")}</strong> {agent.is_default ? t("Sim") : t("Não")} ({t("read-only — gerenciado pelo backend")}).
+              <strong>{t("Default:")}</strong> {agent.is_default ? t("Sim") : t("Não")} (
+              {t("read-only — gerenciado pelo backend")}).
             </div>
           </Card>
         </TabsContent>
 
         <TabsContent value="model">
           <Card className="space-y-4 p-4">
-            <div className="space-y-1">
-              <Label>{t("Modelo")}</Label>
-              <Select
-                value={formState.model}
-                onValueChange={(v) => patchForm({ model: v as AgentModel })}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AGENT_MODELS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              {t("A conexão de IA é definida pela plataforma.")}
+            </p>
 
             <SystemPromptEditor
               value={formState.system_prompt}
@@ -299,9 +276,7 @@ export function AgentEditor({ agentId, initialData, readOnly = false }: Props) {
                   min={1}
                   max={50}
                   value={formState.config.context_message_window}
-                  onChange={(e) =>
-                    patchConfig({ context_message_window: Number(e.target.value) })
-                  }
+                  onChange={(e) => patchConfig({ context_message_window: Number(e.target.value) })}
                   disabled={disabled}
                 />
               </div>
@@ -346,9 +321,7 @@ export function AgentEditor({ agentId, initialData, readOnly = false }: Props) {
                   min={0}
                   max={1}
                   value={formState.config.confidence_threshold}
-                  onChange={(e) =>
-                    patchConfig({ confidence_threshold: Number(e.target.value) })
-                  }
+                  onChange={(e) => patchConfig({ confidence_threshold: Number(e.target.value) })}
                   disabled={disabled}
                 />
               </div>

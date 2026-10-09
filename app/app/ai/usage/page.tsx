@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK } from "@/lib/auth/types";
+
 import { createClient } from "@/lib/supabase/server";
 import { BudgetCard } from "@/components/ai/BudgetCard";
 import { getBudgetStatus } from "@/lib/ai/budget/check";
@@ -23,7 +23,7 @@ export default async function AiUsagePage({ searchParams }: PageProps) {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
-  if (ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+  if (!user.is_platform_admin || !!user.support) {
     redirect("/403");
   }
 
@@ -51,7 +51,7 @@ export default async function AiUsagePage({ searchParams }: PageProps) {
   };
 
   const budget = await getBudgetStatus(activeOrg.orgId);
-  const isAdmin = ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
+  const isAdmin = activeOrg.role === "admin";
   const idioma = user.idioma;
 
   return (

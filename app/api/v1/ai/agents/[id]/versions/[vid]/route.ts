@@ -1,3 +1,4 @@
+import { applyAgentConnection } from "@/lib/ai/agents/platform-connection";
 import { guardAgentCredential } from "@/lib/ai/agents/credential-access";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
@@ -80,8 +81,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const patch = parsed.data;
-  const credentialDenied = await guardAgentCredential(activeOrg.orgId, id, patch.credential_id, vid);
+  const patch = await applyAgentConnection(activeOrg.orgId, parsed.data).catch(() => null);
+  if (!patch)
+    return fail(
+      "state_conflict",
+      "A plataforma precisa configurar a conexão de IA antes de criar ou editar agentes.",
+      409,
+      { requestId },
+    );
+  const credentialDenied = await guardAgentCredential(
+    activeOrg.orgId,
+    id,
+    patch.credential_id,
+    vid,
+  );
   if (credentialDenied) return credentialDenied;
   if (Object.keys(patch).length === 0) {
     return fail("invalid_request", "Body vazio.", 400, { requestId });

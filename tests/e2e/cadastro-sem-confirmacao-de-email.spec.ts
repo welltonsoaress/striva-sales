@@ -103,6 +103,7 @@ test("⭐ o cadastro não manda esperar um e-mail que não vai chegar", async ({
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(SENHA);
   await page.locator("#password_confirm").fill(SENHA);
+  await page.getByRole("checkbox", { name: /termos|li e aceito/i }).check();
   await page.getByRole("button", { name: /criar conta/i }).click();
 
   // A saída, e não a sala de espera.
@@ -173,6 +174,7 @@ test("⭐ quem se cadastra POR UM CONVITE vai aceitá-lo, não abrir empresa pr�
   await page.goto(`/signup?invite=${encodeURIComponent(token)}`);
   await page.locator("#password").fill(SENHA);
   await page.locator("#password_confirm").fill(SENHA);
+  await page.getByRole("checkbox", { name: /termos|li e aceito/i }).check();
   await page.getByRole("button", { name: /criar conta/i }).click();
 
   await expect(page).toHaveURL(/\/team\/accept-invite\//, { timeout: 30_000 });

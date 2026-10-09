@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { pricedUsage } from "@/lib/ai/model-price";
 
 interface ModelPricingRow {
+  long_context_pricing?: unknown;
   provider: string;
   model_id: string;
   input_price_per_million_cents: number | null;
@@ -34,7 +35,9 @@ async function loadPricing(): Promise<Map<string, ModelPricingRow>> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ai_models")
-    .select("provider, model_id, input_price_per_million_cents, output_price_per_million_cents, cache_read_price_per_million_cents, cache_write_price_per_million_cents");
+    .select(
+      "provider, model_id, input_price_per_million_cents, output_price_per_million_cents, cache_read_price_per_million_cents, cache_write_price_per_million_cents, long_context_pricing",
+    );
   if (error) {
     return cache ?? new Map();
   }
@@ -61,11 +64,21 @@ export async function computeCostCents(input: ComputeCostInput): Promise<number 
   const pricing = await loadPricing();
   const row = pricing.get(key(input.provider, input.model));
   if (!row) return null;
-  return pricedUsage({ input: row.input_price_per_million_cents, output: row.output_price_per_million_cents,
-    cache_read: row.cache_read_price_per_million_cents ?? null, cache_write: row.cache_write_price_per_million_cents ?? null }, {
-    inputTokens: input.inputTokens ?? 0, outputTokens: input.outputTokens ?? 0,
-    cacheReadTokens: input.cacheReadTokens ?? 0, cacheWriteTokens: input.cacheWriteTokens ?? 0,
-  });
+  return pricedUsage(
+    {
+      input: row.input_price_per_million_cents,
+      output: row.output_price_per_million_cents,
+      cache_read: row.cache_read_price_per_million_cents ?? null,
+      long_context: row.long_context_pricing,
+      cache_write: row.cache_write_price_per_million_cents ?? null,
+    },
+    {
+      inputTokens: input.inputTokens ?? 0,
+      outputTokens: input.outputTokens ?? 0,
+      cacheReadTokens: input.cacheReadTokens ?? 0,
+      cacheWriteTokens: input.cacheWriteTokens ?? 0,
+    },
+  );
 }
 
 /** Test-only: drop the in-memory pricing cache. */

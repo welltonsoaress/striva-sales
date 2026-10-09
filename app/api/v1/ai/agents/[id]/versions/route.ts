@@ -1,3 +1,7 @@
+import { applyAgentConnection } from "@/lib/ai/agents/platform-connection";
+import { platformKeyServer } from "@/lib/billing/platform-credentials";
+import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
+import { env } from "@/lib/env";
 import { guardAgentCredential } from "@/lib/ai/agents/credential-access";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
@@ -93,7 +97,14 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const v = parsed.data;
+  const v = await applyAgentConnection(activeOrg.orgId, parsed.data).catch(() => null);
+  if (!v)
+    return fail(
+      "state_conflict",
+      "A plataforma precisa configurar a conexão de IA antes de criar ou editar agentes.",
+      409,
+      { requestId },
+    );
   const credentialDenied = await guardAgentCredential(activeOrg.orgId, id, v.credential_id);
   if (credentialDenied) return credentialDenied;
 
@@ -120,10 +131,19 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     // publicada para morrer em toda mensagem — e o dono só descobriria com o
     // primeiro cliente. O schema valida FORMA; quem conhece o ambiente do
     // servidor é esta rota.
-    if (v.credential_id === null && lerAmbiente().chavesDeProvedor[v.provider] !== true) {
+    let platformReady = lerAmbiente().chavesDeProvedor[v.provider] === true;
+    if (v.credential_id === null && !platformReady) {
+      try {
+        await platformKeyServer(v.provider, llmEdgeConfigFromEnv(env));
+        platformReady = true;
+      } catch {
+        /* Falha fechada. */
+      }
+    }
+    if (v.credential_id === null && !platformReady) {
       return fail(
         "credential_required",
-        `Esta instalação não tem chave de ${v.provider} no ambiente. Cadastre uma chave em IA › Credenciais ou escolha outra empresa de inteligência artificial.`,
+        "A conexão de IA precisa ser configurada pela administração da plataforma.",
         422,
         { requestId },
       );

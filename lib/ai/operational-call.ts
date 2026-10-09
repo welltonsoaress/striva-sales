@@ -24,7 +24,7 @@ export async function recordOperationalCall(input: {
   const { data } = await db
     .from("ai_models")
     .select(
-      "input_price_per_million_cents,output_price_per_million_cents,cache_read_price_per_million_cents,cache_write_price_per_million_cents,pricing_verified_at,pricing_source",
+      "input_price_per_million_cents,output_price_per_million_cents,cache_read_price_per_million_cents,cache_write_price_per_million_cents,pricing_verified_at,pricing_source,long_context_pricing",
     )
     .eq("provider", input.provider)
     .eq("model_id", input.model)
@@ -38,6 +38,7 @@ export async function recordOperationalCall(input: {
         cache_write: data.cache_write_price_per_million_cents,
         verified_at: data.pricing_verified_at,
         source: data.pricing_source,
+        long_context: data.long_context_pricing,
       }
     : null;
   const duration = input.duration_seconds;
@@ -55,36 +56,34 @@ export async function recordOperationalCall(input: {
             cacheReadTokens: input.cache_read_tokens ?? 0,
             cacheWriteTokens: input.cache_write_tokens ?? 0,
           });
-  const { error } = await db
-    .from("llm_calls")
-    .insert({
-      organization_id: input.organization_id,
-      purpose: input.purpose,
-      provider: input.provider,
-      model: input.model,
-      input_tokens: input.input_tokens ?? null,
-      output_tokens: input.output_tokens ?? null,
-      latency_ms: input.latency_ms,
-      cost_cents: cost,
-      status: input.failed ? "erro" : "ok",
-      error_code: input.failed ? "operational_call_failed" : null,
-      pricing_snapshot:
-        duration !== undefined
+  const { error } = await db.from("llm_calls").insert({
+    organization_id: input.organization_id,
+    purpose: input.purpose,
+    provider: input.provider,
+    model: input.model,
+    input_tokens: input.input_tokens ?? null,
+    output_tokens: input.output_tokens ?? null,
+    latency_ms: input.latency_ms,
+    cost_cents: cost,
+    status: input.failed ? "erro" : "ok",
+    error_code: input.failed ? "operational_call_failed" : null,
+    pricing_snapshot:
+      duration !== undefined
+        ? {
+            mode: input.billing_mode ?? "unknown",
+            unit: "usd_cents_per_minute",
+            rate: input.duration_rate ?? null,
+            seconds: duration,
+            source: input.duration_source ?? null,
+          }
+        : price
           ? {
               mode: input.billing_mode ?? "unknown",
-              unit: "usd_cents_per_minute",
-              rate: input.duration_rate ?? null,
-              seconds: duration,
-              source: input.duration_source ?? null,
+              unit: "usd_cents_per_million_tokens",
+              rates: { ...price },
             }
-          : price
-            ? {
-                mode: input.billing_mode ?? "unknown",
-                unit: "usd_cents_per_million_tokens",
-                rates: { ...price },
-              }
-            : { mode: input.billing_mode ?? "unknown" },
-    });
+          : { mode: input.billing_mode ?? "unknown" },
+  });
   if (error)
     logger.error("[ai] falha ao registrar custo operacional", {
       organization_id: input.organization_id,

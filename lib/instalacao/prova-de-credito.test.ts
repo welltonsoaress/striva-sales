@@ -19,9 +19,7 @@ describe("montarRequisicaoDeProva", () => {
   it("sabe cobrar TODOS os provedores que a lista oferece", () => {
     // Se a lista ganhar um provedor e este módulo não souber testá-lo, o
     // diagnóstico ficaria mudo justamente para quem escolheu o mais novo.
-    const semProva = IDS_DE_PROVEDOR.filter(
-      (id) => montarRequisicaoDeProva(id, "k", "m") === null,
-    );
+    const semProva = IDS_DE_PROVEDOR.filter((id) => montarRequisicaoDeProva(id, "k", "m") === null);
     expect(semProva).toEqual([]);
   });
 
@@ -37,6 +35,19 @@ describe("montarRequisicaoDeProva", () => {
   it("pede o mínimo possível — o objetivo é atravessar a cobrança, não gerar texto", () => {
     const anthropic = montarRequisicaoDeProva("anthropic", "k", "m");
     expect(anthropic!.body).toMatchObject({ max_tokens: 1 });
+  });
+  it.each(["gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol"])(
+    "OpenAI %s usa o limite de conclusão aceito",
+    (model) => {
+      const req = montarRequisicaoDeProva("openai", "test-key", model)!;
+      expect(req.body).toMatchObject({ model, max_completion_tokens: 1 });
+      expect(req.body).not.toHaveProperty("max_tokens");
+    },
+  );
+  it("Google recebe a chave apenas no cabeçalho", () => {
+    const req = montarRequisicaoDeProva("google", "test-key", "gemini-3-flash")!;
+    expect(req.url).not.toContain("test-key");
+    expect(req.headers["x-goog-api-key"]).toBe("test-key");
   });
 
   it("provedor desconhecido não recebe 'ok' por omissão", () => {

@@ -105,13 +105,11 @@ describe("painel do Operador — disciplina de informação", () => {
     }
   });
 
-  it("o modelo herdado tem NOME, e o caminho de volta existe", async () => {
-    // Um Select não oferece "nenhum" como item. Sem o botão, escolher um modelo
-    // seria de mão única — e o usuário não teria como saber por quê.
+  it("a conexão administrada não oferece escolha nem alteração de modelo", () => {
     const props = renderPainel({ enabled: true, model: "claude-haiku-4-5-20251001" });
-    const voltar = screen.getByTestId("operador-modelo-herdar");
-    await userEvent.click(voltar);
-    expect(props.onModelChange).toHaveBeenCalledWith("");
+    expect(screen.queryByTestId("operador-modelo-herdar")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /modelo/i })).toBeNull();
+    expect(props.onModelChange).not.toHaveBeenCalled();
   });
 
   it("sem modelo escolhido, não oferece o botão de voltar — não há para onde voltar", () => {
@@ -143,7 +141,13 @@ describe("o papel funcionando aparece na tela", () => {
   it("zero conversas não vira '0' cru — num papel recém-ligado isso é o esperado", async () => {
     // Número solto num painel de configuração parece falha. A frase diz que o
     // estado é normal e o que vai acontecer.
-    metricas = { dias: 30, turnos: 0, agiu: 0, promessas: { declaradas: 0, assumidas: 0, semDono: 0 }, quisAgirENaoPode: 0 };
+    metricas = {
+      dias: 30,
+      turnos: 0,
+      agiu: 0,
+      promessas: { declaradas: 0, assumidas: 0, semDono: 0 },
+      quisAgirENaoPode: 0,
+    };
     renderPainel({ enabled: true });
     const bloco = await screen.findByTestId("operador-como-esta-indo");
     expect(bloco.textContent).toContain("Nenhuma conversa passou por aqui");
@@ -152,12 +156,12 @@ describe("o papel funcionando aparece na tela", () => {
 
   it("cada número responde 'e daí?' — e o que pede configuração diz onde", async () => {
     metricas = {
-        dias: 30,
-        turnos: 40,
-        agiu: 31,
-        promessas: { declaradas: 12, assumidas: 9, semDono: 3 },
-        quisAgirENaoPode: 2,
-      };
+      dias: 30,
+      turnos: 40,
+      agiu: 31,
+      promessas: { declaradas: 12, assumidas: 9, semDono: 3 },
+      quisAgirENaoPode: 2,
+    };
     renderPainel({ enabled: true });
 
     expect((await screen.findByTestId("operador-metrica-acao")).textContent).toContain("31");
@@ -170,7 +174,13 @@ describe("o papel funcionando aparece na tela", () => {
   });
 
   it("sem promessa órfã, não inventa alarme", async () => {
-    metricas = { dias: 30, turnos: 10, agiu: 10, promessas: { declaradas: 4, assumidas: 4, semDono: 0 }, quisAgirENaoPode: 0 };
+    metricas = {
+      dias: 30,
+      turnos: 10,
+      agiu: 10,
+      promessas: { declaradas: 4, assumidas: 4, semDono: 0 },
+      quisAgirENaoPode: 0,
+    };
     renderPainel({ enabled: true });
     await screen.findByTestId("operador-metrica-promessas");
     expect(screen.queryByTestId("operador-metrica-sem-mao")).toBeNull();

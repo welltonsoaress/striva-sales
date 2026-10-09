@@ -41,8 +41,8 @@ interface Requisicao {
 }
 
 /**
- * A menor geração possível em cada provedor. `max_tokens: 1` porque o objetivo
- * é atravessar a cobrança, não obter texto.
+ * A menor geração possível em cada provedor. O limite usa o contrato do provedor;
+ * o objetivo é atravessar a cobrança, não obter texto.
  */
 export function montarRequisicaoDeProva(
   provider: string,
@@ -66,7 +66,7 @@ export function montarRequisicaoDeProva(
       return {
         url: "https://api.openai.com/v1/chat/completions",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: { model: modelo, max_tokens: 1, messages: msg },
+        body: { model: modelo, max_completion_tokens: 1, messages: msg },
       };
     case "openrouter":
       return {
@@ -87,8 +87,8 @@ export function montarRequisicaoDeProva(
       return {
         url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
           modelo,
-        )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        headers: { "content-type": "application/json" },
+        )}:generateContent`,
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
         body: {
           contents: [{ parts: [{ text: "oi" }] }],
           generationConfig: { maxOutputTokens: 1 },
@@ -151,7 +151,12 @@ export async function provarSaldo(
     // Rede fora, DNS, timeout: NÃO é chave ruim, e dizer que é mandaria o
     // operador trocar uma chave que está certa.
     const n = normalizarErro(err);
-    return { ok: false, codigo: n.error_code, mensagem: n.error_message, httpStatus: n.http_status };
+    return {
+      ok: false,
+      codigo: n.error_code,
+      mensagem: n.error_message,
+      httpStatus: n.http_status,
+    };
   } finally {
     clearTimeout(timer);
   }

@@ -51,7 +51,16 @@ export function canSee(
   platform: boolean,
   role: Role | null,
 ): boolean {
-  if (d.href === "/app/ai/credentials") return platform;
+  if (
+    [
+      "/app/ai/credentials",
+      "/app/audit",
+      "/app/ai/runs",
+      "/app/ai/providers",
+      "/app/ai/usage",
+    ].includes(d.href)
+  )
+    return platform;
   return platform || (!!role && ROLE_RANK[role] >= ROLE_RANK[d.minRole ?? "viewer"]);
 }
 export function permitidos(platform: boolean, role: Role | null): NavMetadata[] {

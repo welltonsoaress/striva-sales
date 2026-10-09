@@ -516,6 +516,9 @@ export const AUDIT_ACTIONS = [
   "voice.opt_in_changed",
   "voice.session_unpaired",
   "platform_admin.credit_pack_published",
+  "platform_admin.user_updated",
+  "platform_admin.user_deleted",
+  "platform_admin.plan_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

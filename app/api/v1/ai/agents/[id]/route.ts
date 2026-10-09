@@ -97,12 +97,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   let priorityPatch: number | null = null;
   if (rawBody !== null && typeof rawBody === "object" && "priority" in rawBody) {
     const p = (rawBody as { priority?: unknown }).priority;
-    if (
-      typeof p !== "number" ||
-      !Number.isInteger(p) ||
-      p < 0 ||
-      p > 1000
-    ) {
+    if (typeof p !== "number" || !Number.isInteger(p) || p < 0 || p > 1000) {
       return fail("validation_failed", t("priority inválido (0..1000)."), 422, { requestId });
     }
     priorityPatch = p;
@@ -118,6 +113,10 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   }
 
   const patch = parsed.data;
+  if (patch.model !== undefined)
+    return fail("forbidden", "O modelo de atendimento é definido pela plataforma.", 403, {
+      requestId,
+    });
   const admin = createAdminClient();
 
   // Carrega o agent atual (filtrando org explicitamente — service role bypassa RLS).

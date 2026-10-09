@@ -33,7 +33,15 @@ export interface ConviteDoSignup {
   email: string;
 }
 
-export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convite?: ConviteDoSignup; suggestedSegment?: BusinessSegment; selectedPlan?: string }) {
+export function SignupForm({
+  convite,
+  suggestedSegment,
+  selectedPlan,
+}: {
+  convite?: ConviteDoSignup;
+  suggestedSegment?: BusinessSegment;
+  selectedPlan?: string;
+}) {
   const t = useT();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -47,6 +55,7 @@ export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convit
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<SignupInput & { full_name: string }>({
     // O formulário tem UM tipo e DOIS contratos, e agora os dois contratos têm
@@ -66,6 +75,7 @@ export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convit
       email: convite?.email ?? "",
       password: "",
       password_confirm: "",
+      accepted_terms: false,
     },
   });
 
@@ -77,6 +87,7 @@ export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convit
       const entrada: SignupInput | SignupComConviteInput = convite
         ? {
             full_name: values.full_name,
+            accepted_terms: values.accepted_terms,
             email: convite.email,
             password: values.password,
             password_confirm: values.password_confirm,
@@ -252,7 +263,49 @@ export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convit
         </div>
       )}
       <Turnstile key={captchaAttempt} action="signup" onToken={setCaptchaToken} />
-      <Button type="submit" className="w-full" disabled={isPending || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}>
+      <div className="space-y-2">
+        <label className="flex items-start gap-3 text-sm leading-relaxed">
+          <input
+            type="checkbox"
+            className="mt-1 size-4 shrink-0 accent-primary"
+            {...register("accepted_terms")}
+            disabled={isPending}
+          />
+          <span>
+            {t("Li e aceito os")}{" "}
+            <Link
+              href="/legal/terms"
+              target="_blank"
+              className="font-medium underline underline-offset-4"
+            >
+              {t("Termos de Uso")}
+            </Link>{" "}
+            {t("e a")}{" "}
+            <Link
+              href="/legal/privacy"
+              target="_blank"
+              className="font-medium underline underline-offset-4"
+            >
+              {t("Política de Privacidade")}
+            </Link>
+            .
+          </span>
+        </label>
+        {errors.accepted_terms && (
+          <p role="alert" className="text-sm text-destructive">
+            {t(errors.accepted_terms.message ?? "")}
+          </p>
+        )}
+      </div>
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={
+          isPending ||
+          !watch("accepted_terms") ||
+          (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)
+        }
+      >
         {isPending ? t("Criando conta...") : t("Criar conta")}
       </Button>
     </form>

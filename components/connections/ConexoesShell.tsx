@@ -37,9 +37,11 @@ import { useT } from "@/hooks/i18n/useT";
 export function ConexoesShell({
   wahaConfigured,
   wacallsConfigured,
+  advancedAllowed = false,
 }: {
   wahaConfigured: boolean;
   wacallsConfigured: boolean;
+  advancedAllowed?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -64,6 +66,8 @@ export function ConexoesShell({
     // usuário para o topo a cada clique faz a tela parecer que recarregou.
     router.replace(qs ? `/app/connections?${qs}` : "/app/connections", { scroll: false });
   };
+
+  if (!advancedAllowed) return <ConnectionsClient wahaConfigured={wahaConfigured} />;
 
   return (
     <Tabs value={aba} onValueChange={(v) => irPara(v, sub)} className="flex flex-col gap-4">
@@ -102,7 +106,11 @@ export function ConexoesShell({
             só faz a segunda sumir abaixo da dobra. O rótulo diz "do parceiro"
             para não colidir com "Templates" da barra lateral, que significa
             OUTRA coisa (respostas rápidas do atendente). */}
-        <Tabs value={sub} onValueChange={(v) => irPara("parceiro", v)} className="flex flex-col gap-4">
+        <Tabs
+          value={sub}
+          onValueChange={(v) => irPara("parceiro", v)}
+          className="flex flex-col gap-4"
+        >
           <TabsList>
             <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
             <TabsTrigger value="templates">{t("Modelos do parceiro")}</TabsTrigger>
@@ -117,7 +125,11 @@ export function ConexoesShell({
       </TabsContent>
 
       <TabsContent value="oficial" className="mt-0">
-        <Tabs value={sub} onValueChange={(v) => irPara("oficial", v)} className="flex flex-col gap-4">
+        <Tabs
+          value={sub}
+          onValueChange={(v) => irPara("oficial", v)}
+          className="flex flex-col gap-4"
+        >
           <TabsList>
             <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
             {/* "Templates da Meta", não "Templates": a barra lateral já tem um item

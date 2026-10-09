@@ -27,11 +27,18 @@ export interface AttendantMetrics {
 }
 
 /** spec 13 §6 — funil + performance por atendente. `owner` filtra (manager+). */
-export function useAttendantMetrics(owner: string | null) {
-  const qs = owner ? `?owner_user_id=${encodeURIComponent(owner)}` : "";
+export function useAttendantMetrics(owner: string | null, days = 30) {
   return useQuery({
-    queryKey: ["metrics", "attendants", owner ?? "all"],
-    queryFn: async () => apiClient.get<{ data: AttendantMetrics }>(`/api/v1/metrics/attendants${qs}`),
+    queryKey: ["metrics", "attendants", owner ?? "all", days],
+    queryFn: async () => {
+      const to = new Date();
+      const qs = new URLSearchParams({
+        from: new Date(to.getTime() - days * 86400000).toISOString(),
+        to: to.toISOString(),
+      });
+      if (owner) qs.set("owner_user_id", owner);
+      return apiClient.get<{ data: AttendantMetrics }>(`/api/v1/metrics/attendants?${qs}`);
+    },
     staleTime: 30_000,
   });
 }

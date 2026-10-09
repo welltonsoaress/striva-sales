@@ -37,6 +37,7 @@ async function preencherEEnviar(comEmpresa = true) {
   await user.type(screen.getByLabelText(/^Email$/i), "dono@plata.test");
   await user.type(screen.getByLabelText(/^Senha$/i), "SenhaForte!2026");
   await user.type(screen.getByLabelText(/Confirmar senha/i), "SenhaForte!2026");
+  await user.click(screen.getByRole("checkbox", { name: /termos|li e aceito/i }));
   await user.click(screen.getByRole("button", { name: /criar conta/i }));
 }
 
@@ -65,9 +66,7 @@ describe("cadastro quando o provedor já abriu a sessão", () => {
     render(<SignupForm convite={{ token: "tok-123", email: "convidado@plata.test" }} />);
     await preencherEEnviar(false);
 
-    await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/team/accept-invite/tok-123"),
-    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/team/accept-invite/tok-123"));
   });
 
   it("CONTROLE — confirmação LIGADA: a tela do e-mail continua aparecendo", async () => {
@@ -77,9 +76,7 @@ describe("cadastro quando o provedor já abriu a sessão", () => {
     render(<SignupForm />);
     await preencherEEnviar();
 
-    await waitFor(() =>
-      expect(screen.getByText(/Enviamos um link de confirmação/i)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/Enviamos um link de confirmação/i)).toBeTruthy());
     expect(replace).not.toHaveBeenCalled();
   });
 });

@@ -106,7 +106,7 @@ export function paraLinhaDeExecucao(c: LlmCallRow): Record<string, unknown> {
     channel_session_id: null,
     inbound_message_id: null,
     outbound_message_id: null,
-    status: STATUS_DO_BANCO_PARA_A_TELA[c.status ?? ""] ?? (c.status ?? "completed"),
+    status: STATUS_DO_BANCO_PARA_A_TELA[c.status ?? ""] ?? c.status ?? "completed",
     abort_reason: null,
     error_code: c.error_code,
     error_message: c.error_message,
@@ -152,7 +152,7 @@ export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
   const { id } = await ctx.params;
   if (!UUID_RX.test(id)) return fail("invalid_request", "id inválido.", 400, { requestId });
 
-  const authz = await requireRole("manager", { requestId, resource: "ai_agents" });
+  const authz = await requireRole("manager", { requestId, resource: "ai_runs" });
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { org: activeOrg } = authz;

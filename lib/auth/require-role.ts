@@ -26,8 +26,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
 
 export type RoleCheck =
-  | { ok: true; user: AuthUser; org: ActiveOrg }
-  | { ok: false; response: NextResponse<ApiError> };
+  { ok: true; user: AuthUser; org: ActiveOrg } | { ok: false; response: NextResponse<ApiError> };
 
 interface RequireRoleOpts {
   /** Correlaciona a resposta e o audit com o X-Request-Id da rota. */
@@ -58,23 +57,55 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
   }
   const t = (texto: string) => traduzir(texto, user.idioma);
 
+  // As superfícies de infraestrutura não fazem parte da conta do cliente,
+  // inclusive quando ele administra a própria organização.
+  const platformResources = new Set([
+    "audit",
+    "ai_runs",
+    "ai_usage",
+    "channels_official",
+    "channels_partner",
+    "channels_templates",
+    "voice_calls",
+    "org_voice_calls",
+    "voice_sessions",
+  ]);
+  if (resource && platformResources.has(resource) && (!user.is_platform_admin || user.support)) {
+    return {
+      ok: false,
+      response: fail("forbidden", t("Este recurso é administrado pela plataforma."), 403, {
+        requestId,
+      }),
+    };
+  }
+
   if (user.support && user.support.status !== "active") {
-    return { ok: false, response: fail("forbidden", "O acompanhamento terminou. Saia para continuar.", 403, { requestId }) };
+    return {
+      ok: false,
+      response: fail("forbidden", "O acompanhamento terminou. Saia para continuar.", 403, {
+        requestId,
+      }),
+    };
   }
   let org: ActiveOrg | null;
   if (organizationId) {
     const membership = user.organizations.find((o) => o.organization_id === organizationId);
-    org = user.support?.organization_id === organizationId
-      ? { orgId: organizationId, name: user.support.name, role: user.support.access_mode === "full" ? "admin" : "viewer" }
-      : membership
-      ? {
-          orgId: membership.organization_id,
-          name: membership.organization_name,
-          role: membership.role,
-        }
-      : allowPlatformAdmin && user.is_platform_admin
-        ? { orgId: organizationId, name: "—", role: "viewer" }
-        : null;
+    org =
+      user.support?.organization_id === organizationId
+        ? {
+            orgId: organizationId,
+            name: user.support.name,
+            role: user.support.access_mode === "full" ? "admin" : "viewer",
+          }
+        : membership
+          ? {
+              orgId: membership.organization_id,
+              name: membership.organization_name,
+              role: membership.role,
+            }
+          : allowPlatformAdmin && user.is_platform_admin
+            ? { orgId: organizationId, name: "—", role: "viewer" }
+            : null;
   } else {
     org = await resolveActiveOrg(user);
   }

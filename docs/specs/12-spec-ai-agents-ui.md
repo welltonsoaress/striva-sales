@@ -11,6 +11,8 @@ owner: Rafael Melgaço
 
 # Spec 12 — AI Agents UI (Telas, Fluxos, Wireframes)
 
+Atualização confirmada em 09/10/2026: na experiência SaaS, clientes editam o atendimento e as capacidades, mas herdam modelo e conexão definidos pela plataforma. Os seletores de provedor, modelo e credencial destes wireframes antigos não se aplicam à conta do cliente. Credenciais, execuções e uso técnico são superfícies da operação da plataforma. Contrato atual: [experiência SaaS](experiencia-saas.md); configuração global em `/admin/ai`.
+
 > Mapa completo de telas, fluxos de navegação, wireframes ASCII, componentes shadcn, validação de formulário, estados de erro e interação com endpoints (Spec 10) e MCP catalog (Spec 11). Mantém o design system locked do projeto (Sage + Atkinson Hyperlegible + Aerada + Phosphor — ver memória `project_design_system_locked`).
 
 ---

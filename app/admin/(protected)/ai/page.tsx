@@ -27,6 +27,7 @@ export default async function PlatformAiPage() {
       .select("id,name,units,price_cents,publication_state,hotmart_offer")
       .order("created_at", { ascending: false }),
   ]);
+  const { data: credentials } = await db.from("platform_ai_credentials").select("provider,last4");
   if (settings.error || models.error || packs.error)
     return (
       <p role="alert">
@@ -51,6 +52,7 @@ export default async function PlatformAiPage() {
       </div>
       <ManagedAiEditor
         initial={settings.data}
+        credentials={credentials ?? []}
         models={models.data ?? []}
         packs={packs.data ?? []}
         readOnly={platformAdmin.scope !== "full"}
