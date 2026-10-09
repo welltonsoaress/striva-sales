@@ -75,7 +75,7 @@ enroll_enabled = true
 verify_enabled = true
 
 [edge_runtime]
-enabled = false # Não usamos Edge Functions no MVP
+enabled = false # O E2E usa os handlers Next; a Edge financeira é empacotada à parte.
 policy = "oneshot"
 
 [analytics]
@@ -83,4 +83,5 @@ enabled = false
 
 # Hotmart autentica seu próprio Hottok antes do corpo/banco, não um JWT Supabase.
 [functions.handle-payment-webhook]
+enabled = false # Preparar o pacote externo antes de servir/publicar a Edge (runbook Hotmart).
 verify_jwt = false

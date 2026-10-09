@@ -47,7 +47,7 @@ export default async function BillingPage({
     .eq("organization_id", org.orgId).eq("id", proposalId.data).not("change_request_id", "is", null).maybeSingle() : { data: null };
 
   const { account: commercial, checked_at, usage } = creditSnapshot;
-  const paidActive = commercial?.mode === "platform" && commercial.state === "active" && !!commercial.access_until && Date.parse(commercial.access_until) > Date.now();
+  const paidActive = commercial?.mode === "platform" && commercial.state === "active" && !!commercial.access_until && Date.parse(commercial.access_until) > Date.parse(checked_at);
   const selected = catalog.plans.find((plan) => plan.id === query.plan);
   const period =
     selected?.billing_interval === "year" || (!selected && query.period === "year")
