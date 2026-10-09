@@ -59,10 +59,17 @@ describe("interface por vínculo é apresentação", () => {
         .map((d) => d.href),
     ).toEqual(["/app/products"]);
     expect(searchable(false, "admin", settings).map((d) => d.href)).toContain("/app/products");
-    expect(homeDaInterface(settings, false, "admin")).toBe("/app/inicio");
+    expect(homeDaInterface(settings, false, "admin")).toBe("/app/products");
     expect(hrefs(settings)).toEqual(
       expect.arrayContaining(["/app/team", "/app/settings/profile", "/app/settings/security"]),
     );
+  });
+  it("Início é o padrão; seleção explícita respeita o papel e mantém portas essenciais", () => {
+    expect(homeDaInterface(simplified, false, "agent")).toBe("/app/inicio");
+    expect(homeDaInterface(complete, false, "admin")).toBe("/app/inicio");
+    expect(homeDaInterface({ preset: "simplificada", destinos: ["/app/tasks"] }, false, "agent")).toBe("/app/tasks");
+    expect(homeDaInterface({ preset: "completa", destinos: ["/app/settings/billing"] }, false, "agent")).toBe("/app/inicio");
+    expect(hrefs(granular)).toContain("/app/inicio");
   });
   it("escrita recusa arbitrário/vazio; leitura remove obsoleto e degrada sem lançar", () => {
     expect(

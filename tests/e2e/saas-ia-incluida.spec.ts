@@ -680,7 +680,7 @@ test("jornada comercial: Google opcional, plano preservado e paywall sem escape"
     .analyze();
   expect(access.violations).toEqual([]);
   const credentials = await page.request.post("/api/v1/ai/credentials", {
-    headers: { Origin: "http://localhost:3007" },
+    headers: { Origin: new URL(page.url()).origin },
     data: { provider: "openai", api_key: "ficticia" },
   });
   expect(credentials.status()).toBe(403);
@@ -743,13 +743,13 @@ test("jornada comercial: troca solicitada no app preserva saldo e cria chamado h
   )!;
   expect(account.monthly_remaining).toBe(3000);
   const credentials = await page.request.post("/api/v1/ai/credentials", {
-    headers: { Origin: "http://localhost:3007" },
+    headers: { Origin: new URL(page.url()).origin },
     data: { provider: "openai", api_key: "ficticia" },
   });
   expect(credentials.status()).toBe(403);
   expect((await credentials.json()).error.message).toContain("plataforma");
   const pack = await page.request.post("/api/v1/billing/checkout", {
-    headers: { Origin: "http://localhost:3007" },
+    headers: { Origin: new URL(page.url()).origin },
     data: { credit_pack_id: randomUUID() },
   });
   expect(pack.status()).toBe(503);

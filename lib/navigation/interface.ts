@@ -100,6 +100,13 @@ export function interfaceTemDestino(
 }
 export function homeDaInterface(raw: unknown, platform: boolean, role: Role | null): string {
   const visible = destinosDaInterface(raw, platform, role);
+  const { settings } = lerInterface(raw);
+  // A seleção explícita conserva a área inicial escolhida. Início permanece
+  // acessível como porta essencial, sem substituir a personalização do vínculo.
+  if (settings.destinos) {
+    const selectedHome = visible.find((d) => !essencial(d, role, platform));
+    if (selectedHome) return selectedHome.href;
+  }
   return (
     visible.find((d) => d.href === "/app/inicio")?.href ??
     visible.find((d) => !essencial(d, role, platform))?.href ??

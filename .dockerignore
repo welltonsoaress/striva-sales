@@ -25,3 +25,7 @@ scratchpad
 .opencode
 .specs
 .changes
+# Backups privados, credenciais de sessão e evidências locais não são runtime.
+.superpowers
+.e2e-creds.json
+.supabase
