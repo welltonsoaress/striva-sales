@@ -187,6 +187,9 @@ async function ensureMembership(userId: string, orgId: string, role: string): Pr
     organization_id: orgId,
     role,
     accepted_at: new Date().toISOString(),
+    // Esta fixture representa a organização legada usada para provar as áreas
+    // completas. Cadastros novos continuam usando o default simples do banco.
+    interface_settings: { preset: "completa" },
   } as never);
   if (error) throw new Error(`membership insert: ${error.message}`);
   console.log(`[seed] membership inserted user=${userId} role=${role}`);

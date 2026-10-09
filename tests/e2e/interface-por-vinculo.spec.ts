@@ -76,6 +76,9 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
           organization_id: i === 3 ? orgs[1] : orgs[0],
           role: i === 0 ? "admin" : "agent",
           accepted_at: new Date().toISOString(),
+          // A jornada compara a mudança explícita de completa para simples;
+          // o default de novos clientes é comprovado pela jornada SaaS.
+          interface_settings: { preset: "completa" },
         })),
       );
     if (membership.error) throw membership.error;

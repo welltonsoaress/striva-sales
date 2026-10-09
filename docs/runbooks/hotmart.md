@@ -1,5 +1,7 @@
 # Integração Hotmart — preparação e homologação
 
+Atualização de 09/10/2026: migrations 0248–0253 aplicadas no projeto vinculado, com agente e credencial existentes preservados; as seis ofertas continuam desabilitadas para compra. Preparação, evidências e limites em [preparação da release](../reviews/2026-10-09-preparacao-da-release.md). O registro abaixo conserva também as provas históricas do receptor anterior.
+
 Registro inicial de 05/10/2026: seis ofertas fornecidas pelo proprietário, catálogo cadastrado e Edge Function publicada no Supabase `fpvvjjkazwrbrxujcftp`, inicialmente na versão 1. Migrações 0243–0247 aplicadas nesse projeto. Segredo configurado pela gestão de segredos do Supabase, sem gravá-lo no código. Em 09/10/2026 o proprietário autorizou a preparação do banco e a publicação da nova release no GitHub com CI e imagens; isso não autoriza uma compra nem habilita vendas públicas. A atualização da aplicação na VPS é uma etapa separada.
 
 A tentativa anterior de operar o navegador não criou negócios ou produtos na Hotmart. Esta etapa usa os links fornecidos e conferidos nos checkouts públicos, sem criar compra.
