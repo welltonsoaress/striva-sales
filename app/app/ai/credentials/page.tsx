@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +15,8 @@ const SAFE_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
 
 export default async function CredentialsPage() {
+  const platform = await requireAiPlatformAdmin();
+  if (!platform.ok) redirect("/app/ai/providers");
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");

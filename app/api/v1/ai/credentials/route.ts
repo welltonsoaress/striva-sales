@@ -1,3 +1,4 @@
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * GET  /api/v1/ai/credentials — lista credentials da org ativa (manager+).
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();
-  const authz = await requireRole("admin", { requestId, resource: "ai_credentials" });
+  const authz = await requireAiPlatformAdmin();
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;

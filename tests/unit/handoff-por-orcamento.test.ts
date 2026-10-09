@@ -57,6 +57,7 @@ const RESUMO_DO_CHECKPOINT = "Compromissos: enviar orçamento. Próxima ação: 
 function poolFalso(opts: { falhaEm?: string } = {}) {
   const chamadas: Array<{ sql: string; params: unknown[] }> = [];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes("from organization_ai_accounts")) return { rows: [{ mode: "legacy" }] };
     chamadas.push({ sql, params });
     if (opts.falhaEm !== undefined && sql.includes(opts.falhaEm)) {
       throw new Error("banco fora");

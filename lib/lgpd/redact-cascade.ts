@@ -17,6 +17,8 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
+import { logger } from "@/lib/logger";
 
 export interface CascadeResult {
   alreadyAnonymized: boolean;
@@ -63,7 +65,21 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
   const avatarPath = (contatoAvatar as { avatar_storage_path?: string | null } | null)
     ?.avatar_storage_path;
 
-  if (avatarPath) {
+  if (avatarPath && !isStoragePathOwnedBy(avatarPath, args.organizationId)) {
+    // Desvincula o ponteiro inválido, sem enfileirar ou apagar um arquivo alheio.
+    const { error: clearError } = await admin
+      .from("contacts")
+      .update({ avatar_storage_path: null, avatar_updated_at: new Date().toISOString() })
+      .eq("id", args.contactId)
+      .eq("organization_id", args.organizationId);
+    if (clearError)
+      throw new Error("[lgpd-redact-cascade] não foi possível limpar o ponteiro inválido");
+    logger.warn("[lgpd-redact-cascade] avatar fora do escopo rejeitado", {
+      organization_id: args.organizationId,
+      contact_id: args.contactId,
+    });
+  }
+  if (avatarPath && isStoragePathOwnedBy(avatarPath, args.organizationId)) {
     // `upsert` que REABRE a linha, e não `insert` cru. A mídia de mensagem tem
     // caminho único por arquivo, então lá um conflito nunca acontece; o avatar
     // inverte essa premissa — o caminho é `{org}/avatars/{id}.jpg`, estável por
@@ -103,11 +119,14 @@ export async function cascadeRedactContact(args: CascadeArgs): Promise<CascadeRe
       .eq("organization_id", args.organizationId);
   }
 
-  const { data, error } = await admin.rpc("fn_lgpd_cascade_redact_contact" as never, {
-    p_organization_id: args.organizationId,
-    p_contact_id: args.contactId,
-    p_request_id: args.requestId,
-  } as never);
+  const { data, error } = await admin.rpc(
+    "fn_lgpd_cascade_redact_contact" as never,
+    {
+      p_organization_id: args.organizationId,
+      p_contact_id: args.contactId,
+      p_request_id: args.requestId,
+    } as never,
+  );
 
   if (error) {
     throw new Error(`[lgpd-redact-cascade] rpc failed: ${error.message}`);

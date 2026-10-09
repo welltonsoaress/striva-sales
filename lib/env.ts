@@ -28,9 +28,7 @@ const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
  * pra permitir setup parcial (ex: dev sem WAHA quando trabalhando só na UI).
  */
 const required = (name: string) =>
-  isProd
-    ? z.string().min(1, `${name} é obrigatória em produção`)
-    : z.string().default("");
+  isProd ? z.string().min(1, `${name} é obrigatória em produção`) : z.string().default("");
 
 const requiredAlways = (name: string) => z.string().min(1, `${name} é obrigatória`);
 
@@ -62,6 +60,13 @@ const diasDeRetencao = (nome: string, padrao: number) =>
     });
 
 const schema = z.object({
+  TRUSTED_PROXY_SECRET: z.string().optional(),
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
+  // Opcional: vazio desliga checkout e recepção Hotmart sem quebrar VPS antiga.
+  HOTMART_HOTTOK: z.string().optional().default(""),
+  // Liberação explícita após homologar o ciclo completo; instalações antigas seguem sem cobrança.
+  HOTMART_CHECKOUT_ENABLED: z.enum(["true", "false"]).optional().default("false"),
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
@@ -256,6 +261,8 @@ const schema = z.object({
    *
    * `RESEND_FROM_EMAIL` vazio NÃO cai num domínio nosso: ver `fromAddress()`.
    */
+  COMMERCIAL_TRIAL_NOTICE_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  COMMERCIAL_RENEWAL_NOTICE_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   RESEND_API_KEY: z.string().optional().default(""),
   RESEND_FROM_EMAIL: z.string().optional().default(""),
 
@@ -320,14 +327,8 @@ const schema = z.object({
     .transform((v) => v === "true"),
 
   // App URLs
-  NEXT_PUBLIC_APP_URL: z
-    .string()
-    .url()
-    .default("http://localhost:3000"),
-  NEXT_PUBLIC_ADMIN_URL: z
-    .string()
-    .url()
-    .default("http://localhost:3000"),
+  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_ADMIN_URL: z.string().url().default("http://localhost:3000"),
 
   // Marca da instalação (white-label) — ver lib/branding.ts.
   // Sem prefixo NEXT_PUBLIC_ de propósito: essas seriam queimadas no bundle
@@ -392,10 +393,15 @@ export const env = parsed.data;
 // cadastrava uma chave da Anthropic que não precisava, só para calar o aviso.
 // O texto era verdadeiro enquanto a Anthropic era a única chave que o
 // instalador pedia; o menu novo o tornou falso.
-if (!env.AI_GATEWAY_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENROUTER_API_KEY) {
+if (
+  !env.AI_GATEWAY_API_KEY &&
+  !env.ANTHROPIC_API_KEY &&
+  !env.OPENROUTER_API_KEY &&
+  !env.OPENAI_API_KEY
+) {
   console.warn(
-    "[env] Nenhuma chave de IA configurada (AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY ou OPENROUTER_API_KEY) — " +
-      "o agente vai pular toda resposta com reason='ai_gateway_key_missing'.",
+    "[env] Nenhuma chave de IA configurada no servidor — confira a configuração da plataforma " +
+      "ou as credenciais das organizações legadas antes de ativar o atendimento.",
   );
 }
 // Este aviso ANUNCIAVA UM DESFECHO que o boot não tem como saber, e a correção

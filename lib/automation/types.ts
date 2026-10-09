@@ -15,6 +15,8 @@ export interface ActionCtx {
   admin: SupabaseClient;
   organizationId: string;
   ruleId: string;
+  /** Posição persistente da ação na regra, fornecida pelo motor. */
+  actionIndex?: number;
   /** Nome da regra como o operador a nomeou — entra nos avisos que ele lê. */
   ruleName: string;
   event: EventRow;

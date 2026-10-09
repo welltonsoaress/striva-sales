@@ -10,23 +10,24 @@
  *      — path fora do manifesto (ou kind:'asset') é rejeitado antes do download.
  * Erros são sempre de ENSINO ({ ok:false, error }), nunca throw (convenção do run).
  */
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { LoadedSkill } from './skills';
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LoadedSkill } from "./skills";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
-const SKILL_ASSETS_BUCKET = 'skill-assets';
+const SKILL_ASSETS_BUCKET = "skill-assets";
 
 interface ManifestEntry {
   path: string;
-  kind: 'reference' | 'asset';
+  kind: "reference" | "asset";
 }
 
 function referenceEntries(manifest: readonly unknown[]): ManifestEntry[] {
   return manifest.filter(
     (m): m is ManifestEntry =>
       m !== null &&
-      typeof m === 'object' &&
-      typeof (m as ManifestEntry).path === 'string' &&
-      (m as ManifestEntry).kind === 'reference',
+      typeof m === "object" &&
+      typeof (m as ManifestEntry).path === "string" &&
+      (m as ManifestEntry).kind === "reference",
   );
 }
 
@@ -46,14 +47,19 @@ export type ReadSkillReferenceResult =
  */
 export async function readSkillReference(
   deps: { admin: SupabaseClient },
-  input: { organizationId: string; matchedSkills: readonly LoadedSkill[]; skillName: string; refPath: string },
+  input: {
+    organizationId: string;
+    matchedSkills: readonly LoadedSkill[];
+    skillName: string;
+    refPath: string;
+  },
 ): Promise<ReadSkillReferenceResult> {
   const skill = input.matchedSkills.find((s) => s.name === input.skillName);
   if (skill === undefined) {
     return {
       ok: false,
       error: {
-        code: 'skill_not_active',
+        code: "skill_not_active",
         message: `a skill '${input.skillName}' não está ativa neste turno — só é possível ler references de skills já casadas.`,
       },
     };
@@ -63,19 +69,28 @@ export async function readSkillReference(
     return {
       ok: false,
       error: {
-        code: 'reference_not_found',
+        code: "reference_not_found",
         message: `'${input.refPath}' não é uma reference conhecida da skill '${input.skillName}' — confira o caminho exato do manifesto.`,
       },
     };
   }
   const objectPath = `${input.organizationId}/${skill.name}/${skill.versionId}/${input.refPath}`;
+  if (!isStoragePathOwnedBy(objectPath, input.organizationId))
+    return {
+      ok: false,
+      error: {
+        code: "reference_not_found",
+        message: "O caminho da reference não é válido nesta empresa.",
+      },
+    };
   const { data, error } = await deps.admin.storage.from(SKILL_ASSETS_BUCKET).download(objectPath);
   if (error || data === null) {
     return {
       ok: false,
       error: {
-        code: 'reference_download_failed',
-        message: 'a reference existe no manifesto mas não foi possível lê-la agora — siga sem ela ou tente de novo.',
+        code: "reference_download_failed",
+        message:
+          "a reference existe no manifesto mas não foi possível lê-la agora — siga sem ela ou tente de novo.",
       },
     };
   }

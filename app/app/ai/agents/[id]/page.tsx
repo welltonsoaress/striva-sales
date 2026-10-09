@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -24,7 +25,7 @@ const AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_prompt, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
@@ -157,14 +158,23 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
       <AgentOperation agent={agent} readOnly={readOnly} />
       {(agent.kind ?? "rag_bot") !== "mcp_agent" && !agent.published_version_id && (
         <LegacyRecovery
+          credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
           agent={agent}
           channels={channelSessions}
           credentials={credentials}
-          hasVersion={versions.length > 0 && !(versions.length===1 && (versions[0] as AgentVersionRow & {provisioning_origin?:string}).provisioning_origin==="legacy_reconciliation")}
+          hasVersion={
+            versions.length > 0 &&
+            !(
+              versions.length === 1 &&
+              (versions[0] as AgentVersionRow & { provisioning_origin?: string })
+                .provisioning_origin === "legacy_reconciliation"
+            )
+          }
           readOnly={readOnly}
         />
       )}
       <AgentTabs
+        credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
         agent={agent}
         draft={draft}
         published={published}

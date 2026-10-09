@@ -67,6 +67,12 @@ const PASTAS_IGNORADAS = new Set(["api", "node_modules"]);
  * tradução nas telas da operação autenticada.
  */
 const FORA_DO_PRODUTO: Record<string, string> = {
+  "app/clinicas/page.tsx":"campanha pública para clínicas brasileiras, com preços BRL, sem seletor de idioma; a operação continua traduzida",
+  "components/marketing/ClinicLanding.tsx":"landing da campanha de clínicas em pt-BR, conforme a solicitação do proprietário",
+  "app/planos/page.tsx":
+    "continuação da campanha comercial pública em pt-BR para o mercado brasileiro; preços BRL e sem seletor de idioma, conforme a landing existente",
+  "components/marketing/PricingSection.tsx":
+    "ofertas da campanha comercial pública em pt-BR para o mercado brasileiro, sem seletor de idioma",
   "components/marketing/LandingPage.tsx":
     "campanha comercial pública em pt-BR para o mercado brasileiro, definida pelo proprietário; não usa o seletor de idioma da operação autenticada",
   "app/design": "vitrine do design system: rota noindex, sem porta na navegação",
@@ -85,7 +91,8 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
   {
     arquivo: "app/app/settings/profile/_form.tsx",
     texto: "Português (BR)",
-    motivo: "nome de idioma se escreve no próprio idioma — quem lê espanhol precisa reconhecer a opção portuguesa",
+    motivo:
+      "nome de idioma se escreve no próprio idioma — quem lê espanhol precisa reconhecer a opção portuguesa",
   },
   {
     arquivo: "app/app/settings/tenant/_form.tsx",
@@ -94,8 +101,7 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
   },
   {
     arquivo: "app/global-error.tsx",
-    texto:
-      "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.",
+    texto: "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.",
     motivo:
       "é o error boundary da RAIZ: renderiza fora de qualquer provider, quando o app já falhou. Chamar um hook de contexto ali é justamente o que não pode falhar de novo",
   },
@@ -177,7 +183,10 @@ function ehPadraoDeData(texto: string): boolean {
 
 /** Um placeholder pode listar VÁRIOS endereços, um por linha. Todos têm de ser. */
 function soEnderecosDeRede(texto: string): boolean {
-  const linhas = texto.split(/[\n,;]/).map((l) => l.trim()).filter(Boolean);
+  const linhas = texto
+    .split(/[\n,;]/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   return linhas.length > 0 && linhas.every((l) => ENDERECO_DE_REDE.test(l));
 }
 

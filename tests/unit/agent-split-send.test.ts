@@ -6,9 +6,15 @@ describe("sendInBubbles", () => {
   it("split off → 1 envio com o corpo inteiro", async () => {
     const send = vi.fn(async () => ({ kind: "sent", messageId: "m" }));
     const sleep = vi.fn(async () => undefined);
-    const out = await sendInBubbles("um texto qualquer", { enabled: false, maxChars: 600, send, sleep, jitter: () => 0 });
+    const out = await sendInBubbles("um texto qualquer", {
+      enabled: false,
+      maxChars: 600,
+      send,
+      sleep,
+      jitter: () => 0,
+    });
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith("um texto qualquer");
+    expect(send).toHaveBeenCalledWith("um texto qualquer", { index: 0, total: 1 });
     expect(out.kind).toBe("sent");
   });
 
@@ -16,7 +22,13 @@ describe("sendInBubbles", () => {
     const send = vi.fn(async () => ({ kind: "sent", messageId: "m" }));
     const sleep = vi.fn(async () => undefined);
     const text = "Primeira ideia aqui.\n\nSegunda ideia aqui.\n\nTerceira ideia aqui.";
-    const out = await sendInBubbles(text, { enabled: true, maxChars: 25, send, sleep, jitter: () => 900 });
+    const out = await sendInBubbles(text, {
+      enabled: true,
+      maxChars: 25,
+      send,
+      sleep,
+      jitter: () => 900,
+    });
     expect(send.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(sleep).toHaveBeenCalledWith(900); // jitter entre bolhas
     expect(out.kind).toBe("sent");
@@ -69,7 +81,13 @@ describe("sendInBubbles", () => {
       .mockResolvedValueOnce({ kind: "blocked" });
     const sleep = vi.fn(async () => undefined);
     const text = "Bolha um aqui.\n\nBolha dois aqui.\n\nBolha três aqui.";
-    const out = await sendInBubbles(text, { enabled: true, maxChars: 20, send, sleep, jitter: () => 0 });
+    const out = await sendInBubbles(text, {
+      enabled: true,
+      maxChars: 20,
+      send,
+      sleep,
+      jitter: () => 0,
+    });
     expect(out.kind).toBe("blocked");
     expect(send).toHaveBeenCalledTimes(2); // parou na 2ª
   });

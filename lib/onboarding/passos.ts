@@ -37,6 +37,7 @@ export interface PassoDoOnboarding {
 export interface ContextoDoPasso {
   /** A integração de loja está ligada nesta instalação? */
   lojaLigada: boolean;
+  managed?: boolean;
 }
 
 /** Um passo marcado no estado — com ou sem `skipped`. */
@@ -111,6 +112,8 @@ export const PASSOS: readonly PassoDoOnboarding[] = [
 
 /** Os passos que existem NESTA instalação, na ordem. */
 export function passosVisiveis(ctx: ContextoDoPasso): PassoDoOnboarding[] {
+  if (ctx.managed) return PASSOS.filter((p) => ['welcome', 'connect-whatsapp', 'setup-ai'].includes(p.segmento)).map((p) =>
+    p.segmento === 'setup-ai' ? { ...p, rotulo: 'Seu agente pronto', cumprido: (s) => Boolean(s.ai?.activated_at) } : p.segmento === 'connect-whatsapp' ? { ...p, rotulo: 'Seu WhatsApp' } : p);
   return PASSOS.filter((p) => p.existe(ctx));
 }
 

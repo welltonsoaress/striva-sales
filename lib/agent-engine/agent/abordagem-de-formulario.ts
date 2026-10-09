@@ -45,6 +45,7 @@ import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
 
 export interface AbordagemDeFormularioInput {
   tenantId: string;
+  responseReservationId?: string;
   /** Agente PUBLICADO que assina a mensagem. */
   agentId: string;
   /** Contato destinatário — `leadId` no vocabulário do seam (é o contact_id). */
@@ -176,6 +177,7 @@ export async function gerarAbordagemDeFormulario(
     leadId: input.leadId,
     jobId: null,
     purpose: 'automation_ai_message',
+    responseReservationId: input.responseReservationId,
     system,
     messages,
     model: agent.model,

@@ -12,6 +12,7 @@ export interface TranscriptionCreds {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  onResult?: (result: {duration_seconds?:number;failed:boolean;latency_ms:number})=>Promise<void>;
 }
 
 const DEFAULT_BASE = "https://api.openai.com";
@@ -35,21 +36,26 @@ export function apiTranscriptionProvider(
   const model = creds.model ?? DEFAULT_MODEL;
   return {
     async transcribe(audio, mime) {
+      const started=Date.now();
       const form = new FormData();
       form.append("model", model);
+      form.append("response_format", "verbose_json");
       form.append(
         "file",
         new Blob([new Uint8Array(audio)], { type: mime.split(";")[0]!.trim() }),
         `audio.${extFor(mime)}`,
       );
+      try {
       const res = await fetchImpl(`${base}/v1/audio/transcriptions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${creds.apiKey}` },
         body: form,
       });
       if (!res.ok) throw new Error(`transcription_${res.status}`);
-      const json = (await res.json()) as { text?: string };
+      const json = (await res.json()) as { text?: string; duration?:number };
+      await creds.onResult?.({duration_seconds:json.duration,failed:false,latency_ms:Date.now()-started});
       return json.text ?? "";
+      } catch(error) {await creds.onResult?.({failed:true,latency_ms:Date.now()-started});throw error;}
     },
   };
 }

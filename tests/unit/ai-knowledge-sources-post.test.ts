@@ -77,6 +77,7 @@ function dublarBanco(opts: { agenteExiste?: boolean; erroDoInsert?: ErroDoBanco 
   const escritas: Array<{ tabela: string; linhas: unknown }> = [];
   const admin = {
     from: (tabela: string) => ({
+      select: () => ({eq: () => ({maybeSingle: async () => ({data: {mode:"legacy"},error:null})})}),
       insert: (linhas: unknown) => {
         escritas.push({ tabela, linhas });
         const erro = tabela === "ai_knowledge_sources" ? erroDoInsert : null;

@@ -67,6 +67,11 @@ vi.mock("@/app/app/ai/agents/[id]/_actions", () => ({
 // Dependências da server action (bloco 2). Ficam no topo porque `vi.mock` é
 // içado; o bloco 1 não as toca.
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+// A conexão é preservada nestes cenários; os guards possuem regressão separada.
+vi.mock("@/lib/ai/agents/credential-access", () => ({
+  guardAgentCredential: vi.fn(async () => null),
+  guardNewAgentCredential: vi.fn(async () => null),
+}));
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(async () => ({ id: "user-1", email: "u@example.com" })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "Org", role: "admin" })),
@@ -137,6 +142,7 @@ const VERSAO = {
   followup: { enabled: false, flow_pointer_ids: [] },
   operator_enabled: false,
   operator_model: null,
+  operator_prompt: "Organize somente os registros desta empresa, confirmando cada alteração.",
   operator_tool_ids: [],
   pipeline_ids: [],
   knowledge_source_ids: [],
@@ -182,6 +188,13 @@ describe("editor de agente — a tela", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     acoes.salvar.mockResolvedValue({ ok: true, data: { version_id: "v2", version_number: 2 } });
+  });
+
+  it("salvar outra configuração preserva as instruções específicas do organizador", async () => {
+    const { campo } = abrirEditor();
+    fireEvent.change(campo("description"), { target: { value: "Descrição atualizada" } });
+    await salvarRascunho();
+    expect(acoes.salvar.mock.calls[0]?.[1]).toHaveProperty("operator_prompt", VERSAO.operator_prompt);
   });
 
   it("leva o nome novo ao servidor quando a pessoa salva o rascunho", async () => {

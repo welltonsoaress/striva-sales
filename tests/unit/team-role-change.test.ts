@@ -24,6 +24,24 @@ vi.mock("@/lib/auth/server", () => ({
   mfaEmDivida: vi.fn(async () => false),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// A guarda comercial usa o servidor administrativo. Esta suíte mede membros
+// legados; acesso expirado e falha fechada têm regressões próprias.
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: (table: string) => {
+      if (table !== "organization_ai_accounts") throw new Error(`unexpected table ${table}`);
+      const query = {
+        select: () => query,
+        eq: () => query,
+        maybeSingle: async () => ({
+          data: { mode: "legacy", state: "pending", access_until: null },
+          error: null,
+        }),
+      };
+      return query;
+    },
+  }),
+}));
 vi.mock("@/lib/audit", () => ({
   audit: vi.fn(async () => undefined),
   isServiceRoleConfigured: () => false,
@@ -70,9 +88,7 @@ function makeSupabaseStub(state: StubState) {
       };
     },
     rpc: async (fn: string) =>
-      fn === "fn_user_role_in_org"
-        ? { data: "admin", error: null }
-        : { data: null, error: null },
+      fn === "fn_user_role_in_org" ? { data: "admin", error: null } : { data: null, error: null },
   };
 }
 
@@ -123,9 +139,7 @@ describe("PATCH /api/v1/team/[user_id] — guard de último admin", () => {
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("state_conflict");
     expect(state.updates).toHaveLength(0);
-    expect(
-      vi.mocked(audit).mock.calls.some(([e]) => e.action === "team.role_changed"),
-    ).toBe(false);
+    expect(vi.mocked(audit).mock.calls.some(([e]) => e.action === "team.role_changed")).toBe(false);
   });
 
   it("rebaixar admin com 2 admins ativos → 200 e write efetuado", async () => {

@@ -31,11 +31,12 @@ const BASE = path.join(RAIZ, "app", "app");
  * e quem revisar o PR a lê.
  */
 const NAV_ALLOWLIST: Record<string, string> = {
-  "/app": "redirect para /app/inbox — não é tela, é o ponto de entrada",
+  "/app": "redirect para a home da interface (Início) — não é tela, é o ponto de entrada",
   "/app/ai/agents/new":
     "sub-fluxo de criar agente, alcançado pelo botão dentro da lista de Agentes",
   "/app/team/invite": "sub-fluxo de convite, alcançado de dentro de Equipe",
-  "/app/settings/tenant/whatsapp": "redirect legado para /app/connections; mantido por links salvos",
+  "/app/settings/tenant/whatsapp":
+    "redirect legado para /app/connections; mantido por links salvos",
   "/app/settings/canal-oficial":
     "redirect para /app/connections?aba=oficial desde o PR #105 — conectar canal passou a ter um lugar só. Conexões é a porta; a aba é navegação interna dela",
   "/app/settings/templates":
@@ -93,9 +94,10 @@ describe("completude da navegação", () => {
 
   it("a allowlist não guarda rota que já morreu", () => {
     const obsoletas = Object.keys(NAV_ALLOWLIST).filter((r) => !ROTAS.includes(r));
-    expect(obsoletas, `Allowlist cita rota que não existe mais:\n  ${obsoletas.join("\n  ")}`).toEqual(
-      [],
-    );
+    expect(
+      obsoletas,
+      `Allowlist cita rota que não existe mais:\n  ${obsoletas.join("\n  ")}`,
+    ).toEqual([]);
   });
 
   it("toda entrada da allowlist explica o porquê", () => {

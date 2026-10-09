@@ -1,3 +1,4 @@
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * DELETE /api/v1/ai/credentials/:id (admin)
@@ -12,7 +13,6 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { contarUsoPublicado, type VersaoVinculada } from "@/lib/ai/credenciais/uso";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -29,7 +29,7 @@ export async function DELETE(
   const requestId = randomUUID();
   const { id } = await ctx.params;
 
-  const authz = await requireRole("admin", { requestId, resource: "ai_credentials" });
+  const authz = await requireAiPlatformAdmin();
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;

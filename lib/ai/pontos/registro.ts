@@ -57,13 +57,7 @@
  */
 
 /** O papel que o ponto cumpre — é como a tela agrupa, para quem não é engenheiro. */
-export type PapelDeIa =
-  | "atender"
-  | "entender"
-  | "proteger"
-  | "lembrar"
-  | "perceber"
-  | "melhorar";
+export type PapelDeIa = "atender" | "entender" | "proteger" | "lembrar" | "perceber" | "melhorar";
 
 export const PAPEIS: Record<PapelDeIa, { rotulo: string; explicacao: string }> = {
   atender: {
@@ -122,10 +116,7 @@ export interface CapacidadeExigida {
  * union é o que faz o `tsc` reprovar a volta, em vez de depender de alguém
  * reparar.
  */
-export type DestinoDeTelemetria =
-  | "llm_calls"
-  | "ai_agent_runs"
-  | "nenhum";
+export type DestinoDeTelemetria = "llm_calls" | "ai_agent_runs" | "nenhum";
 
 export interface PontoDeIa {
   /** Casa com o `purpose` passado ao seam, ou com o id do ponto fora dele. */
@@ -161,11 +152,28 @@ export interface PontoDeIa {
 
 export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
+    id: "platform_support",
+    rotulo: "Orientar o uso do sistema",
+    oQueFaz:
+      "Responde com base no manual e encaminha dúvidas sem orientação segura à equipe de suporte.",
+    papel: "melhorar",
+    exige: {},
+    emissor: "lib/help/support.ts",
+    fixo: {
+      razao:
+        "A configuração de suporte é administrada pela plataforma; o cliente pode solicitar atendimento humano mesmo sem IA disponível.",
+    },
+    sintomaDeFalha:
+      "O suporte apresenta a orientação do manual e mantém disponível o pedido de atendimento humano.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "agent_preview",
     rotulo: "Testar ou revisar resposta",
-    oQueFaz: "Prepara uma resposta com a versão e o conhecimento do agente, sem aplicar alterações ao cliente.",
+    oQueFaz:
+      "Prepara uma resposta com a versão e o conhecimento do agente, sem aplicar alterações ao cliente.",
     papel: "atender",
-    exige: {tools:true,imagem:true},
+    exige: { tools: true, imagem: true },
     emissor: "lib/agent-engine/agent/inbound-turn.ts",
     sintomaDeFalha: "O teste ou a sugestão não consegue preparar a resposta para revisão.",
     registraEm: "llm_calls",
@@ -186,11 +194,13 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "management_consultation",
     rotulo: "Responder perguntas do gestor",
-    oQueFaz: "Consulta as informações da organização para responder ao gestor pelo WhatsApp comercial.",
+    oQueFaz:
+      "Consulta as informações da organização para responder ao gestor pelo WhatsApp comercial.",
     papel: "atender",
     exige: { tools: true },
     emissor: "lib/management/consultation.ts",
-    sintomaDeFalha: "O gestor recebe um resumo limitado e a falha fica registrada para acompanhamento.",
+    sintomaDeFalha:
+      "O gestor recebe um resumo limitado e a falha fica registrada para acompanhamento.",
     registraEm: "llm_calls",
   },
   {
@@ -222,8 +232,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "draft_suggestion",
     rotulo: "Sugerir resposta ao atendente",
-    oQueFaz:
-      "Escreve um rascunho de resposta para o atendente humano revisar antes de enviar.",
+    oQueFaz: "Escreve um rascunho de resposta para o atendente humano revisar antes de enviar.",
     papel: "atender",
     exige: {},
     emissor: "lib/agent-engine/agent/draft-reply.ts",
@@ -248,8 +257,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "intent_router",
     rotulo: "Escolher qual agente atende",
-    oQueFaz:
-      "Lê a mensagem que chegou e decide qual dos seus agentes deve pegar aquela conversa.",
+    oQueFaz: "Lê a mensagem que chegou e decide qual dos seus agentes deve pegar aquela conversa.",
     papel: "entender",
     exige: {},
     emissor: "lib/agent-engine/agent/intent-classifier.ts",
@@ -260,8 +268,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "stage_classifier",
     rotulo: "Identificar a etapa do lead",
-    oQueFaz:
-      "Lê a conversa e sugere em que etapa do funil aquele cliente está de verdade.",
+    oQueFaz: "Lê a conversa e sugere em que etapa do funil aquele cliente está de verdade.",
     papel: "entender",
     exige: {},
     emissor: "lib/agent-engine/agent/stage-classifier.ts",
@@ -309,8 +316,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "jailbreak_detect",
     rotulo: "Barrar tentativa de manipulação",
-    oQueFaz:
-      "Percebe quando alguém tenta enganar o agente para ele fugir das suas regras.",
+    oQueFaz: "Percebe quando alguém tenta enganar o agente para ele fugir das suas regras.",
     papel: "proteger",
     exige: {},
     emissor: "lib/agent-engine/guardrails/jailbreak/classifier.ts",
@@ -359,8 +365,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   {
     id: "checkpoint",
     rotulo: "Fechar o atendimento",
-    oQueFaz:
-      "Escreve o resumo de encerramento do turno, que o próximo atendimento lê ao abrir.",
+    oQueFaz: "Escreve o resumo de encerramento do turno, que o próximo atendimento lê ao abrir.",
     papel: "lembrar",
     exige: {},
     emissor: "lib/agent-engine/agent/inbound-turn.ts",
@@ -382,27 +387,22 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     },
     sintomaDeFalha:
       "Você sobe um documento e ele nunca fica pronto para uso; o agente responde sem conhecer o seu material.",
-    // `nenhum`, e não `llm_calls`: `lib/ai/embed.ts` não chama `logInvocation`
-    // nem passa pelo seam — não há uma linha de telemetria para este ponto em
-    // lugar nenhum. Declarar a tabela certa seria mentir sobre uma cobertura
-    // que não existe; a dívida fica visível com o nome dela.
-    registraEm: "nenhum",
+    registraEm: "llm_calls",
   },
   {
     id: "embedding_consultar",
     rotulo: "Buscar no seu material",
-    oQueFaz:
-      "Encontra, entre os seus documentos, os trechos que respondem à pergunta do cliente.",
+    oQueFaz: "Encontra, entre os seus documentos, os trechos que respondem à pergunta do cliente.",
     papel: "lembrar",
     exige: { embeddingDims: 1536 },
-    emissor: "lib/agent-engine/edge/llm/embed.ts",
+    emissor: "lib/ai/embed.ts",
     fixo: {
       razao:
         "Precisa usar o mesmo modelo com que o material foi indexado. Se divergir, a busca continua funcionando e devolve resultados errados — falha silenciosa, e por isso a troca é feita junto com a reindexação, não aqui.",
     },
     sintomaDeFalha:
       "O agente responde de forma genérica, ignorando o que está escrito nos seus documentos.",
-    registraEm: "nenhum",
+    registraEm: "llm_calls",
   },
 
   // ───────────────────────────── Ver e ouvir ───────────────────────────────
@@ -431,8 +431,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       // `/v1/audio/transcriptions` com `whisper-1`.
       usa: { provider: "openai", modelId: "whisper-1" },
     },
-    sintomaDeFalha:
-      "O cliente manda áudio e o agente responde como se não tivesse recebido nada.",
+    sintomaDeFalha: "O cliente manda áudio e o agente responde como se não tivesse recebido nada.",
     registraEm: "nenhum",
   },
   {

@@ -1,22 +1,18 @@
 "use server";
 
-import { supportWriteError } from "@/lib/impersonate/support";
+import { supportWriteError, requireSupportWrite } from "@/lib/impersonate/support";
 import { savePipelineSettings } from "@/lib/pipelines/save-settings";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
-import {
-  pipelineConfigPatchSchema,
-  type PipelineConfigPatch,
-} from "@/lib/schemas/settings";
+import { pipelineConfigPatchSchema, type PipelineConfigPatch } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 
 export type UpdatePipelineConfigResult =
-  | { ok: true }
-  | { ok: false; error: string; details?: unknown };
+  { ok: true } | { ok: false; error: string; details?: unknown };
 
 export async function updatePipelineConfig(
   pipelineId: string,
@@ -39,6 +35,7 @@ export async function updatePipelineConfig(
     return { ok: false, error: "forbidden_role" };
   }
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden" };
   const supabase = await createClient();
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
@@ -64,8 +61,19 @@ export async function updatePipelineConfig(
   if (parsed.data.lost_reasons !== undefined) nextSettings.lost_reasons = parsed.data.lost_reasons;
 
   try {
-    const saved = await savePipelineSettings(supabase, { organizationId: activeOrg.orgId, pipelineId, expectedUpdatedAt: row.updated_at, settings: nextSettings, vocabulary: nextVocabulary });
-    if (!saved) return { ok: false, error: "As configurações mudaram enquanto você editava. Atualize a página e revise antes de salvar." };
+    const saved = await savePipelineSettings(supabase, {
+      organizationId: activeOrg.orgId,
+      pipelineId,
+      expectedUpdatedAt: row.updated_at,
+      settings: nextSettings,
+      vocabulary: nextVocabulary,
+    });
+    if (!saved)
+      return {
+        ok: false,
+        error:
+          "As configurações mudaram enquanto você editava. Atualize a página e revise antes de salvar.",
+      };
   } catch {
     return { ok: false, error: "Não consegui salvar as configurações. Tente novamente." };
   }

@@ -46,13 +46,14 @@ const JEITOS: { id: PromptTemplate; titulo: string; desc: string }[] = [
 ];
 
 interface Props {
+  platformOperator?: boolean;
   /** O que ele já sabe fazer, em linguagem de dono de negócio. */
   capacidades: string[];
   /** O que ele nunca faz — as conferências antes de cada mensagem sair. */
   conferencias: string[];
 }
 
-export function SetupAiForm({ capacidades, conferencias }: Props) {
+export function SetupAiForm({ capacidades, conferencias, platformOperator = true }: Props) {
   const t = useT();
   const [name, setName] = useState("Atendente IA");
   const [jeito, setJeito] = useState<PromptTemplate>("ecommerce_friendly");
@@ -211,13 +212,38 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             {t("não foram gravadas. Copie o que você escreveu antes de sair — e salve de novo em")}{" "}
             <strong>{t("IA › Memória")}</strong>.
           </p>
-          <p className="text-xs text-muted-foreground">
-            {t("Erro do banco de dados:")} <code className="break-all">{regrasNaoSalvas}</code>
-          </p>
+          {platformOperator && (
+            <p className="text-xs text-muted-foreground">
+              {t("Erro do banco de dados:")} <code className="break-all">{regrasNaoSalvas}</code>
+            </p>
+          )}
         </div>
       )}
 
-      {causa === "chave" && (
+      {!platformOperator && causa && (
+        <div role="alert" className="space-y-3 rounded-lg border p-4">
+          <p className="text-sm">
+            {t(
+              "Seu agente foi preparado e salvo como rascunho, mas ainda não está pronto para responder. A equipe precisa conferir a configuração do atendimento.",
+            )}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Você pode continuar a configuração. Depois, use o botão Suporte em Início para pedir ajuda à equipe.",
+            )}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              window.location.href = "/onboarding";
+            }}
+          >
+            {t("Continuar sem publicar")}
+          </Button>
+        </div>
+      )}
+      {platformOperator && causa === "chave" && (
         <div
           role="alert"
           className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
@@ -228,7 +254,9 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
           </p>
           <p className="text-sm">
             {t("Não achei chave de")} {provedorLegivel(provedor, t)}{" "}
-            {t("nem cadastrada aqui, nem vinda da instalação. Cole a chave no campo acima («o cérebro dele») e crie o atendente de novo — ou cadastre em")}{" "}
+            {t(
+              "nem cadastrada aqui, nem vinda da instalação. Cole a chave no campo acima («o cérebro dele») e crie o atendente de novo — ou cadastre em",
+            )}{" "}
             <strong>{t("IA › Credenciais")}</strong>.
           </p>
           {/*
@@ -254,7 +282,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
         </div>
       )}
 
-      {causa === "modelo" && (
+      {platformOperator && causa === "modelo" && (
         <div
           role="alert"
           className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
@@ -279,8 +307,8 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             </p>
           ) : (
             <p className="text-sm">
-              {t("Esta instalação ainda não tem a lista de modelos")} {provedorLegivel(provedor, t)}.{" "}
-              {t("Ela é baixada automaticamente uma vez por dia; depois disso, publique em")}{" "}
+              {t("Esta instalação ainda não tem a lista de modelos")} {provedorLegivel(provedor, t)}
+              . {t("Ela é baixada automaticamente uma vez por dia; depois disso, publique em")}{" "}
               <strong>{t("IA › Agentes")}</strong>.
             </p>
           )}
@@ -299,7 +327,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
         </div>
       )}
 
-      {naoPublicado && (
+      {platformOperator && naoPublicado && (
         <div
           role="alert"
           className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
@@ -310,11 +338,15 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
               "não consegui ler os números de WhatsApp desta instalação, então não dá pra dizer em qual número ele atenderia — e rascunho não responde mensagem.",
             )}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {t("Erro do banco de dados:")} <code className="break-all">{naoPublicado}</code>
-          </p>
+          {platformOperator && (
+            <p className="text-xs text-muted-foreground">
+              {t("Erro do banco de dados:")} <code className="break-all">{naoPublicado}</code>
+            </p>
+          )}
           <p className="text-sm">
-            {t("Tente de novo no botão abaixo (clicar de novo não cria um segundo agente) ou siga agora e publique depois em")}{" "}
+            {t(
+              "Tente de novo no botão abaixo (clicar de novo não cria um segundo agente) ou siga agora e publique depois em",
+            )}{" "}
             <strong>{t("IA › Agentes")}</strong>.
           </p>
           <div className="flex sm:justify-end">

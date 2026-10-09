@@ -17,6 +17,7 @@
  * aqui chamamos os handlers internos para reusar a lógica.
  */
 import { randomUUID } from "node:crypto";
+import { guardAgentCredential, guardNewAgentCredential } from "@/lib/ai/agents/credential-access";
 import { revalidatePath } from "next/cache";
 
 import { audit } from "@/lib/audit";
@@ -38,7 +39,7 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_prompt, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
 
 type ActionResult<T = void> =
   | { ok: true; data?: T }
@@ -146,6 +147,8 @@ export async function saveAgentDraftAction(
   }
 
   const v = parsed.data;
+  if (await guardAgentCredential(activeOrg.orgId, agentId, v.credential_id))
+    return { ok: false, error: "forbidden", message: "A conexão de IA é administrada pela plataforma." };
   const requestId = randomUUID();
   const admin = createAdminClient();
 
@@ -310,6 +313,7 @@ export async function saveAgentDraftAction(
         cases_enabled: v.cases_enabled,
         operator_enabled: v.operator_enabled,
         operator_model: v.operator_model,
+        operator_prompt: v.operator_prompt,
         operator_tool_ids: v.operator_tool_ids,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
@@ -489,6 +493,8 @@ export async function revertToVersionAction(
     .eq("agent_id", agentId)
     .maybeSingle();
   if (!source) return { ok: false, error: "version_not_found" };
+  if (await guardAgentCredential(activeOrg.orgId, agentId, source.credential_id))
+    return { ok: false, error: "forbidden", message: "A versão anterior usa outra conexão de IA. Peça à plataforma para conferir antes de restaurar." };
 
   // Espelha tool_id check do publish.
   const tools = ((source as { tool_ids: string[] | null }).tool_ids ?? []) as string[];
@@ -517,6 +523,7 @@ export async function revertToVersionAction(
     cases_enabled: boolean;
     operator_enabled: boolean;
     operator_model: string | null;
+    operator_prompt: string | null;
     operator_tool_ids: string[];
     pipeline_ids: string[];
     knowledge_source_ids: string[];
@@ -561,6 +568,7 @@ export async function revertToVersionAction(
         cases_enabled: src.cases_enabled,
         operator_enabled: src.operator_enabled,
         operator_model: src.operator_model,
+        operator_prompt: src.operator_prompt,
         operator_tool_ids: src.operator_tool_ids,
         // O revert leva o escopo junto: voltar para uma versão e NÃO voltar a
         // permissão dela seria publicar uma configuração que nunca existiu.
@@ -672,6 +680,8 @@ export async function createMcpAgentAction(
   const admin = createAdminClient();
 
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
+  if (await guardNewAgentCredential(parsed.data.version.credential_id))
+    return { ok: false, error: "forbidden", message: "A conexão de IA é administrada pela plataforma." };
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
     .insert({
@@ -720,6 +730,7 @@ export async function createMcpAgentAction(
     // uma versão com tudo no default do banco — desligado e vazio.
     operator_enabled: v.operator_enabled,
     operator_model: v.operator_model,
+        operator_prompt: v.operator_prompt,
     operator_tool_ids: v.operator_tool_ids,
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,

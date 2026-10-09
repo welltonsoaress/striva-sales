@@ -18,6 +18,7 @@ import { ensureRole, ensureScope, type McpAuthResult } from "./auth";
 import { allTools } from "./tools";
 import { higienizarUuidsDeAterro } from "./uuid-de-aterro";
 import type { McpContext } from "./types";
+import { assertTenantOperation } from "@/lib/billing/operation-access-server";
 
 const SERVER_NAME = "deskcomm-crm";
 const SERVER_VERSION = "0.1.0";
@@ -72,6 +73,8 @@ export function createMcpServer(auth: McpAuthResult, requestId: string): McpServ
         try {
           ensureScope(auth.scopes, tool.requiresScope);
           ensureRole(auth.role, tool.requiresRole);
+          if (tool.requiresScope === "mcp:write")
+            await assertTenantOperation(supabase, auth.organizationId);
 
           const result = await tool.handler(args as never, ctx);
           const durationMs = Date.now() - startedAt;

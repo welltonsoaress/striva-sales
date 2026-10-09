@@ -9,6 +9,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export interface DrainStats {
   attempted: number;
@@ -63,9 +64,29 @@ export async function drainStorageRedactionQueue(
     const nextAttempts = row.attempts + 1;
 
     try {
-      const { error: removeErr } = await admin.storage
-        .from(row.bucket)
-        .remove([row.object_path]);
+      if (
+        row.bucket !== "whatsapp-media" ||
+        !isStoragePathOwnedBy(row.object_path, row.organization_id)
+      ) {
+        const { error: rejected } = await admin
+          .from("storage_redaction_queue")
+          .update({
+            status: "failed",
+            attempts: nextAttempts,
+            processed_at: new Date().toISOString(),
+            error_message: "storage_path_outside_organization",
+          })
+          .eq("id", row.id)
+          .eq("organization_id", row.organization_id);
+        if (rejected) throw new Error("storage_rejection_record_failed");
+        stats.failed++;
+        logger.warn("[lgpd-redact-worker] objeto fora do escopo rejeitado", {
+          queue_id: row.id,
+          organization_id: row.organization_id,
+        });
+        continue;
+      }
+      const { error: removeErr } = await admin.storage.from(row.bucket).remove([row.object_path]);
 
       if (removeErr) {
         // Treat "not found" as deleted (idempotent / object already gone).

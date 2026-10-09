@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { LeadContextMessage } from "@/lib/agent-engine/edge/crm/get-lead-context";
 import { modelCapabilities } from "@/lib/agent-engine/edge/llm/capabilities";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
-
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 /**
  * AI SDK v7: imagem E pdf vão como `file` part com `mediaType` (o antigo
@@ -22,6 +22,7 @@ import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 export type NativeMediaPart = { type: "file"; data: Buffer; mediaType: string };
 
 export interface BuildNativeMediaPartsArgs {
+  organizationId: string;
   messages: LeadContextMessage[];
   provider: string;
   model: string;
@@ -31,7 +32,9 @@ export interface BuildNativeMediaPartsArgs {
   maxItems?: number;
 }
 
-export async function buildNativeMediaParts(args: BuildNativeMediaPartsArgs): Promise<NativeMediaPart[]> {
+export async function buildNativeMediaParts(
+  args: BuildNativeMediaPartsArgs,
+): Promise<NativeMediaPart[]> {
   if (!args.multimodalInput) return [];
   // ⚠️ A imagem NÃO pergunta ao registro direto. Num roteador (openrouter) o
   // registro responde pelo prefixo do fabricante — `openai/gpt-3.5-turbo` casa
@@ -84,6 +87,7 @@ export async function buildNativeMediaParts(args: BuildNativeMediaPartsArgs): Pr
   try {
     for (const m of candidates) {
       try {
+        if (!isStoragePathOwnedBy(m.media_storage_path!, args.organizationId)) continue;
         const mime = (m.media_mime ?? "").split(";")[0]!.trim().toLowerCase();
         const isImage = m.type === "image" && mime.startsWith("image/") && caps.image;
         const isPdf = m.type === "document" && mime === "application/pdf" && caps.pdf;

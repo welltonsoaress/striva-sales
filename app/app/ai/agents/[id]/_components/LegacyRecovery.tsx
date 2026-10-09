@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/hooks/i18n/useT";
@@ -15,12 +16,14 @@ export function LegacyRecovery({
   credentials,
   hasVersion,
   readOnly,
+  credentialEditingAllowed = false,
 }: {
   agent: AgentRow;
   channels: ChannelSessionLite[];
   credentials: CredentialRow[];
   hasVersion: boolean;
   readOnly?: boolean;
+  credentialEditingAllowed?: boolean;
 }) {
   const t = useT(),
     router = useRouter(),
@@ -59,7 +62,16 @@ export function LegacyRecovery({
           "O prompt e o conhecimento serão preservados. Nenhuma permissão para alterar negócios ou agenda será adicionada.",
         )}
       </p>
-      {hasVersion ? (
+      {!hasVersion && !credentialEditingAllowed ? (
+        <p className="text-sm">
+          {t(
+            "A recuperação da conexão de IA exige a administração da plataforma. Peça ajuda para concluir esta etapa.",
+          )}{" "}
+          <Link href="/app/ajuda" className="text-primary underline">
+            {t("Abrir ajuda")}
+          </Link>
+        </p>
+      ) : hasVersion ? (
         <p className="text-sm">
           {t("Já existe uma versão preservada. Revise, teste e publique pelo editor abaixo.")}
         </p>

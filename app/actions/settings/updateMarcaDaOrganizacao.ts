@@ -1,6 +1,6 @@
 "use server";
 
-import { supportWriteError } from "@/lib/impersonate/support";
+import { supportWriteError, requireSupportWrite } from "@/lib/impersonate/support";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -8,10 +8,7 @@ import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { normalizarHex } from "@/lib/branding/rampa";
-import {
-  marcaDaOrganizacaoSchema,
-  type MarcaDaOrganizacaoInput,
-} from "@/lib/schemas/settings";
+import { marcaDaOrganizacaoSchema, type MarcaDaOrganizacaoInput } from "@/lib/schemas/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type UpdateMarcaDaOrganizacaoResult =
@@ -110,6 +107,7 @@ export async function updateMarcaDaOrganizacao(
     return { ok: false, error: "mfa_required" };
   }
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden_role" };
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
@@ -127,8 +125,7 @@ export async function updateMarcaDaOrganizacao(
         // `#FFFFFF` passam pelo Zod (o validador do domínio aceita as duas
         // formas) e só uma das duas passa pelo banco. Normalizar aqui é o que faz
         // "mudou?" ser uma pergunta com resposta.
-        accent_hex:
-          parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
+        accent_hex: parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
         updated_by: authUser.id,
         updated_at: new Date().toISOString(),
       };
@@ -138,10 +135,11 @@ export async function updateMarcaDaOrganizacao(
   // `platform_branding.accent_hex`. Um envelope gravado no jsonb teria
   // `format`/`algo` sem nada que os force a bater com a versão do código, e o
   // resolvedor já sabe degradar a partir de um hex. Um único escritor da forma.
-  const { data, error } = await createAdminClient().rpc(
-    "fn_definir_marca_da_organizacao",
-    { p_org: activeOrg.orgId, p_actor: authUser.id, p_marca: marca },
-  );
+  const { data, error } = await createAdminClient().rpc("fn_definir_marca_da_organizacao", {
+    p_org: activeOrg.orgId,
+    p_actor: authUser.id,
+    p_marca: marca,
+  });
 
   if (error) {
     // Os dois códigos que a função levanta de propósito. `42501` é papel — e

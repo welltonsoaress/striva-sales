@@ -27,6 +27,7 @@
 import { Resend } from "resend";
 
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 interface SendArgs {
   to: string | string[];
@@ -40,6 +41,7 @@ interface SendArgs {
    * Ausente usa o endereço puro: quem não passa marca não ganha a nossa.
    */
   fromName?: string;
+  idempotencyKey?: string;
 }
 
 interface SendResult {
@@ -92,18 +94,10 @@ export async function sendEmail(args: SendArgs): Promise<SendResult> {
   const from = fromAddress(args.fromName);
 
   if (!client || !from) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[email] envio desligado — falta RESEND_API_KEY ou RESEND_FROM_EMAIL. Payload:",
-        {
-          to: args.to,
-          subject: args.subject,
-          preview: args.text?.slice(0, 200) ?? args.html.slice(0, 200),
-          tem_chave: client !== null,
-          tem_remetente: from !== null,
-        },
-      );
-    }
+    logger.warn("email_not_configured", {
+      tem_chave: client !== null,
+      tem_remetente: from !== null,
+    });
     return { ok: false, error: "not_configured" };
   }
 
@@ -116,7 +110,7 @@ export async function sendEmail(args: SendArgs): Promise<SendResult> {
       text: args.text,
       replyTo: args.replyTo,
       tags: args.tags,
-    });
+    }, args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined);
 
     if (error) {
       return {

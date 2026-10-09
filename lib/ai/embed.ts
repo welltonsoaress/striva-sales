@@ -20,6 +20,8 @@ import {
   type PontoDeEmbedding,
 } from "@/lib/ai/embeddings/chave";
 import { gatewayHeaders, type ModelId } from "@/lib/ai/gateway";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
+import { recordOperationalCall } from "./operational-call";
 
 export interface EmbedOptions {
   organizationId: string;
@@ -56,17 +58,16 @@ export class SemChaveDeEmbeddingError extends Error {
   }
 }
 
-export async function embedText(
-  content: string,
-  opts: EmbedOptions,
-): Promise<EmbedResult> {
-  const chave =
-    opts.chave ?? (await resolverChaveDeEmbedding(opts.organizationId, opts.ponto));
+export async function embedText(content: string, opts: EmbedOptions): Promise<EmbedResult> {
+  const managed = await managedSettings(opts.organizationId, opts.ponto ?? "embedding_indexar");
+  const chave = managed
+    ? { apiKey: managed.api_key, baseUrl: null, viaGateway: false }
+    : (opts.chave ?? (await resolverChaveDeEmbedding(opts.organizationId, opts.ponto)));
   if (!chave) {
     throw new SemChaveDeEmbeddingError(opts.organizationId);
   }
 
-  const modelId = String(opts.model ?? MODELO_DE_EMBEDDING);
+  const modelId = String(managed ? MODELO_DE_EMBEDDING : (opts.model ?? MODELO_DE_EMBEDDING));
 
   // COM gateway: a string `openai/text-embedding-3-small` é roteada por ele, que
   // lê `AI_GATEWAY_API_KEY` do process.env. Headers vão junto p/ observabilidade
@@ -83,12 +84,22 @@ export async function embedText(
         ...(chave.baseUrl ? { baseURL: chave.baseUrl } : {}),
       }).textEmbeddingModel(modelId.replace(/^openai\//, ""));
 
+  const start = Date.now();
   const result = await embed({
     model: resolvido,
     value: content,
-    headers: chave.viaGateway
-      ? gatewayHeaders({ organizationId: opts.organizationId })
-      : undefined,
+    headers: chave.viaGateway ? gatewayHeaders({ organizationId: opts.organizationId }) : undefined,
+  }).catch(async (error: unknown) => {
+    await recordOperationalCall({
+      organization_id: opts.organizationId,
+      billing_mode: managed ? "platform" : "legacy",
+      purpose: opts.ponto ?? "embedding_indexar",
+      provider: "openai",
+      model: modelId.replace(/^openai\//, ""),
+      latency_ms: Date.now() - start,
+      failed: true,
+    });
+    throw error;
   });
 
   // Dimensão asserida a cada chamada: divergir de modelo quebra o recall em
@@ -107,5 +118,15 @@ export async function embedText(
     (result.usage as { tokens?: number; promptTokens?: number } | undefined)?.promptTokens ??
     0;
 
+  await recordOperationalCall({
+    organization_id: opts.organizationId,
+    billing_mode: managed ? "platform" : "legacy",
+    purpose: opts.ponto ?? "embedding_indexar",
+    provider: "openai",
+    model: modelId.replace(/^openai\//, ""),
+    input_tokens: result.usage ? promptTokens : undefined,
+    output_tokens: 0,
+    latency_ms: Date.now() - start,
+  });
   return { embedding: result.embedding, promptTokens, model: modelId };
 }

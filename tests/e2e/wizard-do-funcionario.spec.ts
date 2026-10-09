@@ -182,35 +182,17 @@ test.describe("o wizard monta um funcionário", () => {
     await page.waitForURL(/\/onboarding\/setup-ai/, { timeout: 30_000 });
   });
 
-  test("treinar mostra o cérebro dele — e sem chave não é um beco", async ({ page }) => {
-    // Vale nos dois mundos pela mesma razão do caso do quadro (ver lá): no CI
-    // não há chave de provedor e o bloco vira o formulário para colar uma; na
-    // máquina de quem desenvolve, `next start` carrega o `.env.local` e ele vira
-    // o veredito sobre a chave que existe.
-    //
-    // O que NÃO varia: a tela nunca deixa a pessoa sabendo que falta a chave sem
-    // dizer o que fazer. Antes o passo 1 escrevia "Falta a chave da inteligência
-    // artificial" e o assunto morria ali — diagnóstico certo, saída nenhuma.
+  test("treinar deixa as configurações técnicas com a plataforma", async ({ page }) => {
+    // O membro administrador deste fixture é cliente, não operador. O setup
+    // técnico permanece na plataforma; falta de chave será explicada como
+    // rascunho depois da criação, com uma saída para continuar configurando.
     await login(page);
     await page.waitForURL(/\/onboarding\/setup-ai/, { timeout: 30_000 });
 
-    const corpo = page.locator("body");
-    await expect(corpo).toContainText(/cérebro/i);
-
-    const semChave = await page.locator("#api_key_da_ia").count();
-    if (semChave > 0) {
-      // O beco vira saída: o campo está aqui, no passo em que a chave importa.
-      await expect(page.locator("#provedor_da_ia")).toBeVisible();
-      await expect(page.getByRole("button", { name: /guardar a chave/i })).toBeDisabled();
-      await expect(corpo).toContainText(/guardada cifrada/i);
-    } else {
-      // Com chave, o passo DIZ qual é e confere o crédito — "validada" nunca
-      // significou "funciona": o validador bate num endpoint de listagem, que
-      // responde 200 com a conta zerada.
-      await expect(corpo).toContainText(
-        /Conferindo se a chave tem crédito|Testei agora|não passou|Não consegui testar/i,
-      );
-    }
+    await expect(page.getByText(/A equipe cuida das configurações técnicas da IA/)).toBeVisible();
+    await expect(page.locator("#api_key_da_ia")).toHaveCount(0);
+    await expect(page.locator("#provedor_da_ia")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /criar e continuar/i })).toBeEnabled();
   });
 
   test("treinar: pede as regras da casa e mostra o que ele já sabe fazer", async ({ page }) => {
@@ -318,7 +300,10 @@ test.describe("o wizard monta um funcionário", () => {
     // assumisse espaço livre vermelharia conforme a resposta do modelo. Remover
     // antes de acrescentar também é o que o dono faz — tira o que não serve e
     // põe o que falta.
-    await page.getByRole("button", { name: /^remover$/i }).last().click();
+    await page
+      .getByRole("button", { name: /^remover$/i })
+      .last()
+      .click();
     await page.getByRole("button", { name: /adicionar coluna/i }).click();
     await expect(page.getByText(/dê um nome à coluna em branco/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /usar este quadro/i })).toBeDisabled();

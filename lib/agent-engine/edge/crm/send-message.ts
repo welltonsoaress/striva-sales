@@ -7,6 +7,7 @@ import { assertAgendaEffectPg } from '@/lib/agenda/efeito';
 import { AgendaDeferredError } from '@/lib/agenda/protecao-followup';
 import { StaleServiceBoundaryError } from '@/lib/atendimento/fronteira';
 import { requireCurrentServiceBoundary } from '@/lib/atendimento/fronteira-server';
+import { reserveResponsePg } from '@/lib/billing/managed-ai';
 import { parseServiceBoundary } from '@/lib/atendimento/fronteira';
 /**
  * Borda de saída pós-fusão: envio de mensagem SEMPRE via `sendMessageHandler` do
@@ -54,6 +55,7 @@ export interface SendMessageInput {
   jobId: string;
   /** Posição da mensagem no turno (1..n) — com jobId forma a identidade da intenção. */
   seq: number;
+  responseParts?: number;
   conversationId: string;
   body: string;
   /**
@@ -127,6 +129,10 @@ export async function sendTurnMessage(
     if (policy.body !== input.body || policy.conversation_id !== input.conversationId)
       throw new StaleServiceBoundaryError();
   }
+  const generated = !meetingDelivery && !approvedReply && (sourceJobs[0]?.kind !== 'followup_turn' || typeof sourceJobs[0]?.payload.fixed_body !== 'string');
+  const responseId = generated ? await reserveResponsePg(db, input.tenantId, input.jobId) : null;
+  if (responseId) await db.query(`update ai_response_reservations set expected_parts=greatest(coalesce(expected_parts,0),$3)
+    where organization_id=$1 and id=$2 and sealed_at is null`, [input.tenantId, responseId, input.responseParts ?? input.seq]);
   return sendWithLedger(pgSendLedger(db), input, async (idempotencyKey, messageId) => {
     let message: Message;
     try {
@@ -139,9 +145,13 @@ export async function sendTurnMessage(
           serviceBoundary: parseServiceBoundary(sourceJobs[0]?.payload.service_boundary),
           proactiveContext,
           meetingDelivery,
+          // Follow-up fixo também usa o ator do agente, mas não gera texto com IA.
+          aiGenerated: sourceJobs[0]?.kind !== 'followup_turn' || typeof sourceJobs[0]?.payload.fixed_body !== 'string',
           approvedReply,
           agentOperation: input.agentOperation,
           internalMessageId: messageId,
+          aiResponseId: responseId ?? undefined,
+          aiResponsePart: responseId ? input.seq : undefined,
         },
         {
           conversation_id: input.conversationId,

@@ -2,19 +2,22 @@
  * Cost computation for ai_agent_runs (S-13.08).
  *
  * Looks up the curated `ai_models` catalog (Spec 10 §2.2) and converts token
- * usage into cents, rounded up. Cached in-memory for 5 min — stale catalog data
+ * usage into fractional cents. Cached in-memory for 5 min — stale catalog data
  * never crashes; missing entries simply mean cost=0 for that run.
  *
  * IMPORTANT: distinct from `lib/ai/cost.ts` which still serves the legacy
  * `ai_pricing` table used by the EPIC-06 RAG worker.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
+import { pricedUsage } from "@/lib/ai/model-price";
 
 interface ModelPricingRow {
   provider: string;
   model_id: string;
   input_price_per_million_cents: number | null;
   output_price_per_million_cents: number | null;
+  cache_read_price_per_million_cents: number | null;
+  cache_write_price_per_million_cents: number | null;
 }
 
 const TTL_MS = 5 * 60 * 1000;
@@ -31,7 +34,7 @@ async function loadPricing(): Promise<Map<string, ModelPricingRow>> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("ai_models")
-    .select("provider, model_id, input_price_per_million_cents, output_price_per_million_cents");
+    .select("provider, model_id, input_price_per_million_cents, output_price_per_million_cents, cache_read_price_per_million_cents, cache_write_price_per_million_cents");
   if (error) {
     return cache ?? new Map();
   }
@@ -49,19 +52,20 @@ export interface ComputeCostInput {
   model: string;
   inputTokens?: number;
   outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
-/** Returns cost in cents (rounded up). 0 if model not in catalog. */
-export async function computeCostCents(input: ComputeCostInput): Promise<number> {
+/** Returns cost in fractional cents; null when the model has no known rate. */
+export async function computeCostCents(input: ComputeCostInput): Promise<number | null> {
   const pricing = await loadPricing();
   const row = pricing.get(key(input.provider, input.model));
-  if (!row) return 0;
-  const inputRate = Number(row.input_price_per_million_cents ?? 0);
-  const outputRate = Number(row.output_price_per_million_cents ?? 0);
-  const cents =
-    ((input.inputTokens ?? 0) * inputRate) / 1_000_000 +
-    ((input.outputTokens ?? 0) * outputRate) / 1_000_000;
-  return Math.ceil(cents);
+  if (!row) return null;
+  return pricedUsage({ input: row.input_price_per_million_cents, output: row.output_price_per_million_cents,
+    cache_read: row.cache_read_price_per_million_cents ?? null, cache_write: row.cache_write_price_per_million_cents ?? null }, {
+    inputTokens: input.inputTokens ?? 0, outputTokens: input.outputTokens ?? 0,
+    cacheReadTokens: input.cacheReadTokens ?? 0, cacheWriteTokens: input.cacheWriteTokens ?? 0,
+  });
 }
 
 /** Test-only: drop the in-memory pricing cache. */

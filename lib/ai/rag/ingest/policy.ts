@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { chunkText } from "@/lib/ai/rag/chunker";
 import { extractPdfText, PdfExtractError } from "@/lib/ai/rag/extractors/pdf";
 import { extractMarkdownText } from "@/lib/ai/rag/extractors/markdown";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export { PdfExtractError };
 
@@ -93,6 +94,8 @@ export interface IngestPolicyResult {
  */
 export async function ingestPolicyFile(args: IngestPolicyArgs): Promise<IngestPolicyResult> {
   const { organizationId, knowledgeSourceId, blobPath, ext } = args;
+  if (!isStoragePathOwnedBy(blobPath, organizationId))
+    throw new Error("storage_path_outside_organization");
   const admin = createAdminClient();
 
   // Download blob from private ai-policy bucket

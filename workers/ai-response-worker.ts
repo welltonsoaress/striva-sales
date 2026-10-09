@@ -19,6 +19,7 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
  */
 
 import { generateText, type LanguageModel } from "ai";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
 
 import { DEFAULT_BOT_MODEL, gatewayConfig, gatewayHeaders } from "@/lib/ai/gateway";
 import { embedText } from "@/lib/ai/embed";
@@ -32,7 +33,7 @@ import {
   decidirOrcamento,
   HANDOFF_REASON_ORCAMENTO,
 } from "@/lib/agent-engine/edge/llm/orcamento";
-import { computeCost } from "@/lib/ai/cost";
+import { computeCostDetails } from "@/lib/ai/cost";
 import { silencioVigente } from "@/lib/inbox/comando-da-conversa";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { elegivelParaWorkerLegado, precisaRecuperarLegado } from "@/lib/ai/agents/no-ar";
@@ -208,11 +209,35 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
   // Skip, não erro: modelo que nenhuma chave desta instalação atende é config,
   // não falha transitória — retentar só repetiria o loop que este PR mata.
   // O painel de provedores manda aqui também — ver lib/ai/gateway-binding.ts.
+  if (await managedSettings(ctx.organization_id, "bot_respond")) {
+    await createAdminClient().rpc("fn_ai_commercial_notice", {
+      p_org: ctx.organization_id,
+      p_code: "managed_runtime_required",
+    });
+    return {
+      status: "skipped",
+      reason: "managed_runtime_required",
+      detail: "O atendimento com IA incluída utiliza o agente publicado no motor canônico.",
+    };
+  }
   const resolvido = await resolverModeloDoPonto(
     "bot_respond",
     ctx.organization_id,
     ctx.agent.model,
   );
+  // Uma migração pode acontecer entre a primeira guarda e a resolução da chave.
+  // A origem já resolvida também precisa respeitar o motor comercial canônico.
+  if (resolvido?.origem === "plataforma") {
+    await createAdminClient().rpc("fn_ai_commercial_notice", {
+      p_org: ctx.organization_id,
+      p_code: "managed_runtime_required",
+    });
+    return {
+      status: "skipped",
+      reason: "managed_runtime_required",
+      detail: "O atendimento com IA incluída utiliza o agente publicado no motor canônico.",
+    };
+  }
   const model = resolvido?.model ?? null;
   if (!model || !resolvido) {
     logger.warn("[ai-response-worker] modelo do agente sem provider configurado", {
@@ -235,6 +260,25 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
   // o gasto à Anthropic — no ponto de IA mais frequente do produto. O mesmo
   // defeito já tinha sido corrigido no ai-sentiment-worker; aqui era a cópia do
   // padrão que ficou para trás.
+  const measuredCost = async (response: Awaited<ReturnType<typeof invokeBot>>) => {
+    const cost = await computeCostDetails({
+      provider: resolvido.provider,
+      model: resolvido.modelId,
+      promptTokens: response.prompt_tokens,
+      completionTokens: response.completion_tokens,
+    });
+    return {
+      ...cost,
+      pricing_snapshot: {
+        ...(cost.pricing_snapshot !== null &&
+        typeof cost.pricing_snapshot === "object" &&
+        !Array.isArray(cost.pricing_snapshot)
+          ? cost.pricing_snapshot
+          : {}),
+        mode: "legacy",
+      },
+    };
+  };
   try {
     const response = await invokeBot(ctx, model);
     const post = postProcess(response.text);
@@ -272,21 +316,18 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
           source: "g3_low_confidence",
         },
       });
-      logInvocation({
+      await logInvocation({
         organization_id: ctx.organization_id,
         agent_id: ctx.agent.id,
         conversation_id: ctx.conversation_id,
         message_id: persisted.outbound_message_id,
         invocation_kind: "bot_respond",
+        provider: resolvido.provider,
         model: resolvido.modelId,
         prompt_tokens: response.prompt_tokens,
         completion_tokens: response.completion_tokens,
         latency_ms: response.latency_ms,
-        cost_cents: await computeCost({
-          model: resolvido.modelId,
-          promptTokens: response.prompt_tokens,
-          completionTokens: response.completion_tokens,
-        }),
+        ...(await measuredCost(response)),
         finish_reason: response.finish_reason,
         citations: response.citations as unknown as Array<Record<string, unknown>>,
       });
@@ -298,21 +339,18 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
     }
 
     const persisted = await persistAndDispatch(ctx, response, post.text);
-    logInvocation({
+    await logInvocation({
       organization_id: ctx.organization_id,
       agent_id: ctx.agent.id,
       conversation_id: ctx.conversation_id,
       message_id: persisted.outbound_message_id,
       invocation_kind: "bot_respond",
+      provider: resolvido.provider,
       model: resolvido.modelId,
       prompt_tokens: response.prompt_tokens,
       completion_tokens: response.completion_tokens,
       latency_ms: response.latency_ms,
-      cost_cents: await computeCost({
-        model: resolvido.modelId,
-        promptTokens: response.prompt_tokens,
-        completionTokens: response.completion_tokens,
-      }),
+      ...(await measuredCost(response)),
       finish_reason: response.finish_reason,
       citations: response.citations as unknown as Array<Record<string, unknown>>,
     });
@@ -324,17 +362,19 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
       message_id: ctx.message_id,
       error: detail,
     });
-    logInvocation({
+    await logInvocation({
       organization_id: ctx.organization_id,
       agent_id: ctx.agent.id,
       conversation_id: ctx.conversation_id,
       message_id: ctx.message_id,
       invocation_kind: "bot_respond",
+      provider: resolvido.provider,
       model: resolvido.modelId,
       prompt_tokens: 0,
       completion_tokens: 0,
       latency_ms: 0,
-      cost_cents: 0,
+      cost_cents: null,
+      pricing_snapshot: { mode: "legacy" },
       finish_reason: "error",
       error_payload: { message: detail },
     });
@@ -1066,6 +1106,7 @@ async function persistAndDispatch(
     status: "sending",
     body: finalText,
     sent_via: "ai" as const,
+    ai_credit_eligible: true,
     sent_at: new Date().toISOString(),
     metadata: {
       ai_generated: true,

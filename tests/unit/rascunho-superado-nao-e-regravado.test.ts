@@ -63,6 +63,11 @@ const CREDENCIAL = "11111111-1111-4111-8111-111111111111";
 const CANAL = "22222222-2222-4222-8222-222222222222";
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+// Estes cenários mantêm a conexão atual. A autorização de troca tem teste próprio.
+vi.mock("@/lib/ai/agents/credential-access", () => ({
+  guardAgentCredential: vi.fn(async () => null),
+  guardNewAgentCredential: vi.fn(async () => null),
+}));
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(async () => ({ id: "user-1", email: "u@example.com" })),
   resolveActiveOrg: vi.fn(async () => ({ orgId: ORG, name: "Org", role: "admin" })),

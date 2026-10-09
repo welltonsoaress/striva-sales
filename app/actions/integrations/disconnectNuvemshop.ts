@@ -8,7 +8,7 @@
  * may not have a valid token if the disconnect was triggered by token expiry).
  */
 
-import { supportWriteError } from "@/lib/impersonate/support";
+import { supportWriteError, requireSupportWrite } from "@/lib/impersonate/support";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
@@ -16,7 +16,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type DisconnectResult =
   | { ok: true }
-  | { ok: false; error: "auth_required" | "no_active_org" | "forbidden" | "not_connected" | "db_error" };
+  | {
+      ok: false;
+      error: "auth_required" | "no_active_org" | "forbidden" | "not_connected" | "db_error";
+    };
 
 export async function disconnectNuvemshop(): Promise<DisconnectResult> {
   const user = await loadAuthUser();
@@ -30,6 +33,7 @@ export async function disconnectNuvemshop(): Promise<DisconnectResult> {
     return { ok: false, error: "forbidden" };
   }
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden" };
   const admin = createAdminClient();
   const { data: existing, error: lookupErr } = await admin
     .from("tenant_integrations")
@@ -47,7 +51,8 @@ export async function disconnectNuvemshop(): Promise<DisconnectResult> {
       status: "disconnected",
       status_reason: "user_disconnected",
     })
-    .eq("id", existing.id);
+    .eq("id", existing.id)
+    .eq("organization_id", activeOrg.orgId);
 
   if (updErr) return { ok: false, error: "db_error" };
 

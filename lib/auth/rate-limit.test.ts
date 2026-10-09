@@ -14,13 +14,14 @@ vi.mock("next/headers", () => ({ headers: vi.fn() }));
 
 function comIp(ip: string) {
   vi.mocked(headers).mockResolvedValue({
-    get: (k: string) => (k === "x-forwarded-for" ? ip : null),
+    get: (k: string) => k==='x-platform-proxy-token' ? 'proxy-de-teste' : k === "x-real-ip" ? ip : null,
   } as never);
 }
 
 describe("authRateLimited", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv('TRUSTED_PROXY_SECRET','proxy-de-teste');
   });
 
   it("barra ao estourar o teto por IP", async () => {
@@ -117,7 +118,7 @@ describe("sem IP identificável — o balde global que era um DoS", () => {
   it("x-real-ip serve quando x-forwarded-for não vem — Nginx simples só seta esse", async () => {
     const { authRateLimited } = await import("./rate-limit");
     vi.mocked(headers).mockResolvedValue({
-      get: (k: string) => (k === "x-real-ip" ? "203.0.113.77" : null),
+      get: (k: string) => k==='x-platform-proxy-token' ? 'proxy-de-teste' : k === "x-real-ip" ? "203.0.113.77" : null,
     } as never);
     const limites = { ip: 2, windowSec: 300 };
 

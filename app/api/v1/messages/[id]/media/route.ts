@@ -22,6 +22,7 @@ import {
 } from "@/lib/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,9 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
 
   if (msg.media_storage_path) {
+    if (!isStoragePathOwnedBy(msg.media_storage_path, activeOrg.orgId)) {
+      return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
+    }
     const admin = createAdminClient();
     const { data: signed, error: signErr } = await admin.storage
       .from("whatsapp-media")

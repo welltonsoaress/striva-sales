@@ -30,6 +30,7 @@ export interface CredsE2E {
   password: string;
   users: Record<string, { email: string }>;
   admin_totp?: { secret: string; factor_id?: string };
+  dono_totp?: { secret: string; factor_id?: string };
   /**
    * O agente que o seed de credenciais cria. **É um `rag_bot`** — a tela de
    * configuração por papéis é do `mcp_agent`, então não serve para ela.
@@ -99,17 +100,22 @@ async function tentarMfa(page: Page, secret: string, tentativas: number): Promis
  * re-semeadas no meio do caminho, e nesse caso são diferentes das que o chamador
  * tinha em mãos.
  */
-export async function loginComoAdmin(page: Page, creds: CredsE2E): Promise<CredsE2E> {
+export async function loginComoAdmin(
+  page: Page,
+  creds: CredsE2E,
+  identidade: "admin" | "dono" = "admin",
+): Promise<CredsE2E> {
   let atuais = creds;
 
   for (let volta = 0; volta < 2; volta++) {
     await page.goto("/login");
-    await page.locator("#email").fill(atuais.users.admin!.email);
+    await page.locator("#email").fill(atuais.users[identidade]!.email);
     await page.locator("#password").fill(atuais.password);
     await page.getByRole("button", { name: /entrar/i }).click();
     await page.waitForURL(/\/login\/mfa/, { timeout: 30_000 });
 
-    if (await tentarMfa(page, atuais.admin_totp!.secret, 3)) return atuais;
+    const fator = identidade === "dono" ? atuais.dono_totp : atuais.admin_totp;
+    if (await tentarMfa(page, fator!.secret, 3)) return atuais;
 
     if (volta === 0) {
       // O segredo em disco não vale mais: outra sessão rodou o seed. Re-semeia

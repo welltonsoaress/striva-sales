@@ -4,7 +4,7 @@
  * UPDATEs scoped explicitly by `organization_id` resolved from the validated
  * session — no body-derived ids ever).
  */
-import { supportWriteError } from "@/lib/impersonate/support";
+import { supportWriteError, requireSupportWrite } from "@/lib/impersonate/support";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OnboardingState } from "@/lib/schemas/onboarding";
@@ -12,11 +12,7 @@ import type { OnboardingState } from "@/lib/schemas/onboarding";
 export class OnboardingError extends Error {
   constructor(
     public readonly code:
-      | "auth_required"
-      | "no_active_org"
-      | "forbidden"
-      | "not_found"
-      | "db_error",
+      "auth_required" | "no_active_org" | "forbidden" | "not_found" | "db_error",
     message: string,
   ) {
     super(message);
@@ -36,9 +32,20 @@ export interface OnboardingCtx {
 export async function requireOnboardingCtx(): Promise<OnboardingCtx> {
   const user = await loadAuthUser();
   if (!user) throw new OnboardingError("auth_required", "Auth required.");
-  if (supportWriteError(user.support)) throw new OnboardingError("forbidden", "Acompanhamento somente leitura ou encerrado.");
+  if (supportWriteError(user.support))
+    throw new OnboardingError("forbidden", "Acompanhamento somente leitura ou encerrado.");
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) throw new OnboardingError("no_active_org", "Sem organização ativa.");
+  if (activeOrg.role !== "admin")
+    throw new OnboardingError(
+      "forbidden",
+      "Somente quem administra a empresa pode configurar os primeiros passos.",
+    );
+  if (await requireSupportWrite(activeOrg.orgId))
+    throw new OnboardingError(
+      "forbidden",
+      "Não foi possível autorizar a configuração. Confira o período contratado em Faturamento.",
+    );
   return {
     userId: user.id,
     orgId: activeOrg.orgId,

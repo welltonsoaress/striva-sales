@@ -21,7 +21,7 @@ export interface FinalizeHandoffInput {
   latencyMs?: number;
   tokensIn?: number;
   tokensOut?: number;
-  costCents?: number;
+  costCents?: number | null;
   stepsCount?: number;
   toolCalls?: FinalizeRunInput["toolCalls"];
   isDryRun?: boolean;

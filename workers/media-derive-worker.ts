@@ -19,6 +19,10 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
+import { CommercialAiError } from "@/lib/billing/managed-ai";
+import { recordOperationalCall } from "@/lib/ai/operational-call";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export const MEDIA_DERIVE_CONSUMER_KEY = "media_derive_v1";
 const DRAIN_MAX_ATTEMPTS = 5; // espelho de lib/event-log/drain.ts
@@ -61,8 +65,10 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
 
   const msg = data as MessageRow | null;
   if (!msg?.media_storage_path) return { consumer_key, status: "skipped", detail: "no media" };
-  if (msg.media_derived_status === "ready") return { consumer_key, status: "skipped", detail: "already derived" };
-  if (!TIPOS_DERIVAVEIS.has(msg.type)) return { consumer_key, status: "skipped", detail: `type ${msg.type}` };
+  if (msg.media_derived_status === "ready")
+    return { consumer_key, status: "skipped", detail: "already derived" };
+  if (!TIPOS_DERIVAVEIS.has(msg.type))
+    return { consumer_key, status: "skipped", detail: `type ${msg.type}` };
   // Vídeo é opt-in (custo: ffmpeg + N chamadas de visão): só deriva se algum agente
   // publicado da org tem video_frames_enabled=true (flag da migration 0058).
   if (msg.type === "video") {
@@ -78,13 +84,19 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
   }
 
   const markFailed = async () => {
-    await admin.from("messages").update({ media_derived_status: "failed" })
-      .eq("id", msg.id).eq("organization_id", msg.organization_id);
+    await admin
+      .from("messages")
+      .update({ media_derived_status: "failed" })
+      .eq("id", msg.id)
+      .eq("organization_id", msg.organization_id);
   };
 
   try {
+    if (!isStoragePathOwnedBy(msg.media_storage_path, row.organization_id))
+      throw new Error("storage_path_outside_organization");
     const dl = await admin.storage.from("whatsapp-media").download(msg.media_storage_path);
-    if (dl.error || !dl.data) throw new Error(`storage_download_failed: ${dl.error?.message ?? "no_data"}`);
+    if (dl.error || !dl.data)
+      throw new Error(`storage_download_failed: ${dl.error?.message ?? "no_data"}`);
     const buffer = Buffer.from(await dl.data.arrayBuffer());
 
     // Credencial BYOK da org p/ visão (imagem).
@@ -99,7 +111,13 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       openrouterApiKey: process.env.OPENROUTER_API_KEY,
       cacheTtl: "1h",
     };
-    let llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    const managed = await managedSettings(
+      row.organization_id,
+      msg.type === "audio" ? "transcricao_de_audio" : "visao_de_imagem",
+    );
+    let llm = managed
+      ? { provider: managed.provider, apiKey: managed.api_key, defaultModel: managed.model }
+      : await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
 
     // ─── O painel de provedores manda AQUI também ────────────────────────────
     //
@@ -111,7 +129,9 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // modelo padrão. É textualmente a classe de defeito que
     // `lib/ai/gateway-binding.ts` declara ter vindo matar — três pontos foram
     // fechados e este ficou igual.
-    const bindingDaVisao = await lerBindingDoPonto(admin, row.organization_id, "visao_de_imagem");
+    const bindingDaVisao = managed
+      ? null
+      : await lerBindingDoPonto(admin, row.organization_id, "visao_de_imagem");
     if (bindingDaVisao) {
       try {
         const comBinding = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
@@ -123,11 +143,14 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
         // Binding apontando para provedor sem chave não pode derrubar a
         // derivação inteira: cai no padrão da organização e AVISA, que é o
         // desfecho que deixa rastro em vez de silêncio.
-        logger.warn("[media-derive] binding de visão sem credencial utilizável; usando o padrão da org", {
-          organization_id: row.organization_id,
-          provider: bindingDaVisao.provider,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        logger.warn(
+          "[media-derive] binding de visão sem credencial utilizável; usando o padrão da org",
+          {
+            organization_id: row.organization_id,
+            provider: bindingDaVisao.provider,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        );
       }
     }
 
@@ -139,7 +162,12 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // (visto nesta VPS: media.derive_requested preso com transcription_401,
     // e o cliente ouvindo "não consigo ouvir áudio" com a chave certa no .env).
     let openaiKey: string | null = null;
-    if (llm.provider === "openai") {
+    const audioManaged =
+      managed && (msg.type === "audio" || msg.type === "video")
+        ? await managedSettings(row.organization_id, "transcricao_de_audio")
+        : null;
+    if (audioManaged) openaiKey = audioManaged.api_key;
+    else if (llm.provider === "openai") {
       openaiKey = llm.apiKey;
     } else {
       try {
@@ -152,14 +180,38 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       }
     }
 
-    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id, admin);
+    const deps = buildDeriveDeps(
+      llm,
+      openaiKey,
+      row.organization_id,
+      admin,
+      managed ? "platform" : "legacy",
+      audioManaged?.transcription_price_per_minute_cents,
+      audioManaged?.transcription_pricing_source,
+    );
 
-    const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
-    await admin.from("messages")
+    const text = await deriveMediaText(
+      msg.type,
+      buffer,
+      msg.media_mime ?? "application/octet-stream",
+      deps,
+    );
+    await admin
+      .from("messages")
       .update({ media_derived_text: text, media_derived_status: "ready" })
-      .eq("id", msg.id).eq("organization_id", msg.organization_id);
+      .eq("id", msg.id)
+      .eq("organization_id", msg.organization_id);
     return { consumer_key, status: "ok" };
   } catch (err) {
+    if (err instanceof CommercialAiError) {
+      await markFailed();
+      await avisarMidiaNaoLida(
+        row.organization_id,
+        "mídia",
+        "a IA incluída está pausada; consulte os créditos disponíveis ou solicite suporte",
+      );
+      return { consumer_key, status: "skipped", detail: err.code };
+    }
     const detail = err instanceof Error ? err.message : String(err);
     if (row.attempts >= DRAIN_MAX_ATTEMPTS - 1) {
       logger.error("[media-derive] failed permanently", { message_id: msg.id, detail });
@@ -195,7 +247,9 @@ async function lerBindingDoPonto(
     });
     return null;
   }
-  return (data as { provider: string; model_id: string; credential_id: string | null } | null) ?? null;
+  return (
+    (data as { provider: string; model_id: string; credential_id: string | null } | null) ?? null
+  );
 }
 
 function buildDeriveDeps(
@@ -203,6 +257,9 @@ function buildDeriveDeps(
   openaiKey: string | null,
   orgId: string,
   admin: ReturnType<typeof createAdminClient>,
+  billingMode: "platform" | "legacy",
+  transcriptionRate?: number | null,
+  transcriptionSource?: string | null,
 ): DeriveDeps {
   const registry = createDefaultRegistry();
   // Thunk, não consulta: nada vai ao banco até a visão ser de fato perguntada,
@@ -264,21 +321,53 @@ function buildDeriveDeps(
     }
     const factory = registry[llm.provider];
     if (!factory) {
-      await avisarMidiaNaoLida(orgId, "imagem", `o provedor ${llm.provider} não está disponível nesta instalação`);
+      await avisarMidiaNaoLida(
+        orgId,
+        "imagem",
+        `o provedor ${llm.provider} não está disponível nesta instalação`,
+      );
       return MARCADOR_NAO_LIDA;
     }
+    const started = Date.now();
     const res = await generateText({
+      maxRetries: 0,
       model: factory(llm.apiKey, llm.defaultModel ?? ""),
       messages: [
         {
           role: "user",
           content: [
-            { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
+            {
+              type: "text",
+              text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou.",
+            },
             // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
             { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
           ],
         },
       ],
+    }).catch(async (error: unknown) => {
+      await recordOperationalCall({
+        organization_id: orgId,
+        billing_mode: billingMode,
+        purpose: "visao_de_imagem",
+        provider: llm.provider,
+        model: llm.defaultModel ?? "",
+        latency_ms: Date.now() - started,
+        failed: true,
+      });
+      throw error;
+    });
+    await recordOperationalCall({
+      organization_id: orgId,
+      billing_mode: billingMode,
+      purpose: "visao_de_imagem",
+      provider: llm.provider,
+      model: llm.defaultModel ?? "",
+      input_tokens: res.totalUsage.inputTokens,
+      output_tokens: res.totalUsage.outputTokens,
+      cache_read_tokens: res.totalUsage.inputTokenDetails?.cacheReadTokens,
+      cache_write_tokens: res.totalUsage.inputTokenDetails?.cacheWriteTokens,
+      latency_ms: Date.now() - started,
     });
     return res.text;
   };
@@ -286,7 +375,20 @@ function buildDeriveDeps(
   // (o derivado fica vazio e o marcador "[áudio]" continua valendo) e evita o
   // loop de 401 que retentava a cada drain.
   const transcriber: DeriveDeps["transcriber"] = openaiKey
-    ? apiTranscriptionProvider({ apiKey: openaiKey })
+    ? apiTranscriptionProvider({
+        apiKey: openaiKey,
+        onResult: (r) =>
+          recordOperationalCall({
+            organization_id: orgId,
+            billing_mode: billingMode,
+            purpose: "transcricao_de_audio",
+            provider: "openai",
+            model: "whisper-1",
+            ...r,
+            duration_rate: transcriptionRate,
+            duration_source: transcriptionSource,
+          }),
+      })
     : {
         transcribe: async () => {
           // Mesma razão da visão: devolver "" fazia o agente responder ao áudio

@@ -1,11 +1,12 @@
 /** Validação do upload outbound (Onda 2). Allowlist por categoria + cap 50MB. */
 import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export type MessageKind = "image" | "video" | "audio" | "document";
 
 /**
  * Posse do objeto no bucket: o path DEVE estar sob {org}/{conversation}/
- * (chaves do Storage são literais — sem semântica de traversal).
+ * O caminho bruto deve ser canônico, sem segmentos relativos ou escapes.
  *
  * Morava dentro do módulo de transporte do provider legado e não tinha nada a
  * ver com o canal: valida um path do NOSSO Storage, antes de qualquer coisa
@@ -14,7 +15,7 @@ export type MessageKind = "image" | "video" | "audio" | "document";
  * `docs/doctrine/restricao-de-canal.md` proíbe.
  */
 export function isMediaPathOwnedBy(path: string, orgId: string, conversationId: string): boolean {
-  return path.startsWith(`${orgId}/${conversationId}/`);
+  return isStoragePathOwnedBy(path, orgId) && path.startsWith(`${orgId}/${conversationId}/`);
 }
 
 const DOCUMENT_MIMES = new Set([
@@ -31,7 +32,11 @@ const DOCUMENT_MIMES = new Set([
 ]);
 
 type Ok = { ok: true; kind: MessageKind };
-type Fail = { ok: false; code: "unsupported_media_type" | "payload_too_large" | "validation_failed"; message: string };
+type Fail = {
+  ok: false;
+  code: "unsupported_media_type" | "payload_too_large" | "validation_failed";
+  message: string;
+};
 
 export function validateOutboundMedia(mime: string, sizeBytes: number): Ok | Fail {
   if (!sizeBytes || sizeBytes <= 0) {

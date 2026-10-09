@@ -18,6 +18,7 @@ import {
   Funnel,
   Gauge,
   Inbox,
+  House,
   Kanban,
   Key,
   Lightbulb,
@@ -51,6 +52,7 @@ import { destinosDaInterface, type InterfaceSettings } from "./interface";
 export { NAV_GROUPS, GRUPO_NO_RODAPE } from "./catalogo";
 export type { NavGroup, NavGroupId } from "./catalogo";
 const ICONS = {
+  House,
   Bell,
   BookOpen,
   Brain,
@@ -116,7 +118,10 @@ export function sidebarGroups(
   return NAV_GROUPS.map((group) => ({
     group,
     items: NAV_DESTINATIONS.filter(
-      (d) => d.group === group.id && (d.sidebar || (!group.hub && !!settings?.destinos)) && visible.has(d.href),
+      (d) =>
+        d.group === group.id &&
+        (d.sidebar || (!group.hub && !!settings?.destinos)) &&
+        visible.has(d.href),
     ),
   })).filter(
     (g) =>

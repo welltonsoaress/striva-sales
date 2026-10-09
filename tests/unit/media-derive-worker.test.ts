@@ -23,12 +23,18 @@ const messageRow = {
  * (o caso "ninguém configurou nada", que é o comportamento anterior que estes
  * casos existem para preservar).
  */
-const bindingDeVisao: { provider: string; model_id: string; credential_id: string | null } | null = null;
+const bindingDeVisao: { provider: string; model_id: string; credential_id: string | null } | null =
+  null;
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
-      const linha = tabela === "ai_purpose_bindings" ? bindingDeVisao : messageRow;
+      const linha =
+        tabela === "organization_ai_accounts"
+          ? { mode: "legacy" }
+          : tabela === "ai_purpose_bindings"
+            ? bindingDeVisao
+            : messageRow;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const terminais: any = {
         maybeSingle: async () => ({ data: linha, error: null }),
@@ -42,8 +48,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chain: any = new Proxy(terminais, {
-        get: (alvo, prop) =>
-          prop in alvo ? alvo[prop as keyof typeof alvo] : () => chain,
+        get: (alvo, prop) => (prop in alvo ? alvo[prop as keyof typeof alvo] : () => chain),
       });
       return chain;
     },
@@ -88,10 +93,13 @@ function eventRow(attempts = 0) {
 
 describe("deriveMessageMedia", () => {
   beforeEach(() => {
-    downloadMock.mockReset().mockResolvedValue({ data: new Blob([new Uint8Array([1, 2, 3])]), error: null });
+    downloadMock
+      .mockReset()
+      .mockResolvedValue({ data: new Blob([new Uint8Array([1, 2, 3])]), error: null });
     updateEqMock.mockReset();
     messageRow.media_derived_status = null;
     messageRow.type = "audio";
+    messageRow.media_storage_path = "org1/conv1/msg1.ogg";
     vi.mocked(deriveMediaText).mockReset().mockResolvedValue("transcrição do áudio real");
   });
 
@@ -99,7 +107,20 @@ describe("deriveMessageMedia", () => {
     const r = await deriveMessageMedia(eventRow());
     expect(r.status).toBe("ok");
     expect(updateEqMock).toHaveBeenCalledWith(
-      expect.objectContaining({ media_derived_text: "transcrição do áudio real", media_derived_status: "ready" }),
+      expect.objectContaining({
+        media_derived_text: "transcrição do áudio real",
+        media_derived_status: "ready",
+      }),
+    );
+  });
+  it("não baixa nem envia à IA um ponteiro de mídia de outra empresa", async () => {
+    messageRow.media_storage_path = "org2/conv2/msg2.ogg";
+    const result = await deriveMessageMedia(eventRow(4));
+    expect(result.status).toBe("error");
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(deriveMediaText).not.toHaveBeenCalled();
+    expect(updateEqMock).toHaveBeenCalledWith(
+      expect.objectContaining({ media_derived_status: "failed" }),
     );
   });
 

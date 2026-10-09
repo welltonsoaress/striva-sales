@@ -35,10 +35,7 @@
  */
 
 import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
-import {
-  resolverChaveDeEmbedding,
-  type ChaveDeEmbedding,
-} from "@/lib/ai/embeddings/chave";
+import { resolverChaveDeEmbedding, type ChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
 import { acquireDebounce } from "@/lib/ai/rag/debounce";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import { canonizarTipoDeFonte } from "@/lib/ai/rag/tipos-de-fonte";
@@ -91,10 +88,7 @@ type Resultado =
 // Leitura
 // ---------------------------------------------------------------------------
 
-async function carregarFonte(
-  organizationId: string,
-  sourceId: string,
-): Promise<FonteRow | null> {
+async function carregarFonte(organizationId: string, sourceId: string): Promise<FonteRow | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("ai_knowledge_sources")
@@ -216,7 +210,11 @@ async function pedacosDeDocumento(fonte: FonteRow): Promise<Pedaco[]> {
   const blobPath = meta.blob_path;
   if (!blobPath) throw new ErroDeExtracao("a fonte não aponta para nenhum arquivo");
 
-  const { texto, extensao } = await extrairTextoDoArquivo(blobPath, meta.ext);
+  const { texto, extensao } = await extrairTextoDoArquivo(
+    fonte.organization_id,
+    blobPath,
+    meta.ext,
+  );
   return chunkText(texto, { maxChars: 1600, overlapChars: 200 }).map((c) => ({
     content: c,
     metadata: {
@@ -291,10 +289,13 @@ async function credenciaisDaLoja(
   const storeId = String(meta["store_id"] ?? meta["id"] ?? "");
   if (!storeId) return null;
 
-  const { data: decrypted, error: decErr } = await admin.rpc("fn_decrypt_oauth" as never, {
-    p_organization_id: organizationId,
-    p_integration_id: (data as { id: string }).id,
-  } as never);
+  const { data: decrypted, error: decErr } = await admin.rpc(
+    "fn_decrypt_oauth" as never,
+    {
+      p_organization_id: organizationId,
+      p_integration_id: (data as { id: string }).id,
+    } as never,
+  );
 
   if (decErr || !decrypted) return null;
   const accessToken = String(decrypted);
@@ -498,21 +499,33 @@ async function garantirFonteDeCatalogo(organizationId: string): Promise<FonteRow
 export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
   const consumerKey = "rag-indexer.v1";
 
-  const lagMs = Date.now() - new Date(String(row.payload["created_at"] ?? row.created_at)).getTime();
+  const lagMs =
+    Date.now() - new Date(String(row.payload["created_at"] ?? row.created_at)).getTime();
   if (Number.isFinite(lagMs) && lagMs > LAG_WARN_MS) {
     console.warn(
       `[rag-indexer] atraso de ${Math.round(lagMs / 1000)}s no evento ${row.id} (${row.event_type})`,
     );
   }
 
-  if (row.event_type !== "knowledge_source.updated" && row.event_type !== "nuvemshop.product_synced") {
-    return { consumer_key: consumerKey, status: "skipped", detail: `evento_nao_tratado:${row.event_type}` };
+  if (
+    row.event_type !== "knowledge_source.updated" &&
+    row.event_type !== "nuvemshop.product_synced"
+  ) {
+    return {
+      consumer_key: consumerKey,
+      status: "skipped",
+      detail: `evento_nao_tratado:${row.event_type}`,
+    };
   }
 
   try {
     const { fonte, productId, motivo } = await fonteDoEvento(row);
     if (!fonte) {
-      return { consumer_key: consumerKey, status: "skipped", detail: motivo ?? "fonte_indisponivel" };
+      return {
+        consumer_key: consumerKey,
+        status: "skipped",
+        detail: motivo ?? "fonte_indisponivel",
+      };
     }
     if (!fonte.is_active || fonte.status === "archived") {
       return { consumer_key: consumerKey, status: "skipped", detail: "fonte_arquivada" };

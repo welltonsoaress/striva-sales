@@ -97,9 +97,9 @@ export const dynamic = "force-dynamic";
  *
  * As 14 saídas herdam de graça, porque todas passam por aqui.
  */
-function voltar(parametro: string): NextResponse {
+function paginaDeVolta(parametro: string, onboarding = false): NextResponse {
   const base = env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const destino = new URL(`/app/agenda?${parametro}`, base).toString();
+  const destino = new URL(`${onboarding ? "/onboarding/setup-ai" : "/app/agenda"}?${parametro}`, base).toString();
   // Escapado mesmo o valor vindo de literais nossos: a ponte é genérica, e o
   // dia em que alguém passar algo de fora por aqui não deve ser o dia em que
   // isto vira injeção.
@@ -139,6 +139,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const recusa = url.searchParams.get("error");
   const code = url.searchParams.get("code");
   const stateBruto = url.searchParams.get("state");
+
+  let destinoOnboarding = false;
+  const voltar = (parametro: string) => paginaDeVolta(parametro, destinoOnboarding);
+  // A assinatura protege também o destino; nunca aceitamos uma URL do navegador.
+  try {
+    destinoOnboarding = verificarEstado(stateBruto, { segredo: env.INTERNAL_SECRET, agora: new Date() })?.returnTo === "onboarding";
+  } catch { /* Sem assinatura válida, volta apenas para a agenda. */ }
 
   // 1. A pessoa desistiu. Não é falha: é alguém clicando "Cancelar".
   if (recusa) return voltar("erro=conexao_cancelada");

@@ -4,6 +4,11 @@
  */
 export const PUBLIC_PATHS: RegExp[] = [
   /^\/$/,
+  // Catálogo comercial público minimizado; contratação requer sessão admin.
+  /^\/planos$/,
+  /^\/clinicas$/,
+  // Página informativa de retorno; não concede acesso nem confirma pagamento.
+  /^\/pagamento\/retorno$/,
   /^\/login(\/.*)?$/,
   /^\/signup$/,
   /^\/auth\/confirm$/,

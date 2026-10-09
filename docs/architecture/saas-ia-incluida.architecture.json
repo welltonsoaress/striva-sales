@@ -1,0 +1,396 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "IA incluída e operação SaaS",
+    "subtitle": "Identidade, permissões, respostas lógicas e continuidade humana",
+    "output": "saas-ia-incluida.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "cliente",
+      "label": "Cliente"
+    },
+    {
+      "id": "app",
+      "label": "Aplicação e workers"
+    },
+    {
+      "id": "db",
+      "label": "Banco"
+    },
+    {
+      "id": "operacao",
+      "label": "Operação"
+    }
+  ],
+  "mainPath": [
+    "signup",
+    "prepare",
+    "activation",
+    "account",
+    "runtime",
+    "reservation",
+    "channel",
+    "balance"
+  ],
+  "nodes": [
+    {
+      "id": "signup",
+      "lane": "cliente",
+      "col": 0,
+      "type": "ui",
+      "label": "/clinicas → signup (segmento sugerido/editável) → fn_provision_self_service: organização autenticada"
+    },
+    {
+      "id": "prepare",
+      "lane": "app",
+      "col": 1,
+      "type": "service",
+      "label": "business-agent.ts → templates, memória canônica, funil e agenda real"
+    },
+    {
+      "id": "activation",
+      "lane": "app",
+      "col": 2,
+      "type": "service",
+      "label": "Ativar: e-mail + WhatsApp + Turnstile servidor + elegibilidade"
+    },
+    {
+      "id": "account",
+      "lane": "db",
+      "col": 3,
+      "type": "database",
+      "label": "organization_ai_accounts + ai_trial_claims: período e limites"
+    },
+    {
+      "id": "runtime",
+      "lane": "app",
+      "col": 4,
+      "type": "service",
+      "label": "managedSettings / run-model-call: finalidade, preço validado, chave do servidor e arquivos próprios"
+    },
+    {
+      "id": "reservation",
+      "lane": "db",
+      "col": 5,
+      "type": "database",
+      "label": "fn_ai_reserve → 10 créditos, franquia + extras, resposta lógica e partes; saldo em transação"
+    },
+    {
+      "id": "automation",
+      "lane": "app",
+      "col": 4,
+      "type": "service",
+      "label": "automation engine: contrato verificado; withAutomationResponse reserva antes do modelo, trava de sessão e identidade por ação"
+    },
+    {
+      "id": "channel",
+      "lane": "app",
+      "col": 6,
+      "type": "service",
+      "label": "Cadeia before-send → transporte → confirmação / incerteza"
+    },
+    {
+      "id": "balance",
+      "lane": "cliente",
+      "col": 7,
+      "type": "ui",
+      "label": "ResponseBalance / Faturamento: créditos, renovação, contratação e pacotes extras"
+    },
+    {
+      "id": "cost",
+      "lane": "db",
+      "col": 6,
+      "type": "database",
+      "label": "llm_calls: custo operacional, tarifa usada, origem histórica plataforma/legado e custo desconhecido"
+    },
+    {
+      "id": "payment",
+      "lane": "app",
+      "col": 2,
+      "type": "service",
+      "label": "process-hotmart → acesso pago, franquia e reversão idempotentes"
+    },
+    {
+      "id": "admin",
+      "lane": "operacao",
+      "col": 8,
+      "type": "ui",
+      "label": "/admin: todas as empresas, financeiro, IA e pendências"
+    },
+    {
+      "id": "adjustment",
+      "lane": "db",
+      "col": 9,
+      "type": "database",
+      "label": "fn_admin_ai_account: motivo, referência e api_audit_log"
+    },
+    {
+      "id": "notice",
+      "lane": "db",
+      "col": 7,
+      "type": "database",
+      "label": "fn_ai_commercial_notice → Central + contexto de pausa humana"
+    },
+    {
+      "id": "human",
+      "lane": "cliente",
+      "col": 8,
+      "type": "ui",
+      "label": "Inbox: atendimento humano e retomada dentro do período contratado"
+    },
+    {
+      "id": "reconcile",
+      "lane": "app",
+      "col": 9,
+      "type": "service",
+      "label": "Replay/admin reconcilia recibos; lock impede liberar automação viva, timeout conserva reserva"
+    },
+    {
+      "id": "paywall",
+      "lane": "cliente",
+      "col": 3,
+      "type": "ui",
+      "label": "SubscriptionAccessGate: fim do teste sem fechar; faturamento, ajuda e dados preservados"
+    },
+    {
+      "id": "payment-status",
+      "lane": "cliente",
+      "col": 12,
+      "type": "ui",
+      "label": "/pagamento/retorno e PaymentStatus: referência HttpOnly, organização autenticada e aprovação no servidor"
+    },
+    {
+      "id": "commercial-outbox",
+      "lane": "db",
+      "col": 10,
+      "type": "database",
+      "label": "commercial_notices: evento único por empresa/membro, lease e cancelamento de avisos superados"
+    },
+    {
+      "id": "commercial-email",
+      "lane": "app",
+      "col": 11,
+      "type": "service",
+      "label": "cron/commercial-notices → sendEmail/Resend: idempotência, erros nomeados e conferência administrativa"
+    },
+    {
+      "id": "plan-request",
+      "lane": "cliente",
+      "col": 10,
+      "type": "ui",
+      "label": "Faturamento → change-request: suporte humano, nenhuma cobrança automática"
+    },
+    {
+      "id": "plan-quote",
+      "lane": "operacao",
+      "col": 11,
+      "type": "ui",
+      "label": "Admin assume chamado e prepara proposta; cancelamento anterior confirmado e aceite no faturamento"
+    }
+  ],
+  "edges": [
+    {
+      "from": "account",
+      "to": "automation",
+      "label": "contrato e saldo antes das ações"
+    },
+    {
+      "from": "automation",
+      "to": "reservation",
+      "label": "evento/regra/índice e lock de sessão antes do modelo"
+    },
+    {
+      "from": "automation",
+      "to": "runtime",
+      "label": "finalidade e reserva da própria empresa"
+    },
+    {
+      "from": "automation",
+      "to": "channel",
+      "label": "mesma identidade; resultado na atividade da regra"
+    },
+    {
+      "from": "signup",
+      "to": "prepare",
+      "label": "segmento e informações da empresa"
+    },
+    {
+      "from": "prepare",
+      "to": "activation",
+      "label": "rascunho retomável e capacidades explícitas"
+    },
+    {
+      "from": "activation",
+      "to": "account",
+      "label": "concessão atômica e publicação canônica"
+    },
+    {
+      "from": "account",
+      "to": "runtime",
+      "label": "período, quota e finalidade autorizados"
+    },
+    {
+      "from": "prepare",
+      "to": "runtime",
+      "label": "memória e conhecimento da empresa; isStoragePathOwnedBy antes do download"
+    },
+    {
+      "from": "runtime",
+      "to": "reservation",
+      "label": "reserva antes do atendimento"
+    },
+    {
+      "from": "reservation",
+      "to": "channel",
+      "label": "mesma identidade nos reenvios"
+    },
+    {
+      "from": "channel",
+      "to": "reservation",
+      "label": "confirmar todas as partes; falha definitiva libera"
+    },
+    {
+      "from": "reservation",
+      "to": "balance",
+      "label": "franquia primeiro, extras depois"
+    },
+    {
+      "from": "balance",
+      "to": "payment",
+      "label": "checkout autenticado"
+    },
+    {
+      "from": "payment",
+      "to": "account",
+      "label": "pagamento, cancelamento e reversão por concessão"
+    },
+    {
+      "from": "runtime",
+      "to": "cost",
+      "label": "cada chamada, auxiliar e tentativa observável"
+    },
+    {
+      "from": "cost",
+      "to": "admin",
+      "label": "custo conhecido e cobertura, sem zero fictício"
+    },
+    {
+      "from": "account",
+      "to": "admin",
+      "label": "origem automática e situação comercial"
+    },
+    {
+      "from": "admin",
+      "to": "adjustment",
+      "label": "ação privilegiada com motivo obrigatório"
+    },
+    {
+      "from": "adjustment",
+      "to": "account",
+      "label": "saldo / migração / suspensão auditados"
+    },
+    {
+      "from": "account",
+      "to": "notice",
+      "label": "pausa comercial com próximo passo"
+    },
+    {
+      "from": "notice",
+      "to": "human",
+      "label": "gestor vê motivo e contexto"
+    },
+    {
+      "from": "human",
+      "to": "runtime",
+      "label": "retomar após recuperação de acesso e saldo"
+    },
+    {
+      "from": "channel",
+      "to": "reconcile",
+      "label": "entrega incerta retém a reserva"
+    },
+    {
+      "from": "admin",
+      "to": "reconcile",
+      "label": "conferência visível"
+    },
+    {
+      "from": "reconcile",
+      "to": "reservation",
+      "label": "revisão dos recibos altera o saldo"
+    },
+    {
+      "from": "reconcile",
+      "to": "admin",
+      "label": "resultado e pendência restantes"
+    },
+    {
+      "from": "account",
+      "to": "paywall",
+      "label": "período e saldo do teste conferidos no servidor"
+    },
+    {
+      "from": "paywall",
+      "to": "balance",
+      "label": "contratação e recuperação"
+    },
+    {
+      "from": "balance",
+      "to": "payment-status",
+      "label": "referência do checkout"
+    },
+    {
+      "from": "payment-status",
+      "to": "account",
+      "label": "liberação só após aprovação"
+    },
+    {
+      "from": "account",
+      "to": "commercial-outbox",
+      "label": "teste e contrato próximos do vencimento"
+    },
+    {
+      "from": "commercial-outbox",
+      "to": "notice",
+      "label": "aviso interno durável"
+    },
+    {
+      "from": "commercial-outbox",
+      "to": "commercial-email",
+      "label": "membro ativo, e-mail confirmado e janela válida"
+    },
+    {
+      "from": "commercial-email",
+      "to": "admin",
+      "label": "fila com falha e conferência necessária"
+    },
+    {
+      "from": "admin",
+      "to": "commercial-email",
+      "label": "operador confere provedor e acompanha pelo suporte"
+    },
+    {
+      "from": "balance",
+      "to": "plan-request",
+      "label": "pedido explícito do cliente"
+    },
+    {
+      "from": "plan-request",
+      "to": "plan-quote",
+      "label": "chamado humano e escolha auditada"
+    },
+    {
+      "from": "plan-quote",
+      "to": "balance",
+      "label": "proposta única e condições explícitas"
+    },
+    {
+      "from": "plan-quote",
+      "to": "payment",
+      "label": "checkout sem outra recorrência ativa"
+    }
+  ]
+}

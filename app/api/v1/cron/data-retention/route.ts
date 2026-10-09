@@ -229,6 +229,7 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   let resultado: ResultadoDaRetencao;
+  let trialSignals=0;
   let varredura: ResultadoDaVarredura = {
     examinados: 0,
     comResiduo: 0,
@@ -251,6 +252,9 @@ async function handle(req: NextRequest): Promise<Response> {
       JOB_QUEUE_RETENTION_DAYS: env.JOB_QUEUE_RETENTION_DAYS,
       AUDIT_LOG_RETENTION_DAYS: env.AUDIT_LOG_RETENTION_DAYS,
     });
+    const trialSweep=await admin.rpc('fn_ai_trial_retention',{p_audit_days:resultado.retencao_auditoria_dias,p_signal_days:resultado.retencao_fila_dias,p_limit:1000});
+    if(trialSweep.error)throw new Error('fn_ai_trial_retention: '+trialSweep.error.message);
+    trialSignals=trialSweep.data??0;
     // ── A cascata de anonimização que ficou pela metade ──────────────────
     //
     // Mora AQUI, e não numa rota de cron própria, por uma razão de packaging: o
@@ -300,12 +304,12 @@ async function handle(req: NextRequest): Promise<Response> {
   // Ver o cabeçalho: rodada que não apagou nada não é mutação. E rodada que
   // apagou SEMPRE deixa rastro — é isto que impede o expurgo do audit de ser
   // encolhimento silencioso da trilha.
-  if (houveEfeito(resultado)) {
+  if (houveEfeito(resultado)||trialSignals>0) {
     void audit({
       action: "retention.sweep_run",
       organizationId: null,
       bypassedRls: true,
-      metadata: resultado as unknown as Record<string, unknown>,
+      metadata: {...resultado,trial_signals_expurgados:trialSignals},
       requestId,
     });
   }

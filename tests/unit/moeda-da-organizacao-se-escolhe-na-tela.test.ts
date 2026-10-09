@@ -44,9 +44,17 @@ let orgIdAtualizado: string | null = null;
 
 function adminFalso() {
   return {
-    from: () => ({
+    from: (table: string) => ({
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: { settings: {} }, error: null }) }),
+        eq: () => ({
+          maybeSingle: async () => ({
+            data:
+              table === "organization_ai_accounts"
+                ? { mode: "legacy", state: "pending", access_until: null }
+                : { settings: {} },
+            error: null,
+          }),
+        }),
       }),
       update: (linha: Record<string, unknown>) => {
         atualizado = linha;

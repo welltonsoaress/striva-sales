@@ -3,6 +3,8 @@
  * the persistent `organizations.onboarding_state jsonb` blob.
  */
 import { z } from "zod";
+import { BUSINESS_SEGMENTS } from "@/lib/onboarding/business-templates";
+import { simpleAgendaSchema } from "@/lib/onboarding/simple-agenda";
 
 export const welcomeSchema = z.object({
   display_name: z.string().min(2).max(120),
@@ -20,6 +22,8 @@ export const welcomeSchema = z.object({
    * o próprio negócio em uma linha. Quem pula recebe o quadro genérico.
    */
   o_que_faz: z.string().max(280).optional(),
+  business_segment: z.enum(BUSINESS_SEGMENTS).default("generico"),
+  business_description: z.string().trim().max(20000).optional(),
   timezone: z.string().min(1).default("America/Sao_Paulo"),
   accepted_terms_at: z.string().datetime().optional(),
 });
@@ -59,6 +63,7 @@ export const onboardingStepSchema = z.enum([
 export type OnboardingStep = z.infer<typeof onboardingStepSchema>;
 
 export const onboardingStateSchema = z.object({
+  dismissed_at: z.string().datetime().optional(),
   welcome: z
     .object({
       accepted_at: z.string(),
@@ -66,6 +71,8 @@ export const onboardingStateSchema = z.object({
       display_name: z.string(),
       /** O ramo, na palavra do dono. Alimenta o prompt e o quadro de clientes. */
       o_que_faz: z.string().optional(),
+      business_segment: z.enum(BUSINESS_SEGMENTS).optional(),
+      business_description: z.string().optional(),
     })
     .optional(),
   whatsapp: z
@@ -87,6 +94,9 @@ export const onboardingStateSchema = z.object({
     .object({
       agent_id: z.string(),
       prompt_template: z.string(),
+      template_version: z.number().int().optional(),
+      activated_at: z.string().datetime().optional(),
+      agenda: simpleAgendaSchema.nullable().optional(),
       skipped: z.boolean().optional(),
     })
     .optional(),

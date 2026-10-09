@@ -48,7 +48,9 @@ vi.mock("@/lib/env", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/ai/log-invocation", () => ({ logInvocation: vi.fn() }));
-vi.mock("@/lib/ai/cost", () => ({ computeCost: vi.fn(async () => 1) }));
+vi.mock("@/lib/ai/cost", () => ({
+  computeCostDetails: vi.fn(async () => ({ cost_cents: 1, pricing_snapshot: null })),
+}));
 vi.mock("@/lib/ai/gateway-binding", () => ({ resolverModeloDoPonto: vi.fn() }));
 vi.mock("ai", () => ({ generateObject: vi.fn() }));
 
@@ -109,7 +111,10 @@ function fazerAdmin(banco: Banco, rpcs: Linha[]) {
     const chamadas: Chamada[] = [];
 
     const resolver = (): { data: Linha[]; error: null } => {
-      let linhas = [...((banco as unknown as Record<string, Linha[]>)[tabela] ?? [])];
+      let linhas: Linha[] =
+        tabela === "organization_ai_accounts"
+          ? [{ organization_id: ORG, mode: "legacy", state: "pending", access_until: null }]
+          : [...((banco as unknown as Record<string, Linha[]>)[tabela] ?? [])];
       for (const c of chamadas) {
         if (c.op === "eq") {
           const [col, val] = c.args as [string, unknown];
@@ -280,6 +285,8 @@ async function rodar(c: Cenario): Promise<{
 
 beforeEach(() => {
   vi.clearAllMocks();
+  envMock.ANTHROPIC_API_KEY = "sk-ant-teste";
+  envMock.OPENAI_API_KEY = "";
   vi.mocked(resolverModeloDoPonto).mockResolvedValue({
     model: "modelo-dublê",
     modelId: "anthropic/claude-haiku-4-5",
@@ -291,6 +298,35 @@ beforeEach(() => {
 });
 
 describe("limiar de sentimento — o agente da conversa é quem manda (#486)", () => {
+  it("classifica com o modelo gerenciado da plataforma sem chave do gateway legado", async () => {
+    envMock.ANTHROPIC_API_KEY = "";
+    envMock.OPENAI_API_KEY = "sk-teste-gerenciado";
+    vi.mocked(resolverModeloDoPonto).mockResolvedValue({
+      model: "modelo-gerenciado",
+      modelId: "gpt-5.6-luna",
+      provider: "openai",
+      origem: "plataforma",
+    } as unknown as Awaited<ReturnType<typeof resolverModeloDoPonto>>);
+
+    await rodar({ sessaoDaConversa: SESSAO_CLINICA });
+
+    expect(generateObject).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "modelo-gerenciado", maxRetries: 0 }),
+    );
+    expect(logInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-5.6-luna", provider: "openai" }),
+    );
+  });
+
+  it("sem modelo autorizado não chama o provedor", async () => {
+    vi.mocked(resolverModeloDoPonto).mockResolvedValue(null);
+    expect(await processSentiment(evento)).toEqual({
+      skipped: true,
+      reason: "ai_gateway_key_missing",
+    });
+    expect(generateObject).not.toHaveBeenCalled();
+  });
+
   it("o cenário sabe distinguir os dois limiares (controle positivo)", () => {
     // Sem esta cerca, alguém que iguale os limiares faz TODOS os casos abaixo
     // passarem sem conseguir separar comportamento nenhum.
@@ -358,9 +394,6 @@ describe("limiar de sentimento — o agente da conversa é quem manda (#486)", (
       r.alertas,
       `escalou pelo limiar ${r.limiarDoAlerta}, que é do agente da clínica — um agente que não tem nada a ver com esta conversa`,
     ).toHaveLength(0);
-    expect(
-      r.agenteDoCusto,
-      "atribuiu o custo a um agente que não atende esta conversa",
-    ).toBeNull();
+    expect(r.agenteDoCusto, "atribuiu o custo a um agente que não atende esta conversa").toBeNull();
   });
 });

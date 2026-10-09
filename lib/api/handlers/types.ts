@@ -39,6 +39,11 @@ export interface HandlerCtx {
   approvedReply?: ApprovedReplyContext;
   meetingBooking?: MeetingBookingContext;
   internalMessageId?: string;
+  /** Origem interna; false exclui texto fixo, true inclui automação com IA.
+   * Nunca vem do body/metadata público. */
+  aiGenerated?: boolean;
+  aiResponseId?: string;
+  aiResponsePart?: number;
   proactiveContext?: ProactiveContext;
   /** Trusted origin captured by the runtime, never request-body metadata. */
   serviceBoundary?: ServiceBoundary | null;

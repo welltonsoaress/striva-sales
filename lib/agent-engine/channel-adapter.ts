@@ -23,6 +23,7 @@ export interface ChannelSendInput {
   jobId: string;
   /** posição da mensagem no turno (1..n) — com jobId forma a chave de idempotência */
   seq: number;
+  responseParts?: number;
   /** referência da conversa no canal (conversation_id do CRM na v1) */
   conversationId: string;
   body: string;

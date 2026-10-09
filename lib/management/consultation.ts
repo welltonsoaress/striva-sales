@@ -7,21 +7,37 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { getToolByName } from "@/lib/mcp/tools";
 import { managementProposalTool } from "@/lib/management/actions";
-import { managementSnapshot, formatManagementSummary,
-  managementWeeklyComparison, formatManagementWeeklyComparison } from "@/lib/management/report";
+import {
+  managementSnapshot,
+  formatManagementSummary,
+  managementWeeklyComparison,
+  formatManagementWeeklyComparison,
+} from "@/lib/management/report";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { managementCommandHelp, managementQuickCommand } from "./quick-commands";
+import { managementPendingCases } from "./cases";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
 /** Contrato explícito: nenhuma escrita, handoff ou memória do catálogo amplo. */
 export const MANAGEMENT_READ_TOOL_IDS = [
-  "crm_list_leads", "crm_get_queue_status", "crm_list_human_cases",
-  "crm_list_appointments", "crm_list_at_risk_leads",
+  "crm_list_leads",
+  "crm_get_queue_status",
+  "crm_list_human_cases",
+  "crm_get_human_case",
+  "crm_list_appointments",
+  "crm_list_at_risk_leads",
 ] as const;
 
 const MANAGEMENT_ACTION_READ_TOOL_IDS = [
-  "crm_get_lead", "crm_list_pipelines", "crm_list_stages", "crm_search_contacts",
-  "crm_list_conversations", "crm_list_team_members", "crm_list_event_types", "crm_find_free_slots",
+  "crm_get_lead",
+  "crm_list_pipelines",
+  "crm_list_stages",
+  "crm_search_contacts",
+  "crm_list_conversations",
+  "crm_list_team_members",
+  "crm_list_event_types",
+  "crm_find_free_slots",
 ] as const;
 
 const SYSTEM = `Você conversa apenas com o gestor verificado da empresa. Responda em português claro e curto.
@@ -39,68 +55,137 @@ copie o instante retornado, identifique o cliente e só defina customer_agreed=t
 que o cliente já concordou com o horário. Se ainda falta acordo, use request_appointment: cria tarefa para
 a equipe, não reserva horário e não comunica o cliente. Se faltar identidade, prazo ou destino, peça o dado
 antes de preparar. Nunca prometa execução sem confirmação. Pedidos de enviar mensagem a clientes,
-cancelar compromisso ou encerrar caso ainda precisam ser feitos na aplicação.`;
+cancelar compromisso ainda precisam ser feitos na aplicação.
+Para orientar a IA num caso, consulte o caso e prepare reply_case com a orientação fornecida pelo gestor.
+Não invente nem complete a decisão. Só casos awaiting_human aceitam essa orientação.
+Use resolved para a IA continuar com a decisão; need_lead_info para pedir informação ao cliente.
+O texto não é enviado diretamente ao cliente: a IA o recebe pela fila atual de Casos.`;
 
-export async function answerManagementQuestion(admin: Admin, pool: pg.Pool, input: {
-  organizationId: string; channelSessionId: string; managerUserId: string; messageId?: string; question: string;
-}): Promise<string> {
-  const defs = [...MANAGEMENT_READ_TOOL_IDS, ...MANAGEMENT_ACTION_READ_TOOL_IDS].map((id) => getToolByName(id));
+export async function answerManagementQuestion(
+  admin: Admin,
+  pool: pg.Pool,
+  input: {
+    organizationId: string;
+    channelSessionId: string;
+    managerUserId: string;
+    messageId?: string;
+    question: string;
+  },
+): Promise<string> {
+  const defs = [...MANAGEMENT_READ_TOOL_IDS, ...MANAGEMENT_ACTION_READ_TOOL_IDS].map((id) =>
+    getToolByName(id),
+  );
   if (defs.some((def) => !def || def.category !== "read" || def.requiresScope !== "mcp:read"))
     throw new Error("management_read_catalog_changed");
 
-  const member = await admin.from("user_organizations").select("id")
-    .eq("organization_id", input.organizationId).eq("user_id", input.managerUserId)
-    .in("role", ["manager", "admin"]).is("revoked_at", null)
-    .not("accepted_at", "is", null).maybeSingle();
+  const member = await admin
+    .from("user_organizations")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("user_id", input.managerUserId)
+    .in("role", ["manager", "admin"])
+    .is("revoked_at", null)
+    .not("accepted_at", "is", null)
+    .maybeSingle();
   if (member.error || !member.data) throw new Error("management_manager_access_changed");
-  const binding = await admin.from("management_bindings" as never).select("actions_enabled")
-    .eq("organization_id", input.organizationId).eq("channel_session_id", input.channelSessionId)
-    .eq("manager_user_id", input.managerUserId).maybeSingle();
+  const binding = await admin
+    .from("management_bindings" as never)
+    .select("actions_enabled")
+    .eq("organization_id", input.organizationId)
+    .eq("channel_session_id", input.channelSessionId)
+    .eq("manager_user_id", input.managerUserId)
+    .maybeSingle();
   if (binding.error) throw new Error("management_binding_unavailable");
-  const actionsEnabled = !!(binding.data as { actions_enabled?: boolean } | null)?.actions_enabled && !!input.messageId;
+  const actionsEnabled =
+    !!(binding.data as { actions_enabled?: boolean } | null)?.actions_enabled && !!input.messageId;
 
-  if (/^(?:faça |faca |me (?:dê|de|mostre) )?(?:um )?(?:resumo da semana|relat[oó]rio semanal|comparativo semanal)(?: (?:na|da) cl[ií]nica| da empresa)?[.!?\s]*$/i.test(input.question.trim())) {
-    return formatManagementWeeklyComparison(await managementWeeklyComparison(admin, input.organizationId));
+  const quickCommand = managementQuickCommand(input.question);
+  if (quickCommand === "help") return managementCommandHelp(actionsEnabled);
+  if (quickCommand === "cases") return managementPendingCases(admin, input.organizationId);
+  if (quickCommand === "daily")
+    return formatManagementSummary(await managementSnapshot(admin, input.organizationId));
+  if (quickCommand === "weekly") {
+    return formatManagementWeeklyComparison(
+      await managementWeeklyComparison(admin, input.organizationId),
+    );
   }
 
   const snapshot = await managementSnapshot(admin, input.organizationId);
-  const recent = await admin.from("management_outbox" as never).select("body")
+  const recent = await admin
+    .from("management_outbox" as never)
+    .select("body")
     .eq("organization_id", input.organizationId)
     .eq("channel_session_id", input.channelSessionId)
-    .eq("kind", "consultation").eq("status", "accepted")
+    .eq("kind", "consultation")
+    .eq("status", "accepted")
     .like("dedupe_key", "reply:%")
-    .order("created_at", { ascending: false }).limit(3);
+    .order("created_at", { ascending: false })
+    .limit(3);
   if (recent.error) throw new Error("management_context_unavailable");
-  const priorReplies = ((recent.data ?? []) as { body: string }[]).reverse()
-    .map((row) => row.body.slice(0, 1200).replace(/\bCONFIRMAR \d{6}\b/g, "[código de ação omitido]"));
-  const ctx = { organizationId: input.organizationId, role: "manager" as const,
+  const priorReplies = ((recent.data ?? []) as { body: string }[])
+    .reverse()
+    .map((row) =>
+      row.body.slice(0, 1200).replace(/\bCONFIRMAR \d{6}\b/g, "[código de ação omitido]"),
+    );
+  const ctx = {
+    organizationId: input.organizationId,
+    role: "manager" as const,
     actor: { type: "user" as const, id: input.managerUserId, role: "manager" },
-    apiTokenId: "", delegatedUserId: input.managerUserId,
-    requestId: randomUUID(), supabase: admin };
-  const tools = pickToolsFromMcp({ supabase: admin, ctx,
-    auth: { organizationId: input.organizationId, role: "manager", actor: ctx.actor,
-      apiTokenId: "", scopes: ["mcp:read"] },
-    toolIds: [...MANAGEMENT_READ_TOOL_IDS, ...(actionsEnabled ? MANAGEMENT_ACTION_READ_TOOL_IDS : [])], handoffToolEnabled: false,
-    handoffSignal: { triggered: false }, pipelineIds: [],
+    apiTokenId: "",
+    delegatedUserId: input.managerUserId,
+    requestId: randomUUID(),
+    supabase: admin,
+  };
+  const tools = pickToolsFromMcp({
+    supabase: admin,
+    ctx,
+    auth: {
+      organizationId: input.organizationId,
+      role: "manager",
+      actor: ctx.actor,
+      apiTokenId: "",
+      scopes: ["mcp:read"],
+    },
+    toolIds: [
+      ...MANAGEMENT_READ_TOOL_IDS,
+      ...(actionsEnabled ? MANAGEMENT_ACTION_READ_TOOL_IDS : []),
+    ],
+    handoffToolEnabled: false,
+    handoffSignal: { triggered: false },
+    pipelineIds: [],
   });
-  const proposal = actionsEnabled ? managementProposalTool(admin, {
-    organizationId: input.organizationId, channelSessionId: input.channelSessionId,
-    managerUserId: input.managerUserId, messageId: input.messageId!,
-  }) : null;
+  const proposal = actionsEnabled
+    ? managementProposalTool(admin, {
+        organizationId: input.organizationId,
+        channelSessionId: input.channelSessionId,
+        managerUserId: input.managerUserId,
+        messageId: input.messageId!,
+        question: input.question,
+      })
+    : null;
   if (proposal) tools.management_prepare_action = proposal.definition;
   try {
     const { result } = await runModelCall(pool, llmEdgeConfigFromEnv(env), {
-      tenantId: input.organizationId, purpose: "management_consultation",
+      tenantId: input.organizationId,
+      purpose: "management_consultation",
       system: `${SYSTEM}\n${proposal ? ACTION_SYSTEM : "Se pedirem alteração de dados, oriente a usar a aplicação."}`,
-      messages: [{ role: "user", content: `Retrato autorizado: ${JSON.stringify(snapshot)}\nRespostas recentes deste diálogo: ${JSON.stringify(priorReplies)}\nPergunta: ${input.question.slice(0, 3000)}` }],
-      tools, maxSteps: proposal ? 5 : 3,
+      messages: [
+        {
+          role: "user",
+          content: `Retrato autorizado: ${JSON.stringify(snapshot)}\nRespostas recentes deste diálogo: ${JSON.stringify(priorReplies)}\nPergunta: ${input.question.slice(0, 3000)}`,
+        },
+      ],
+      tools,
+      maxSteps: proposal ? 5 : 3,
     });
     if (proposal?.reply) return proposal.reply;
     const answer = (result.text ?? "").trim();
     return answer ? answer.slice(0, 2800) : formatManagementSummary(snapshot);
   } catch {
     if (proposal?.reply) return proposal.reply;
-    logger.warn("[management] IA indisponível; resumo medido usado", { organization_id: input.organizationId });
+    logger.warn("[management] IA indisponível; resumo medido usado", {
+      organization_id: input.organizationId,
+    });
     return `Não consegui interpretar a pergunta agora. ${formatManagementSummary(snapshot)}`;
   }
 }

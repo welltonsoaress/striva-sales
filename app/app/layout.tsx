@@ -1,3 +1,6 @@
+import { SubscriptionAccessGate } from "@/components/billing/SubscriptionAccessGate";
+import { SubscriptionPaywall } from "@/components/billing/SubscriptionPaywall";
+import { subscriptionPaywallRequired } from "@/lib/billing/journey";
 import { InterfaceRefresh } from "@/hooks/auth/InterfaceRefresh";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -12,14 +15,13 @@ import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  ImpersonateBanner,
-} from "@/components/app/ImpersonateBanner";
+import { ImpersonateBanner } from "@/components/app/ImpersonateBanner";
 import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
 import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
+import { deveAbrirPrimeirosPassos } from "@/lib/onboarding/progresso-inicial";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await loadAuthUser();
@@ -58,15 +60,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const admin = createAdminClient();
     const { data: orgRow } = await admin
       .from("organizations")
-      .select("onboarded_at, status, settings")
+      .select("onboarded_at, onboarding_state, status, settings")
       .eq("id", activeOrg.orgId)
       .maybeSingle();
-    if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
+    if (
+      orgRow &&
+      deveAbrirPrimeirosPassos({
+        onboardedAt: orgRow.onboarded_at,
+        dismissedAt: (orgRow.onboarding_state as { dismissed_at?: string } | null)?.dismissed_at,
+        role: activeOrg.role,
+        support: !!user.support,
+      })
+    )
+      redirect("/onboarding");
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.
-    const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)
-      ?.visibility_mode;
+    const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)?.visibility_mode;
     activeOrg = { ...activeOrg, visibility_mode: mode ?? DEFAULT_VISIBILITY_MODE };
 
     // `marcaDaInstalacao()` é memoizada por TTL no PROCESSO (`lib/branding/
@@ -134,10 +144,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const store = await cookies();
   const collapsed = store.get("sidebar_collapsed")?.value === "1";
 
-  const impersonating = user.support ? {
-    tenantId: user.support.organization_id, tenantName: user.support.name,
-    expiresAt: user.support.expires_at, accessMode: user.support.access_mode,
-  } : null;
+  const impersonating = user.support
+    ? {
+        tenantId: user.support.organization_id,
+        tenantName: user.support.name,
+        expiresAt: user.support.expires_at,
+        accessMode: user.support.access_mode,
+      }
+    : null;
 
   const enrolled = await isMfaEnrolled();
   // A decisão deixou de ser uma constante de papel: ela lê a política de quem
@@ -148,9 +162,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     user.id,
     activeOrg?.orgId,
   );
+  const { data: commercialAccount } = activeOrg && !user.is_platform_admin && !user.support
+    ? await createAdminClient().from("organization_ai_accounts").select("mode,state,access_until,monthly_remaining,extra_remaining,credit_meter")
+        .eq("organization_id", activeOrg.orgId).maybeSingle()
+    : { data: null };
+  const commercialChildren = activeOrg && !user.is_platform_admin && !user.support
+    ? <SubscriptionAccessGate required={subscriptionPaywallRequired(commercialAccount)}
+        paywall={<SubscriptionPaywall idioma={user.idioma} canBuy={activeOrg.role === "admin"} />}>{children}</SubscriptionAccessGate>
+    : children;
   const shell = (
     <VoiceCallProvider>
-      <AppShell sidebarCollapsed={collapsed}>{children}</AppShell>
+      <AppShell sidebarCollapsed={collapsed}>{commercialChildren}</AppShell>
     </VoiceCallProvider>
   );
 
@@ -159,9 +181,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // pergunta quem está logado. Ver `lib/i18n/IdiomaProvider`: foi o
     // acoplamento com a autenticação que derrubou 32 casos.
     <IdiomaProvider locale={user.idioma}>
-    <AuthProvider user={user} activeOrg={activeOrg}>
-      <InterfaceRefresh userId={user.id} org={activeOrg} support={!!user.support} />
-      {/*
+      <AuthProvider user={user} activeOrg={activeOrg}>
+        <InterfaceRefresh userId={user.id} org={activeOrg} support={!!user.support} />
+        {/*
         O MARCADOR da marca da organização — o elemento cuja existência define o
         escopo `body:has([data-marca-org])` (lib/branding/css.ts).
 
@@ -176,20 +198,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         veria a tela de cadastro de MFA — a PRIMEIRA tela dele — com a cor da
         instalação, e depois o resto do produto com a dele.
       */}
-      <div data-marca-org="" className="contents">
-        <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
-        <ImpersonateBanner impersonating={impersonating} />
-        <ConexaoCaidaBanner caidas={conexoesCaidas} />
-        {needsMfaGate ? (
-          // Gate always mounted for MFA-required roles; it latches the blocking
-          // decision client-side so the enroll Server Action's revalidation
-          // can't tear down the recovery-codes screen mid-flow.
-          <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
-        ) : (
-          shell
-        )}
-      </div>
-    </AuthProvider>
+        <div data-marca-org="" className="contents">
+          <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
+          <ImpersonateBanner impersonating={impersonating} />
+          <ConexaoCaidaBanner caidas={conexoesCaidas} />
+          {needsMfaGate ? (
+            // Gate always mounted for MFA-required roles; it latches the blocking
+            // decision client-side so the enroll Server Action's revalidation
+            // can't tear down the recovery-codes screen mid-flow.
+            <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
+          ) : (
+            shell
+          )}
+        </div>
+      </AuthProvider>
     </IdiomaProvider>
   );
 }

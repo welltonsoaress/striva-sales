@@ -27,7 +27,7 @@ FORM: jornada da venda, candidato 5; seed 466d23bb. Escolhido explicitamente pel
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
-Momento próprio: seletor da jornada altera conversa e resultado com transição curta. Sem rotação automática; movimento reduzido preserva todos os estados. Exemplos e valores identificados como fictícios. Preço não publicado porque oferta e periodicidade ainda estão em análise.
+Momento próprio: seletor da jornada altera conversa e resultado com transição curta. Sem rotação automática; movimento reduzido preserva todos os estados. Exemplos e valores identificados como fictícios. As ofertas semestrais/anuais foram fornecidas e conferidas em 05/10/2026. Checkout real continua desligado até homologação e publicação autorizada.
 
 ## Expansão visual solicitada em 30/09/2026
 
@@ -36,3 +36,7 @@ Autorização explícita: incluir pessoas, celular fotográfico e composição c
 OWN-WORLD ampliado: fotografia editorial ilustrativa de empresária usando o celular, luz natural e textura cotidiana. Cena ampla após a abertura, em superfície quente #f8f4ed, com conversa HTML sobreposta à fotografia. Mão e aparelho fotográficos transparentes substituem o celular anteriormente desenhado em CSS na seção de gestão. Não apresentam clientes reais nem endosso. Verde #146b4d identifica atendimento/controle, âmbar #995b0c acompanhamento, azul #215da8 agenda/contexto. Violeta continua a ação comercial principal.
 
 Momento visual: a conversa e seu próximo passo se compõem uma vez quando a fotografia entra no viewport; conteúdo já visível, sem movimento contínuo, e reduzido conforme preferência do visitante. Convite não modal aparece após 40 segundos com a aba visível, uma vez por sessão; não rouba foco, oferece fechar/Agora não/Escape e abre a demonstração no WhatsApp confirmado. Clicar numa CTA comercial antes disso cancela o convite. Sem captura de dados nem envio automático de mensagem.
+
+## Planos — extensão solicitada em 05/10/2026
+
+Comparação por capacidade: três ofertas por período, com Pro recomendado. Seletor semestral/anual conserva foco e informa seleção por aria-pressed; escolha leva ao faturamento da conta sem pagar automaticamente. Preço mensal equivalente vem junto do total do período. Economia anual calculada em relação a dois semestres. Dados do catálogo no banco, valores conferidos nos links fornecidos e limites iniciais autorizados pelo proprietário. Manrope, violeta, ameixa e superfície quente existentes preservados; sem imagem nova nesta extensão. Evidência desktop semestral e mobile anual em `.superpowers/evidence/inicio-primeiros-passos/planos-landing-*.png`, sem overflow a 390px. Revisão visual in-thread: hierarquia, legibilidade, escolha e contexto do total conferidos. O detector emitiu avisos de tokens da escala, não erros; sistema visual existente preservado.

@@ -25,6 +25,7 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 function poolQueGrava() {
   const inserts: Array<{ sql: string; params: unknown[] }> = [];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes("from organization_ai_accounts")) return { rows: [{ mode: "legacy" }] };
     if (sql.includes("settings->'llm'")) {
       return {
         rows: [

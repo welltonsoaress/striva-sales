@@ -29,18 +29,13 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 
-import {
-  resolveCaseFromHuman,
-  markAwaitingLead,
-  escalateCase,
-  buildCaseSummary,
-} from "@/lib/agent-engine/agent/human-cases";
+import { escalateCase, buildCaseSummary } from "@/lib/agent-engine/agent/human-cases";
 import { performHumanHandoff } from "@/lib/agent-engine/agent/human-handoff";
 import { avisarLeadDoCrm } from "@/lib/ai/handoff/aviso-ao-lead";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
-import { enqueueJob } from "@/lib/agent-engine/queue/queue";
+import { commitHumanCaseReply } from "@/lib/agent-engine/agent/human-case-reply";
 import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
@@ -138,39 +133,61 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
   if (action === "escalate") {
     const boundary = parseServiceBoundary(caseRow.context_snapshot?.service_boundary);
     try {
-      if (boundary && (boundary.organization_id !== org.orgId || boundary.contact_id !== contactId || boundary.conversation_id !== conversationId)) throw new StaleServiceBoundaryError();
+      if (
+        boundary &&
+        (boundary.organization_id !== org.orgId ||
+          boundary.contact_id !== contactId ||
+          boundary.conversation_id !== conversationId)
+      )
+        throw new StaleServiceBoundaryError();
       await withServiceBoundary(pool, boundary, async () => {
-    const aviso = await avisarLeadDoCrm(createAdminClient(), {
-      organizationId: org.orgId,
-      conversationId,
-      contactId,
-      reason: body,
-      serviceBoundary: boundary!,
-    });
+        const aviso = await avisarLeadDoCrm(createAdminClient(), {
+          organizationId: org.orgId,
+          conversationId,
+          contactId,
+          reason: body,
+          serviceBoundary: boundary!,
+        });
 
-    // O handoff roda ANTES de fechar o caso, e nesta ordem de propósito: ele é
-    // idempotente (re-executar é no-op) e recebe um pg.Pool próprio, então não
-    // entra na transação abaixo. Se ele falhar, o caso continua `awaiting_human`
-    // e a retentativa se cura sozinha; na ordem inversa sobraria um caso
-    // `escalated` que nunca chegou a humano nenhum — e sem volta pela API.
-    await performHumanHandoff(
-      pool,
-      { tenantId: org.orgId, leadId: contactId, conversationId },
-      {
-        reason: body,
-        conversationSummary: buildCaseSummary(caseRow),
-        avisoAoLead: aviso,
-        log: createLogger(),
-      },
-    );
+        // O handoff roda ANTES de fechar o caso, e nesta ordem de propósito: ele é
+        // idempotente (re-executar é no-op) e recebe um pg.Pool próprio, então não
+        // entra na transação abaixo. Se ele falhar, o caso continua `awaiting_human`
+        // e a retentativa se cura sozinha; na ordem inversa sobraria um caso
+        // `escalated` que nunca chegou a humano nenhum — e sem volta pela API.
+        await performHumanHandoff(
+          pool,
+          { tenantId: org.orgId, leadId: contactId, conversationId },
+          {
+            reason: body,
+            conversationSummary: buildCaseSummary(caseRow),
+            avisoAoLead: aviso,
+            log: createLogger(),
+          },
+        );
       });
     } catch (error) {
       if (!(error instanceof StaleServiceBoundaryError)) throw error;
       // A resposta humana fica registrada, mas não altera o atendimento novo.
-      const registered = await registrarRespostaDeCasoObsoleto(pool, org.orgId, caseId, user.id, body);
-      if (!registered) return fail("invalid_state", "Este caso já foi respondido por outra pessoa.", 409, { requestId });
-      await audit({ action: "ai.case_replied", actorUserId: user.id, organizationId: org.orgId,
-        resourceType: "agent_case", resourceId: caseId, requestId, metadata: { case_action: action, service_stale: true } });
+      const registered = await registrarRespostaDeCasoObsoleto(
+        pool,
+        org.orgId,
+        caseId,
+        user.id,
+        body,
+      );
+      if (!registered)
+        return fail("invalid_state", "Este caso já foi respondido por outra pessoa.", 409, {
+          requestId,
+        });
+      await audit({
+        action: "ai.case_replied",
+        actorUserId: user.id,
+        organizationId: org.orgId,
+        resourceType: "agent_case",
+        resourceId: caseId,
+        requestId,
+        metadata: { case_action: action, service_stale: true },
+      });
       return ok({ status: "resolved", delivery: "service_stale" }, { requestId });
     }
     const escalated = await escalateCase(pool, org.orgId, caseId, user.id, body);
@@ -187,30 +204,14 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
     // engine): sem isso, um enqueue que falhasse depois da transição deixaria o
     // caso fora de `awaiting_human` e sem job — o lead nunca seria avisado e a
     // API passaria a responder 409, sem caminho de recuperação.
-    const client = await pool.connect();
-    let transitioned: boolean;
-    try {
-      await client.query("begin");
-      transitioned =
-        action === "resolved"
-          ? await resolveCaseFromHuman(client, org.orgId, caseId, user.id, body)
-          : await markAwaitingLead(client, org.orgId, caseId, user.id, body);
-      if (transitioned) {
-        await enqueueJob(client, org.orgId, {
-          kind: "case_reply_turn",
-          leadId: contactId,
-          payload: { case_id: caseId, action, body },
-        });
-        await client.query("commit");
-      } else {
-        await client.query("rollback");
-      }
-    } catch (err) {
-      await client.query("rollback");
-      throw err;
-    } finally {
-      client.release();
-    }
+    const transitioned = await commitHumanCaseReply(pool, {
+      organizationId: org.orgId,
+      caseId,
+      actorUserId: user.id,
+      action,
+      body,
+      contactId,
+    });
     if (!transitioned) {
       return fail("invalid_state", t("Este caso já foi respondido por outra pessoa."), 409, {
         requestId,

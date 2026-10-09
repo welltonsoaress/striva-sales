@@ -46,6 +46,7 @@ import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
+import { deliveryMayBeUnknown } from "@/lib/channels/delivery-uncertainty";
 
 type SB = SupabaseClient;
 
@@ -315,12 +316,14 @@ export async function sendMessageHandler(
         .from("conversations")
         .select(convSelect(true))
         .eq("id", input.conversation_id)
+        .eq("organization_id", ctx.organization_id)
         .maybeSingle(),
     () =>
       supabase
         .from("conversations")
         .select(convSelect(false))
         .eq("id", input.conversation_id)
+        .eq("organization_id", ctx.organization_id)
         .maybeSingle(),
   );
 
@@ -527,6 +530,10 @@ export async function sendMessageHandler(
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
     sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
+    ai_credit_eligible:
+      !ctx.meetingDelivery && (ctx.aiGenerated ?? (ctx.actor.type === "ai_agent")),
+    ai_response_id: ctx.aiResponseId ?? null,
+    ai_response_part: ctx.aiResponsePart ?? null,
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
@@ -839,7 +846,7 @@ export async function sendMessageHandler(
       // canal — a URL assinada é montada antes de qualquer coisa tocar o adapter.
       const code = msg.startsWith("storage_sign_failed")
         ? "storage_sign_failed"
-        : adapter.codes.sendFailed;
+        : deliveryMayBeUnknown(err) ? "delivery_unknown" : adapter.codes.sendFailed;
 
       // Falta de CREDENCIAL não é falha desta mensagem: é canal ainda não
       // conectado, e o desfecho certo é `queued` — a mesma coisa que o ramo de

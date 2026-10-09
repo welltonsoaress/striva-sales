@@ -103,3 +103,13 @@ describe("emitirEstado / verificarEstado", () => {
     ).toThrow(/ponto/);
   });
 });
+
+
+it("destino de onboarding viaja assinado e continua ligado à sessão", () => {
+  const segredo = "segredo-de-teste-apenas-32-caracteres", agora = new Date("2026-10-08T10:00:00Z");
+  const state = emitirEstado({ organizationId: "org", userId: "user", authSessionId: "session", returnTo: "onboarding" }, { segredo, agora });
+  expect(verificarEstado(state, { segredo, agora })).toMatchObject({ returnTo: "onboarding", authSessionId: "session" });
+  const [payload, signature] = state.split(".");
+  const changed = Buffer.from(Buffer.from(payload!, "base64url").toString().replace("onboarding", "https://evil.test" )).toString("base64url");
+  expect(verificarEstado(`${changed}.${signature}`, { segredo, agora })).toBeNull();
+});

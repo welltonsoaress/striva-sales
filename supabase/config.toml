@@ -80,3 +80,7 @@ policy = "oneshot"
 
 [analytics]
 enabled = false
+
+# Hotmart autentica seu próprio Hottok antes do corpo/banco, não um JWT Supabase.
+[functions.handle-payment-webhook]
+verify_jwt = false

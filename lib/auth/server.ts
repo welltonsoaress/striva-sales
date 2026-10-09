@@ -233,7 +233,8 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
 
   const support = await readSupportContext(supabase);
   const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
-  const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) ?? null;
+  const avatarUrl =
+    (user.user_metadata?.avatar_url as string | undefined) ?? "/avatars/violeta.svg";
   const locale = (user.user_metadata?.locale as string | undefined) ?? null;
   // A cadeia inteira num lugar só: pessoa → organização ativa → padrão. Quem
   // consome pede `idioma` e não precisa saber que existe uma ordem.

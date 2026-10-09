@@ -83,6 +83,7 @@ CRONS="
 */5 * * * *|45|api/v1/cron/agenda-reminder
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
+23 * * * *|90|api/v1/cron/commercial-notices
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch

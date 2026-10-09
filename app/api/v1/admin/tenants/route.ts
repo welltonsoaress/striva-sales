@@ -15,8 +15,12 @@ import { createHash, randomUUID } from "node:crypto";
 // ---------------------------------------------------------------------------
 
 const querySchema = z.object({
-  q: z.string().optional(),
+  q: z.string().max(120).optional(),
   status: z.enum(["active", "suspended", "onboarding", "redacted"]).optional(),
+  commercial_state: z
+    .enum(["pending", "trial", "active", "expired", "suspended", "legacy"])
+    .optional(),
+  origin: z.enum(["self_service", "manual", "unknown"]).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
@@ -36,7 +40,9 @@ function encodeCursor(payload: CursorPayload): string {
 
 function decodeCursor(cursor: string): CursorPayload | null {
   try {
-    return JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")) as CursorPayload;
+    return z
+      .object({ created_at: z.string().datetime(), id: z.string().uuid() })
+      .parse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf-8")));
   } catch {
     return null;
   }
@@ -64,9 +70,18 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const { q, status, cursor, limit } = parsed.data;
+  const { q, status, commercial_state, origin, cursor, limit } = parsed.data;
   const admin = createAdminClient();
   const cursorPayload = cursor ? decodeCursor(cursor) : null;
+  if (cursor && !cursorPayload)
+    return fail("invalid_cursor", "Página inválida.", 400, { requestId });
+  const search = q?.replace(/[,%().]/g, " ").trim();
+  let countQuery = admin
+    .from("organizations")
+    .select(
+      commercial_state ? "id,ai_account:organization_ai_accounts!inner(organization_id)" : "id",
+      { count: "exact", head: true },
+    );
 
   let query = admin
     .from("organizations")
@@ -81,6 +96,8 @@ export async function GET(req: NextRequest) {
       onboarded_at,
       suspended_at,
       created_at,
+      signup_origin,
+      ai_account:organization_ai_accounts${commercial_state ? "!inner" : ""}(mode,state,access_until,monthly_remaining,extra_remaining),
       user_count:user_organizations(count),
       conversations_count:conversations(count)
     `,
@@ -89,15 +106,54 @@ export async function GET(req: NextRequest) {
     .order("id", { ascending: false })
     .limit(limit + 1);
 
+  if (origin) {
+    if (origin === "unknown") {
+      query = query.is("signup_origin", null);
+      countQuery = countQuery.is("signup_origin", null);
+    } else {
+      query = query.eq("signup_origin", origin);
+      countQuery = countQuery.eq("signup_origin", origin);
+    }
+  }
+  if (commercial_state) {
+    if (commercial_state === "legacy") {
+      query = query.eq("ai_account.mode", "legacy");
+      countQuery = countQuery.eq("ai_account.mode", "legacy");
+    } else {
+      query = query.eq("ai_account.mode", "platform");
+      countQuery = countQuery.eq("ai_account.mode", "platform");
+      const now = new Date().toISOString();
+      if (commercial_state === "expired") {
+        const filter = `state.eq.expired,and(state.in.(trial,active),access_until.lte.${now})`;
+        query = query.or(filter, { referencedTable: "ai_account" });
+        countQuery = countQuery.or(filter, { referencedTable: "ai_account" });
+      } else {
+        query = query.eq("ai_account.state", commercial_state);
+        countQuery = countQuery.eq("ai_account.state", commercial_state);
+        if (["trial", "active"].includes(commercial_state)) {
+          query = query.gt("ai_account.access_until", now);
+          countQuery = countQuery.gt("ai_account.access_until", now);
+        }
+      }
+    }
+  }
+
   if (status === "onboarding") {
     // Estado derivado: ativo no banco, onboarding ainda não concluído.
     query = query.eq("status", "active").is("onboarded_at", null);
+    countQuery = countQuery.eq("status", "active").is("onboarded_at", null);
   } else if (status) {
     query = query.eq("status", status);
+    countQuery = countQuery.eq("status", status);
   }
 
-  if (q) {
-    query = query.or(`display_name.ilike.%${q}%,slug::text.ilike.%${q}%,cnpj.ilike.%${q}%`);
+  if (search) {
+    query = query.or(
+      `display_name.ilike.%${search}%,slug.ilike.%${search}%,cnpj.ilike.%${search}%`,
+    );
+    countQuery = countQuery.or(
+      `display_name.ilike.%${search}%,slug.ilike.%${search}%,cnpj.ilike.%${search}%`,
+    );
   }
 
   if (cursorPayload) {
@@ -106,12 +162,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { data, error } = await query;
+  const [{ data, error }, counted] = await Promise.all([query, countQuery]);
 
-  if (error) {
+  if (error || counted.error) {
     return fail("internal_error", "Query failed", 500, {
       requestId,
-      details: error.message,
+      details: error?.message ?? counted.error?.message,
     });
   }
 
@@ -135,14 +191,19 @@ export async function GET(req: NextRequest) {
     bypassedRls: true,
     requestId,
     metadata: {
-      filters: { status: status ?? null, has_q: !!q },
+      filters: {
+        status: status ?? null,
+        commercial_state: commercial_state ?? null,
+        origin: origin ?? null,
+        has_q: !!q,
+      },
       result_count: page.length,
     },
   });
 
   return ok(page, {
     requestId,
-    meta: { has_more, cursor: nextCursor },
+    meta: { has_more, cursor: nextCursor, total: counted.count },
   });
 }
 

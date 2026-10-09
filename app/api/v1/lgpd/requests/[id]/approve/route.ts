@@ -29,7 +29,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
+  const supportDenied = await requireSupportWrite(undefined, {commercialExempt:true});
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();

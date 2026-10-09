@@ -1,4 +1,5 @@
 "use server";
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 
 /**
  * A CHAVE DA INTELIGÊNCIA, PEDIDA ONDE ELA FALTA.
@@ -26,6 +27,8 @@ import { requireOnboardingCtx, OnboardingError } from "./_shared";
 export type ResultadoDaChave = { ok: true; final: string } | { ok: false; erro: string };
 
 export async function salvarChaveDaIa(formData: FormData): Promise<ResultadoDaChave> {
+  const platform = await requireAiPlatformAdmin();
+  if (!platform.ok) return { ok: false, erro: "A conexão de IA é administrada pela plataforma." };
   let ctx;
   try {
     ctx = await requireOnboardingCtx();

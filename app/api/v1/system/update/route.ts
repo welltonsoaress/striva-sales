@@ -10,13 +10,10 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { loadAuthUser } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  DISTRIBUTION_ID,
-  releaseDaDistribuicaoVerificada,
-} from "@/lib/system/distribution";
+import { DISTRIBUTION_ID, releaseDaDistribuicaoVerificada } from "@/lib/system/distribution";
 import { isRunStale, updateDisponivel } from "@/lib/system/update-run";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +21,33 @@ export const dynamic = "force-dynamic";
 const RUN_IN_PROGRESS_MESSAGE = "Já existe uma atualização em andamento.";
 
 export async function POST(_req: NextRequest): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
-
   const user = await loadAuthUser();
   // `unauthenticated` (não `unauthorized`): esse último é reservado ao segredo
   // interno das rotas host↔app (lib/api/errors.ts) — aqui falta é sessão.
   if (!user) return fail("unauthenticated", "Faça login para continuar.", 401);
-  if (!user.is_platform_admin) {
+  if (!user.is_platform_admin || user.support) {
     return fail("forbidden", "Só o dono do servidor pode atualizar o sistema.", 403);
   }
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
+  if (await mfaEmDivida())
+    return fail("mfa_required", "Confirme sua verificação em duas etapas.", 403);
 
   const db = createAdminClient();
+  const { data: authority, error: authorityError } = await db
+    .from("platform_admins")
+    .select("scope")
+    .eq("user_id", user.id)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (authorityError)
+    return fail(
+      "upstream_unavailable",
+      "Não foi possível confirmar a administração da plataforma.",
+      503,
+    );
+  if (authority?.scope !== "full")
+    return fail("forbidden", "A atualização exige administração completa da plataforma.", 403);
   const { data: version, error: versionError } = await db
     .from("system_version")
     .select(
@@ -48,7 +60,9 @@ export async function POST(_req: NextRequest): Promise<Response> {
   // `latest` vazios — e cai direto no 409 "você já está em dia" abaixo. É a
   // pior mensagem possível bem na hora de uma falha de infraestrutura.
   if (versionError) {
-    logger.error("[system/update] leitura de system_version falhou", { error: versionError.message });
+    logger.error("[system/update] leitura de system_version falhou", {
+      error: versionError.message,
+    });
     return fail("internal_error", "Não consegui ler o estado da atualização.", 500);
   }
 
@@ -66,7 +80,11 @@ export async function POST(_req: NextRequest): Promise<Response> {
       commit: version?.latest_release_commit,
     })
   ) {
-    return fail("state_conflict", "A origem da release não foi verificada; o sistema não foi atualizado.", 409);
+    return fail(
+      "state_conflict",
+      "A origem da release não foi verificada; o sistema não foi atualizado.",
+      409,
+    );
   }
 
   if (
@@ -108,7 +126,8 @@ export async function POST(_req: NextRequest): Promise<Response> {
       .update({
         status: "failed",
         finished_at: new Date().toISOString(),
-        log_tail: "Run abandonado: o agente do host não reportou o desfecho a tempo (agente parado ou travado).",
+        log_tail:
+          "Run abandonado: o agente do host não reportou o desfecho a tempo (agente parado ou travado).",
       })
       .eq("id", running.id)
       .eq("status", "dispatched");
@@ -123,7 +142,12 @@ export async function POST(_req: NextRequest): Promise<Response> {
 
   const { data: run, error } = await db
     .from("system_update_runs")
-    .insert({ from_version: current, to_version: latest, status: "dispatched", requested_by: user.id })
+    .insert({
+      from_version: current,
+      to_version: latest,
+      status: "dispatched",
+      requested_by: user.id,
+    })
     .select()
     .single();
 

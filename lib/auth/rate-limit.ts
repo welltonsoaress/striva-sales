@@ -21,6 +21,7 @@
  */
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
+import { trustedIp } from "./trusted-ip";
 
 import { checkRateLimit, peekRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 
@@ -45,10 +46,7 @@ export interface AuthRateLimits {
  */
 async function clientIp(): Promise<string | null> {
   const hdrs = await headers();
-  const encaminhado = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (encaminhado) return encaminhado;
-  const real = hdrs.get("x-real-ip")?.trim();
-  return real || null;
+  return trustedIp(hdrs);
 }
 
 function opaque(value: string): string {
@@ -135,7 +133,7 @@ function loginIpLimit(): number {
 
 export const AUTH_LIMITS = {
   login: { ip: loginIpLimit(), id: 5, windowSec: 300 },
-  signup: { ip: 20, windowSec: 3600 },
+  signup: { ip: 20, id: 5, windowSec: 3600 },
   reset: { ip: 30, id: 3, windowSec: 3600 },
   invite_accept: { ip: 60, windowSec: 3600 },
   // Recuperação do primeiro acesso: o teto mais apertado da lista, e de

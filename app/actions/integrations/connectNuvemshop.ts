@@ -9,15 +9,21 @@
  * so the UI can render the "configure env" card without crashing.
  */
 
-import { supportWriteError, authenticatedSessionId } from "@/lib/impersonate/support";
+import {
+  supportWriteError,
+  authenticatedSessionId,
+  requireSupportWrite,
+} from "@/lib/impersonate/support";
 import { redirect } from "next/navigation";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { buildAuthorizeUrl } from "@/lib/nuvemshop/oauth";
 import { getConfig } from "@/lib/nuvemshop/config";
 import { issueState } from "@/lib/nuvemshop/state";
 
-export type ConnectResult =
-  | { ok: false; error: "auth_required" | "no_active_org" | "forbidden" | "not_configured" };
+export type ConnectResult = {
+  ok: false;
+  error: "auth_required" | "no_active_org" | "forbidden" | "not_configured";
+};
 
 export async function connectNuvemshop(): Promise<ConnectResult> {
   const user = await loadAuthUser();
@@ -33,10 +39,14 @@ export async function connectNuvemshop(): Promise<ConnectResult> {
     return { ok: false, error: "forbidden" };
   }
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden" };
   const cfg = getConfig();
   if (!cfg) return { ok: false, error: "not_configured" };
 
-  const state = issueState(activeOrg.orgId, { userId: user.id, authSessionId: await authenticatedSessionId() });
+  const state = issueState(activeOrg.orgId, {
+    userId: user.id,
+    authSessionId: await authenticatedSessionId(),
+  });
   const url = buildAuthorizeUrl({ appId: cfg.appId, state });
   redirect(url);
 }

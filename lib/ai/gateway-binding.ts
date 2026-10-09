@@ -29,6 +29,7 @@ import type { LanguageModel } from "ai";
 import { decryptKey, byteaToBuffer } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
 
 import { OPENROUTER_BASE_URL, resolveLanguageModel, type ModelId } from "./gateway";
 
@@ -36,7 +37,8 @@ export interface ModeloResolvido {
   model: LanguageModel;
   /** Para o log: qual modelo e de onde veio a decisão. */
   modelId: string;
-  origem: "binding" | "credencial_da_organizacao" | "padrao";
+  provider?: string;
+  origem: "binding" | "credencial_da_organizacao" | "padrao" | "plataforma";
 }
 
 /**
@@ -58,20 +60,30 @@ export async function resolverModeloDoPonto(
   organizationId: string,
   padrao: ModelId,
 ): Promise<ModeloResolvido | null> {
+  const managed = await managedSettings(organizationId, purpose);
+  if (managed) {
+    const model = instanciar(managed.provider, managed.api_key, managed.model, null);
+    if (!model) throw new Error("ai_platform_provider_unknown");
+    return { model, modelId: managed.model, provider: managed.provider, origem: "plataforma" };
+  }
   const binding = await lerBinding(purpose, organizationId);
 
   if (binding === null) {
     // Antes da chave da instalação vem a credencial da PRÓPRIA organização —
     // o degrau do meio de `resolveOrgLlmConfig`, que esta pilha pulava.
     const daOrg = await credencialDaOrganizacao(organizationId);
-    const idNoProvider =
-      daOrg === null ? null : idParaOProvider(daOrg.provider, String(padrao));
+    const idNoProvider = daOrg === null ? null : idParaOProvider(daOrg.provider, String(padrao));
     if (daOrg !== null && idNoProvider !== null) {
       const model = instanciar(daOrg.provider, daOrg.apiKey, idNoProvider, null);
       if (model !== null) {
         // `modelId` continua sendo o id CANÔNICO, não o traduzido: é ele que
         // casa com o catálogo de preço no log de custo.
-        return { model, modelId: String(padrao), origem: "credencial_da_organizacao" };
+        return {
+          model,
+          modelId: String(padrao),
+          provider: daOrg.provider,
+          origem: "credencial_da_organizacao",
+        };
       }
     }
     const model = resolveLanguageModel(padrao);
@@ -99,10 +111,12 @@ export async function resolverModeloDoPonto(
       provider: binding.provider,
     });
     const fallback = resolveLanguageModel(padrao);
-    return fallback === null ? null : { model: fallback, modelId: String(padrao), origem: "padrao" };
+    return fallback === null
+      ? null
+      : { model: fallback, modelId: String(padrao), origem: "padrao" };
   }
 
-  return { model, modelId: binding.model_id, origem: "binding" };
+  return { model, modelId: binding.model_id, provider: binding.provider, origem: "binding" };
 }
 
 interface LinhaBinding {
@@ -112,10 +126,7 @@ interface LinhaBinding {
   base_url: string | null;
 }
 
-async function lerBinding(
-  purpose: string,
-  organizationId: string,
-): Promise<LinhaBinding | null> {
+async function lerBinding(purpose: string, organizationId: string): Promise<LinhaBinding | null> {
   try {
     const admin = createAdminClient();
     // Admin client bypassa RLS, então o filtro por organização é PROGRAMÁTICO e
@@ -224,10 +235,13 @@ async function credencialDaOrganizacao(
     // cadastrou credencial", e o operador vê a conta do `.env` sendo debitada
     // sem nunca saber por quê. Vai só a CLASSE do erro: a mensagem pode
     // carregar material da credencial, o nome do erro não.
-    logger.warn("credencial da organização não pôde ser lida; seguindo para a chave da instalação", {
-      organizationId,
-      erro: erro instanceof Error ? erro.name : typeof erro,
-    });
+    logger.warn(
+      "credencial da organização não pôde ser lida; seguindo para a chave da instalação",
+      {
+        organizationId,
+        erro: erro instanceof Error ? erro.name : typeof erro,
+      },
+    );
     return null;
   }
 }

@@ -16,6 +16,7 @@ import { NextRequest } from "next/server";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { audit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { AuthUser, Role } from "@/lib/auth/types";
 
 vi.mock("@/lib/auth/server", () => ({
@@ -87,11 +88,16 @@ function session(role: Role | null, tables: Record<string, unknown> = {}) {
       }
     : null;
   vi.mocked(loadAuthUser).mockResolvedValue(user);
-  vi.mocked(resolveActiveOrg).mockResolvedValue(
-    role ? { orgId: ORG_ID, name: "Org", role } : null,
-  );
+  vi.mocked(resolveActiveOrg).mockResolvedValue(role ? { orgId: ORG_ID, name: "Org", role } : null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(createClient).mockResolvedValue(makeSupabaseStub(role, tables) as any);
+  // Conta legada preserva a régua deste teste: autorização por papel.
+  vi.mocked(createAdminClient).mockReturnValue(
+    makeSupabaseStub(role, {
+      ...tables,
+      organization_ai_accounts: { mode: "legacy", state: "pending", access_until: null },
+    }) as never,
+  );
 }
 
 async function errorCode(res: Response): Promise<string> {
@@ -236,7 +242,10 @@ describe("grupo inbox/conversations (read agent 200, write viewer 403)", () => {
     session("viewer");
     const { PATCH } = await import("@/app/api/v1/conversations/[id]/route");
     const res = await PATCH(
-      req("/api/v1/conversations/c1", { method: "PATCH", body: JSON.stringify({ status: "closed" }) }),
+      req("/api/v1/conversations/c1", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "closed" }),
+      }),
       params({ id: "c1" }),
     );
     expect(res.status).toBe(403);

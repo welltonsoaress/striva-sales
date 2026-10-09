@@ -36,7 +36,8 @@ import {
   SQL_ORCAMENTO,
   type ChaveDeOrcamento,
 } from './orcamento';
-import { costCents } from './pricing';
+import { pricedUsage } from '@/lib/ai/model-price';
+import { managedSettingsPg, platformConfig, modelPricePg, assertPricedModel, reserveResponsePg } from '@/lib/billing/managed-ai';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
 import { buildStablePrefix } from './stable-prefix';
 
@@ -111,6 +112,8 @@ export interface RunModelCallInput {
   agentId?: string | null;
   /** atribuição de custo: 'agent_turn' (default) | 'classifier' | 'compaction' | 'connection_test' */
   purpose?: string;
+  /** Reserva interna de uma automação; não é um job nem vem de input público. */
+  responseReservationId?: string;
   system?: string;
   messages: ModelMessage[];
   tools?: ToolSet;
@@ -314,13 +317,15 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
 
   // A config da org é lida ANTES da decisão porque o resolvedor precisa dela
   // como último degrau da precedência (o padrão, quando ninguém mais opinou).
-  const padrao = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
+  const managed = await managedSettingsPg(db, input.tenantId, purpose, input.jobId ?? input.responseReservationId ?? null);
+  const padrao = managed ? platformConfig(managed, cfg) : await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
 
   // O painel de provedores entra AQUI, e é o que faz `purpose` deixar de ser
   // só um rótulo de custo e virar decisão. Sem binding configurado, `decisao`
   // reproduz exatamente o comportamento anterior — a origem volta como
   // 'variavel_de_ambiente' ou 'padrao_da_organizacao'.
-  const decisao = await decidirParaOSeam(db, {
+  const decisao = managed ? { provider: managed.provider, modelId: purpose === 'operator_turn' ? (managed.operator_model ?? managed.model) : managed.model,
+    credentialId: null, baseUrl: null, origem: 'padrao_da_organizacao' as const, avisos: [] } : await decidirParaOSeam(db, {
     organizationId: input.tenantId,
     purpose,
     modeloDoCallSite: input.model,
@@ -368,6 +373,8 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   if (config.enabledModels.length > 0 && !config.enabledModels.includes(model)) {
     throw new LlmModelNotEnabledError(model);
   }
+  const price = await modelPricePg(db, config.provider, model);
+  if (managed) assertPricedModel(price);
   const factory = registry[config.provider];
   if (factory === undefined) {
     throw new LlmProviderUnknownError(config.provider);
@@ -411,6 +418,10 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
     cacheTtl: cfg.cacheTtl ?? '1h',
   });
 
+  if (managed && input.jobId && ['agent_turn', 'followup_turn'].includes(purpose)) {
+    await reserveResponsePg(db, input.tenantId, input.jobId);
+  }
+
   const startedAt = Date.now();
   let result: Awaited<ReturnType<typeof generateText>>;
   try {
@@ -424,7 +435,8 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
       system: prefix.system,
       messages: input.messages,
       tools: guardServiceTools(prefix.tools),
-      stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      maxRetries: 0,
+      stopWhen: managed ? stepCountIs(Math.min(input.maxSteps ?? managed.max_steps, managed.max_steps)) : input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
       temperature,
       topP,
       topK,
@@ -467,20 +479,24 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   }
   const latencyMs = Date.now() - startedAt;
 
+  const total = result.totalUsage ?? result.usage;
   const usage = {
-    inputTokens: result.usage.inputTokens ?? 0,
-    outputTokens: result.usage.outputTokens ?? 0,
-    cacheReadTokens: result.usage.inputTokenDetails.cacheReadTokens ?? 0,
-    cacheWriteTokens: result.usage.inputTokenDetails.cacheWriteTokens ?? 0,
+    inputTokens: total.inputTokens ?? 0,
+    outputTokens: total.outputTokens ?? 0,
+    cacheReadTokens: total.inputTokenDetails?.cacheReadTokens ?? 0,
+    cacheWriteTokens: total.inputTokenDetails?.cacheWriteTokens ?? 0,
   };
-  const cost = costCents(model, usage);
+  // O SDK preserva totais ausentes como undefined; o zero de compatibilidade
+  // acima não é evidência de uma chamada gratuita.
+  const cost = total.inputTokens === undefined || total.outputTokens === undefined
+    ? null : pricedUsage(price, usage);
 
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
        (organization_id, contact_id, job_id, variant_id, purpose, provider, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
-        status, origem_da_escolha, agent_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'ok', $14, $15)
+        status, origem_da_escolha, agent_id, pricing_snapshot)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'ok', $14, $15, $16)
      returning id`,
     [
       input.tenantId,
@@ -498,6 +514,7 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
       latencyMs,
       decisao.origem,
       input.agentId ?? null,
+      price ? JSON.stringify({ provider: config.provider, model, rates: price, currency: 'USD', unit: 'cents_per_million_tokens', mode: managed ? 'platform' : 'legacy' }) : null,
     ],
   );
 

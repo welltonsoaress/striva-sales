@@ -2664,7 +2664,7 @@ async function executarTurnoDoAgente(
                   });
                   runLog.info('atraso humano antes da 1ª bolha', { atraso_ms: ms });
                 },
-                send: (bubble): Promise<ChannelSendResult> => {
+                send: (bubble, part): Promise<ChannelSendResult> => {
                   seq += 1;
                   return liveChannel().send({
                     tenantId,
@@ -2673,6 +2673,7 @@ async function executarTurnoDoAgente(
                     jobClaim: claimOfJob(liveJob()),
                     agentOperation,
                     seq,
+                    responseParts: part ? seq - part.index + part.total - 1 : seq,
                     conversationId: input.conversationId,
                     body: bubble,
                   });
@@ -3511,6 +3512,7 @@ async function executarTurnoDoAgente(
       preview?.kind === 'sandbox'
         ? []
         : await buildNativeMediaParts({
+            organizationId: tenantId,
             messages: effectiveContext.messages,
             provider: agentConfig?.provider ?? 'anthropic',
             model: agentConfig?.model ?? '',
