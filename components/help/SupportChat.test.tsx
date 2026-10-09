@@ -26,7 +26,7 @@ it("carrega o histórico antes de liberar a digitação e preserva a pergunta no
     .mockResolvedValueOnce(history());
   vi.stubGlobal("fetch", fetchMock);
   render(<SupportChat />);
-  fireEvent.click(screen.getByRole("button", { name: "Suporte", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Suporte" }));
   // A abertura já bloqueia o campo: não há intervalo em que um rascunho
   // possa entrar antes do carregamento e desaparecer no próximo render.
   expect(screen.getByLabelText("Sua pergunta")).toBeDisabled();
