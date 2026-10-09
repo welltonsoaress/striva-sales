@@ -9,6 +9,68 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+## [2.0.0] — 2026-10-09
+
+### ⚠️ Requer atenção
+
+- **Ativação simples, contratação acompanhada e credenciais reservadas à plataforma** Aplicar a migration 0253 e publicar app, workers e scheduler compatíveis. Credenciais de IA passam a ser alteradas somente por administradores completos da plataforma, também para empresas legadas; credenciais e agentes existentes são preservados. Conferir permissões, MFA, Resend e SMTP de autenticação antes de liberar cadastros públicos. Configurar o retorno financeiro em `/pagamento/retorno` e homologar os eventos reais antes de habilitar as seis ofertas. O endereço sslip.io não permite cadastrar os registros de verificação do remetente.
+
+### Adicionado
+
+- **Créditos comerciais e campanha para clínicas** Nova régua de dez créditos por mensagem completa, teste de sete dias ou mil créditos, reservas com franquia e extras e preservação das condições anteriores. Pacote de mil créditos por R$49,99 preparado em rascunho, com publicação administrativa auditada após homologação da oferta.
+
+  Página pública `/clinicas`, cadastro com sugestão editável do segmento e coleta clínica mínima. Planos exibem equivalente mensal e total do semestre ou ano; consumo e avisos usam créditos. Sem implantação, venda real ou alteração de agentes em produção.
+
+  O faturamento renova o ciclo antes de consultar o consumo, evitando misturar saldo novo e histórico do mês anterior. A identificação dos planos consulta somente os checkouts dos contratos exibidos, preservando o vínculo em empresas com histórico longo.
+
+- **Página inicial, primeiros passos, manual e suporte com histórico** A página Início reúne boas-vindas, dados da área de trabalho e o progresso da configuração. Agora é possível configurar depois e retomar as etapas sem marcá-las como concluídas.
+
+  O manual e o botão Suporte oferecem orientações e encaminhamento para a equipe da plataforma. Administradores da plataforma acompanham e respondem aos chamados em Suporte. O perfil permite selecionar um avatar ou enviar uma foto privada.
+
+  O assistente de gestão reconhece ajuda e relatórios diário/semanal por comandos diretos, com as medidas existentes da operação.
+
+  O comando de casos pendentes apresenta o que aguarda decisão humana. Uma orientação confirmada do gestor retoma a IA pelo fluxo de Casos, com gravação atômica e proteção contra versões concorrentes.
+
+  A landing e Faturamento apresentam Básico, Pro recomendado e Empresarial, com seis ofertas Hotmart semestrais/anuais. Os totais do período acompanham o valor mensal equivalente e a economia anual. Administração → Planos comerciais permite ajustar limites iniciais e condições. Checkout real continua desligado.
+
+  A página comercial `/planos` e a landing compartilham o catálogo. A preparação Hotmart inclui cadastro da oferta, referência de checkout vinculada à empresa, webhook idempotente, histórico e fila de eventos para conferência. Cobrança real nasce desligada e aguarda homologação completa; o caminho legado conserva seu comportamento. A régua comercial vigente para novos contratos usa dez créditos por mensagem completa do agente, mesmo dividida em vários envios, preservando as condições e os recibos anteriores. Venda de extras permanece desativada.
+
+  As telas novas, o manual e as etapas acompanham o idioma do perfil. A edição dos planos preserva os ajustes quando o salvamento falha, permitindo corrigir e tentar novamente.
+
+  Faturamento mostra créditos consumidos e disponíveis, renovação e últimos registros. A quantidade de mensagens permanece uma métrica separada; fila, falhas definitivas e reenvios não geram novos débitos. Recibos anteriores conservam sua régua histórica. Cancelamentos de assinatura recebidos da Hotmart atualizam o contrato sem apagar pagamentos e preservam o período já pago.
+
+  A Edge Function `handle-payment-webhook` usa o mesmo receptor e os mesmos processadores do Next, com segredo de cabeçalho, vínculo confiável e confirmação transacional. O empacotamento parte dos módulos canônicos, sem cópia de regras mantida à mão.
+
+  A revisão protege o vínculo financeiro contra reutilização da mesma transação em outro contrato. No suporte, mensagens e mudanças de estado são gravadas juntas; repetir o pedido de atendimento ou encerramento não duplica a ação. Respostas atrasadas da IA são descartadas quando uma pessoa já assumiu ou encerrou o chamado.
+
+  Os modelos de confirmação de e-mail e recuperação de senha foram reorganizados com cabeçalho da marca, botão destacado, orientações claras e versão adaptada ao celular. Os links de autenticação são preservados. A aplicação destes modelos no Supabase e a configuração do remetente dependem da etapa posterior de publicação.
+
+- **IA incluída e operação SaaS com configuração inicial por negócio** IA incluída para novos clientes, com teste ativado após confirmação de e-mail e WhatsApp, reserva transacional de créditos e controle de período contratado. Organizações existentes conservam o modo legado até migração administrativa.
+
+  Onboarding por segmento prepara atendimento e organizador, com agenda opcional baseada em disponibilidade real. O admin reúne empresas de todas as origens, saldo, consumo, custos conhecidos/desconhecidos, pagamentos e ações auditadas. Dashboard e primeiros passos usam cores de estado e movimento com redução de animação.
+
+  Migrations 0248 a 0250 e baseline acompanham a implementação, incluindo a restrição de gravações no Storage após o período contratado e o escopo da RPC auxiliar. A publicação dos artefatos não habilita a cobrança real: as ofertas precisam de configuração comercial e homologação. Pacotes extras permanecem indisponíveis. Consulte `docs/specs/saas-ia-incluida.md` para regras e limites da verificação.
+
+  Leituras e remoções de arquivos privados conferem também a empresa proprietária do objeto. Um caminho adulterado em contato, mensagem ou fonte de conhecimento não permite assinar, baixar ou apagar arquivos de outra empresa.
+
+### Alterado
+
+- **Ativação simples, contratação acompanhada e credenciais reservadas à plataforma** Novos clientes recebem navegação simples, preservam o plano escolhido no cadastro e podem conectar o Google Agenda durante a preparação do agente. O fim do teste apresenta contratação sem botão de fechar; faturamento, ajuda, privacidade e segurança continuam acessíveis. Apenas pagamento confirmado pelo servidor libera o atendimento.
+
+  Início é a entrada padrão. Quem personalizou as áreas do vínculo continua entrando pela primeira área de trabalho escolhida, com Início e Ajuda disponíveis para orientação e recuperação. A troca de empresa também resolve essa entrada no servidor. O suporte carrega o histórico antes de liberar a digitação, preservando o envio da pergunta.
+
+  Troca, cancelamento e renovação podem ser solicitados no faturamento e chegam ao suporte humano. A plataforma confirma a oferta e envia uma proposta; uma nova recorrência exige cancelamento confirmado da anterior. Créditos extras permanecem indisponíveis. Avisos antecipados têm fila durável, deduplicação e falhas visíveis no financeiro administrativo.
+
+### Corrigido
+
+- **Dependências atualizadas para corrigir os avisos de segurança da publicação** O Next.js recebe as correções de segurança 16.3.8 e o SDK de MCP recebe a correção de OAuth. Os pisos das dependências transitivas de URI, endereços IP, expansão de padrões, HTTP e mapas de código também foram atualizados, preservando as versões principais de cada árvore. A atualização acompanha o lockfile e as imagens construídas pelo CI; não exige configuração nova na instalação.
+
+  O contexto Docker também exclui a pasta de backups e evidências privadas da sessão, além das credenciais de testes e do estado local do Supabase. Essa exclusão protege construções locais; as imagens publicadas pelo CI são construídas a partir do checkout versionado.
+
+- **Créditos e acesso respeitados também nas automações** Automações de mensagens usam a mesma reserva de dez créditos do atendimento e preservam a identidade em repetição. Timeout e envio interrompido mantêm o saldo reservado para conferência; a recuperação não gera um segundo envio. Comandos pelo WhatsApp e automações de CRM respeitam o período contratado, mantendo o atendimento humano quando só os créditos acabam.
+
+  O organizador conserva suas instruções ao salvar e restaurar agentes; versões publicadas continuam imutáveis. A retomada do cadastro conserva a descrição e o fuso da empresa, o dashboard reconhece os três passos da ativação gerenciada e o admin permite conferir novamente eventos financeiros com falha. Recibos novos identificam a origem do custo e a régua dos ajustes; registros históricos são preservados.
+
 ## [1.2.0] — 2026-09-30
 
 ### Adicionado
@@ -77,7 +139,8 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 <!-- release-base: 0.0.0 -->
 
-[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.2.0...HEAD
+[Não lançado]: https://github.com/welltonsoaress/striva-sales/compare/striva-v2.0.0...HEAD
+[2.0.0]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.2.0...striva-v2.0.0
 [1.2.0]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.1...striva-v1.2.0
 [1.1.1]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.1.0...striva-v1.1.1
 [1.1.0]: https://github.com/welltonsoaress/striva-sales/compare/striva-v1.0.2...striva-v1.1.0
