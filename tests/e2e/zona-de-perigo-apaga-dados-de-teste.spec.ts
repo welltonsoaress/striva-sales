@@ -108,14 +108,24 @@ async function entrar(page: Page, email: string, senha: string) {
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(senha);
   await page.getByRole("button", { name: /entrar/i }).click();
-  await page.waitForURL(/\/app(\/|$)/, { timeout: 30_000 });
+  await page.waitForURL("**/app/inicio", { timeout: 30_000 });
 }
 
 async function trocarPara(page: Page, orgId: string) {
   const seletor = page.getByTestId("tenant-switcher");
   await expect(seletor).toBeVisible({ timeout: 20_000 });
   await seletor.click();
-  await page.getByTestId(`tenant-switcher-item-${orgId}`).click();
+  const destination = page.getByTestId(`tenant-switcher-item-${orgId}`);
+  if ((await destination.innerText()).trim().endsWith("✓")) {
+    await page.keyboard.press("Escape");
+    return;
+  }
+  // A action pode remontar o seletor antes da navegação completa. Habilitado
+  // não comprova que o novo documento terminou: aguarda também a home final.
+  const navigation = page.waitForNavigation({ waitUntil: "load" });
+  await destination.click();
+  await navigation;
+  await page.waitForURL("**/app/inicio", { waitUntil: "load" });
   await expect(seletor).toBeEnabled({ timeout: 60_000 });
 }
 
