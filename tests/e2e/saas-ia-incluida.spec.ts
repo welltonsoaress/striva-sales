@@ -686,7 +686,7 @@ test("jornada comercial: Google opcional, plano preservado e paywall sem escape"
   });
   expect(credentials.status()).toBe(403);
   await wall.getByRole("link", { name: "Ver planos anuais e pagamentos" }).click();
-  await expect(page.getByRole("heading", { name: "Faturamento", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Meu plano", exact: true })).toBeVisible();
   await expect(page.locator("#creditos-extras").getByText(/indisponível no momento/)).toBeVisible();
   await page.goto("/pagamento/retorno");
   await page.waitForURL(/\/app\/settings\/billing\?payment=return/);

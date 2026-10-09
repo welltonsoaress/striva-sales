@@ -143,21 +143,21 @@ for (const role of ["manager", "admin"]) test(`${role}: destinos conforme papel 
   test.setTimeout(120_000); await login(page, role); await central(page);
   await expect(row(page, "Conversa outro atendente").getByRole("link")).toBeVisible();
   await expect(row(page, "Conversa outra organização").getByRole("link")).toHaveCount(0);
-  await row(page, "Orçamento para revisar").getByRole("link", { name: "Abrir uso de IA" }).click();
-  await expect(page).toHaveURL(/\/app\/ai\/usage/);
-  await expect(page.getByRole("heading", { name: /Uso de IA|Uso e custos/i }).first()).toBeVisible();
-  await page.goBack(); await expect(row(page, "Conexão para revisar")).toBeVisible();
   if (role === "manager") {
+    await expect(row(page, "Orçamento para revisar").getByRole("link")).toHaveCount(0);
     await expect(row(page, "Conexão para revisar").getByRole("link")).toHaveCount(0);
     await expect(row(page, "Modelo do canal mudou").getByRole("link")).toHaveCount(0);
   } else {
+    await row(page, "Orçamento para revisar").getByRole("link", { name: "Meu plano" }).click();
+    await expect(page).toHaveURL(/\/app\/settings\/billing/);
+    await expect(page.getByRole("heading", { name: "Meu plano", exact: true })).toBeVisible();
+    await page.goBack(); await expect(row(page, "Conexão para revisar")).toBeVisible();
     await row(page, "Conexão para revisar").getByRole("link").click();
     await expect(page).toHaveURL(/\/app\/connections/);
     await expect(page.getByRole("heading", { name: /Conexões/ }).first()).toBeVisible();
     await page.goBack();
-    await row(page, "Modelo do canal mudou").getByRole("link").click();
-    await expect(page).toHaveURL(/aba=parceiro&sub=templates/);
-    await expect(page.getByRole("heading", { name: /Conexões/ }).first()).toBeVisible();
+    await expect(row(page, "Modelo do canal mudou").getByRole("link")).toHaveCount(0);
+    await expect(row(page, "Modelo do canal mudou")).toContainText("Peça à equipe da plataforma");
   }
 });
 test("viewer continua sem acesso à API Central e bearer não autentica", async ({ page, playwright }) => {

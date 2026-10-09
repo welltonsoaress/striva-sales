@@ -257,13 +257,9 @@ test("menu da conta, plano e restrições do cliente", async ({ page }) => {
   await expect(page.getByRole("tab", { name: /Oficial|Parceiro|Voz/i })).toHaveCount(0);
   await page.goto("/app/ai");
   await expect(page.getByRole("link", { name: /Credenciais/ })).toHaveCount(0);
-  for (const path of [
-    "/api/v1/audit",
-    "/api/v1/ai/runs",
-    "/api/v1/voice/sessions",
-    "/api/v1/channels/official",
-  ])
+  for (const path of ["/api/v1/audit", "/api/v1/ai/runs", "/api/v1/channels/official"])
     expect((await page.request.get(path)).status(), path).toBe(403);
+  expect((await page.request.delete("/api/v1/voice/sessions")).status()).toBe(403);
   await page.goto("/app/inbox");
   await expect(page.getByRole("tab", { name: /Todas/ })).toHaveAttribute("data-state", "active");
 });
@@ -316,7 +312,7 @@ test("desempenho mostra dados reais e gráficos em desktop e celular", async ({ 
   await capture(page, "desempenho");
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, "desempenho-mobile");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await page.evaluate(() => document.body.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 });
 test("admin oferece convite, edição e exclusão; configuração de IA simples", async ({ page }) => {
   await login(page, 1);

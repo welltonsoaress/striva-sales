@@ -1,5 +1,11 @@
 /** Conta, operação da plataforma e inteligência comercial. */
 export const TEXTOS_EXPERIENCIA_SAAS: Record<string, { es: string }> = {
+  "Peça à equipe da plataforma para revisar este serviço.": {
+    es: "Pide al equipo de la plataforma que revise este servicio.",
+  },
+  "Seus números de WhatsApp: conexão por QR code, estado e reconexão.": {
+    es: "Tus números de WhatsApp: conexión mediante código QR, estado y reconexión.",
+  },
   "Carregar mais empresas": { es: "Cargar más empresas" },
   "Conecte seu WhatsApp pelo QR code e acompanhe o estado da conexão.": {
     es: "Conecta tu WhatsApp mediante el código QR y sigue el estado de la conexión.",

@@ -28,12 +28,15 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { catalogoEntregueAoOperador } from "@/lib/agent-engine/agent/entrega-de-capacidade";
+import { createClient } from "@supabase/supabase-js";
+import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 const APP_URL = `http://localhost:${process.env.E2E_PORT ?? "3001"}`;
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const SAIDA = path.join(process.cwd(), "evidence", "ia-360-w4");
 
 interface Creds {
+  org_id: string;
   password: string;
   users: Record<string, { email: string }>;
   admin_totp?: { factor_id: string; secret: string };
@@ -49,6 +52,96 @@ function loadCreds(): Creds {
 
 const creds = loadCreds();
 const ts = Date.now();
+let conexaoSemeada: { agentId: string; versionId: string; createdAgent: boolean } | null = null;
+
+/** A conexão herdada precisa existir antes de a API do tenant criar a versão.
+ * Prepara apenas o banco local de QA; preserva qualquer conexão já cadastrada. */
+async function prepararConexaoDeTeste(
+  credentialId: string,
+  canalId: string,
+  provider: string,
+  model: string,
+) {
+  const c = credenciaisSupabaseDeTeste();
+  if (!["localhost", "127.0.0.1"].includes(new URL(c.url).hostname))
+    throw Error("Esta fixture exige Supabase local.");
+  const db = createClient(c.url, c.serviceRole, { auth: { persistSession: false } });
+  const { data: existing, error } = await db
+    .from("ai_agents")
+    .select("id,published_version_id")
+    .eq("organization_id", creds.org_id)
+    .eq("kind", "mcp_agent")
+    .is("archived_at", null)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  let agentId = existing?.id;
+  if (agentId) {
+    let versions = db
+      .from("ai_agent_versions")
+      .select("id")
+      .eq("organization_id", creds.org_id)
+      .eq("agent_id", agentId);
+    if (existing?.published_version_id) versions = versions.eq("id", existing.published_version_id);
+    const current = await versions.limit(1).maybeSingle();
+    if (current.error) throw current.error;
+    if (current.data) return;
+  }
+  if (!agentId) {
+    const added = await db
+      .from("ai_agents")
+      .insert({
+        organization_id: creds.org_id,
+        kind: "mcp_agent",
+        name: `Conexão QA ${ts}`,
+        system_prompt: PROMPT,
+        model,
+      })
+      .select("id")
+      .single();
+    if (added.error) throw added.error;
+    agentId = added.data.id;
+  }
+  const version = await db
+    .from("ai_agent_versions")
+    .insert({
+      organization_id: creds.org_id,
+      agent_id: agentId,
+      version_number: 1,
+      provider,
+      model,
+      credential_id: credentialId,
+      channel_session_id: canalId,
+      system_prompt: PROMPT,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (version.error) throw version.error;
+  conexaoSemeada = { agentId, versionId: version.data.id, createdAgent: !existing };
+}
+
+test.afterAll(async () => {
+  if (!conexaoSemeada) return;
+  const c = credenciaisSupabaseDeTeste();
+  const db = createClient(c.url, c.serviceRole, { auth: { persistSession: false } });
+  const removed = await db
+    .from("ai_agent_versions")
+    .delete()
+    .eq("id", conexaoSemeada.versionId)
+    .eq("organization_id", creds.org_id);
+  if (removed.error) throw removed.error;
+  if (conexaoSemeada.createdAgent) {
+    const agent = await db
+      .from("ai_agents")
+      .delete()
+      .eq("id", conexaoSemeada.agentId)
+      .eq("organization_id", creds.org_id);
+    if (agent.error) throw agent.error;
+  }
+});
 
 // ── Precondição de identidade ────────────────────────────────────────────────
 // Esta spec dirige o agente como um ADMIN DE TENANT, o usuário compartilhado que
@@ -352,6 +445,7 @@ async function versaoComAsCapacidades(req: APIRequestContext, agenteId: string):
   const validada = existentes.data?.find((c) => c.provider === provider && c.validated_at);
   if (validada) {
     console.info(`[QA] reusando credencial ${provider} já validada`);
+    await prepararConexaoDeTeste(validada.id, canalId, provider, modelo);
     return criarVersao(req, agenteId, validada.id, canalId, provider, modelo);
   }
 
@@ -384,6 +478,7 @@ async function versaoComAsCapacidades(req: APIRequestContext, agenteId: string):
   }
   if (!credentialId) throw new Error("sem credencial de LLM");
 
+  await prepararConexaoDeTeste(credentialId, canalId, provider, modelo);
   return criarVersao(req, agenteId, credentialId, canalId, provider, modelo);
 }
 
@@ -520,7 +615,9 @@ test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
        * crm_list_pipelines" de "não chamou nada" não serve à pergunta que este spec faz.
        */
       const nomes = chamadas.flatMap((passo) => {
-        const doPasso = Array.isArray(passo.tool_calls) ? (passo.tool_calls as Array<Record<string, unknown>>) : [];
+        const doPasso = Array.isArray(passo.tool_calls)
+          ? (passo.tool_calls as Array<Record<string, unknown>>)
+          : [];
         return doPasso.map((c) => String(c.tool_name ?? c.tool ?? c.name ?? c.toolName ?? "?"));
       });
 
@@ -622,9 +719,7 @@ test.describe("QA — o agente usa as mãos que a W4 entregou?", () => {
     fs.writeFileSync(
       path.join(
         SAIDA,
-        cenariosQueMediram > 0
-          ? "qa-turnos-do-agente.md"
-          : "qa-turnos-do-agente__sem-resposta.md",
+        cenariosQueMediram > 0 ? "qa-turnos-do-agente.md" : "qa-turnos-do-agente__sem-resposta.md",
       ),
       `# QA — o agente usando as capacidades da W4\n\n` +
         `Modelo real, dry-run, pelo endpoint do botão "Executar teste".\n\n` +

@@ -29,9 +29,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { org } = authz;
 
-  const parsed = querySchema.safeParse(
-    Object.fromEntries(new URL(req.url).searchParams.entries()),
-  );
+  const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
   if (!parsed.success) {
     return fail("validation_failed", t("Query inválida."), 422, {
       requestId,
@@ -61,6 +59,12 @@ export async function GET(req: NextRequest): Promise<Response> {
     .eq("organization_id", org.orgId)
     .eq("status", "open");
 
-  const items = await resolverDestinosDosAvisos(await createClient(), org.orgId, org.role, data ?? []);
+  const items = await resolverDestinosDosAvisos(
+    await createClient(),
+    org.orgId,
+    org.role,
+    data ?? [],
+    authz.user.is_platform_admin && !authz.user.support,
+  );
   return ok({ items, open_count: openCount ?? 0 }, { requestId });
 }

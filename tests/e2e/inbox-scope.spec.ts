@@ -1,6 +1,6 @@
 /**
  * G4-02 — Inbox com escopo (acceptance 1, 3, 4). Smoke com 2 papéis reais do seed:
- *  - agent (org em modo default own_and_unassigned): NÃO vê a visão 'Todas';
+ *  - agent (org em modo default own_and_unassigned): abre Todas sob o mesmo escopo RLS;
  *  - manager: vê 'Todas' (org-wide read).
  * + deep-link para conversa fora do escopo → estado vazio claro, sem stack trace.
  *
@@ -29,20 +29,26 @@ async function login(page: Page, email: string): Promise<void> {
 }
 
 test.describe("G4-02 — inbox com escopo", () => {
-  test("agent em modo own*: vê Minhas e Fila, NÃO vê Todas", async ({ page }) => {
+  test("agent em modo own*: abre Todas e mantém Minhas e Fila", async ({ page }) => {
     await login(page, creds.users.agent!.email);
     await page.goto("/app/inbox");
     await expect(page.getByRole("tab", { name: /Minhas/ })).toBeVisible();
     await expect(page.getByRole("tab", { name: /Fila/ })).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Todas/ })).toHaveCount(0);
-    await page.screenshot({ path: path.join(EVIDENCE, "G4-02-inbox-scope-agent.png"), fullPage: true });
+    await expect(page.getByRole("tab", { name: /Todas/ })).toHaveAttribute("data-state", "active");
+    await page.screenshot({
+      path: path.join(EVIDENCE, "G4-02-inbox-scope-agent.png"),
+      fullPage: true,
+    });
   });
 
   test("manager: vê a visão Todas", async ({ page }) => {
     await login(page, creds.users.manager!.email);
     await page.goto("/app/inbox");
     await expect(page.getByRole("tab", { name: /Todas/ })).toBeVisible();
-    await page.screenshot({ path: path.join(EVIDENCE, "G4-02-inbox-scope-manager.png"), fullPage: true });
+    await page.screenshot({
+      path: path.join(EVIDENCE, "G4-02-inbox-scope-manager.png"),
+      fullPage: true,
+    });
   });
 
   test("deep-link para conversa fora do escopo → estado vazio claro (sem stack trace)", async ({

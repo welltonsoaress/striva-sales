@@ -90,13 +90,7 @@ test.describe("navegação agrupada", () => {
     // Organização não aparece como título aqui: seu hub (Configurações) vive no
     // rodapé fixo — ver o teste de dobra abaixo.
     const titulos = sidebar(page).getByRole("heading");
-    await expect(titulos).toHaveText([
-      "Atendimento",
-      "CRM",
-      "Agente de IA",
-      "Canais",
-      "Análise",
-    ]);
+    await expect(titulos).toHaveText(["Atendimento", "CRM", "Agente de IA", "Canais", "Análise"]);
 
     await page.screenshot({
       path: path.join(EVIDENCE, "nav-sidebar-agrupado.png"),
@@ -171,26 +165,20 @@ test.describe("navegação agrupada", () => {
     await page.waitForURL(/knowledge\/sources/);
   });
 
-  /**
-   * O canal oficial saiu de Configurações no PR #105 e virou aba de Conexões.
-   * A porta, portanto, é Conexões — que agora vive no grupo CANAIS do sidebar,
-   * e não mais como um card perdido em Configurações.
-   */
-  test("chega ao canal oficial pelo grupo Canais, não por Configurações", async ({ page }) => {
+  test("chega à conexão por QR pelo grupo Canais", async ({ page }) => {
     await loginAdmin(page);
 
     await sidebar(page).getByRole("link", { name: "Conexões" }).click();
     await page.waitForURL(/\/app\/connections/);
-    await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Conexões", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /oficial|parceiro|voz/i })).toHaveCount(0);
   });
 
-  test("o ⌘K acha o canal oficial por nome, mesmo sem tela própria", async ({ page }) => {
+  test("o ⌘K acha a conexão por QR code", async ({ page }) => {
     await loginAdmin(page);
 
-    // Ninguém procura por "Conexões" quando quer o número oficial da Meta —
-    // procura por "oficial". A busca varre a descrição além do rótulo.
     await page.keyboard.press("ControlOrMeta+k");
-    await page.getByRole("combobox").fill("oficial");
+    await page.getByRole("combobox").fill("QR code");
     await expect(page.getByRole("option", { name: /Conexões/ })).toBeVisible();
   });
 
@@ -244,7 +232,10 @@ test.describe("navegação agrupada", () => {
     test("em 390px, o sidebar vira gaveta e não cria overflow horizontal", async ({ page }) => {
       await loginAdmin(page);
 
-      await expect(sidebar(page), "o sidebar desktop fica fora da árvore acessível no mobile").toHaveCount(0);
+      await expect(
+        sidebar(page),
+        "o sidebar desktop fica fora da árvore acessível no mobile",
+      ).toHaveCount(0);
       await expectSemOverflowHorizontal(page, "shell mobile após login");
 
       await page.getByRole("button", { name: "Abrir navegação" }).click();

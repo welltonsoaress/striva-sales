@@ -161,11 +161,14 @@ it("acesso direto do tenant não escolhe outro modelo ou organizador", async () 
     [version, org, agent],
   );
   await expect(
-    db.query("update ai_agent_versions set status='published' where organization_id=$1 and id=$2", [
-      org,
-      version,
-    ]),
-  ).rejects.toMatchObject({ code: "23514" });
+    db.query(
+      "update ai_agent_versions set status='published',published_at=now() where organization_id=$1 and id=$2",
+      [org, version],
+    ),
+  ).rejects.toMatchObject({
+    code: "23514",
+    constraint: "ai_agent_versions_channel_required_when_published",
+  });
   await expect(
     asUser(
       owner,

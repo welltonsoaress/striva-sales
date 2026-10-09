@@ -106,6 +106,7 @@ function semPermissao(minimo: Role): DestinoDoAviso {
  */
 export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
   leitor: SupabaseClient, organizationId: string, papel: Role, itens: T[],
+  acessoTecnico = false,
 ): Promise<Array<T & { destination: DestinoDoAviso }>> {
   const grupos = new Map<string, Set<string>>();
   for (const item of itens) {
@@ -146,7 +147,9 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
     const p = politica(item);
     let destination: DestinoDoAviso = SEM_DESTINO;
     if (p) {
-      if (item.ref_kind === null && item.ref_id === null) {
+      if (!acessoTecnico && ["midia_nao_lida", "channel_template_review"].includes(item.kind)) {
+        destination = { estado: "sem_destino", orientacao: "Peça à equipe da plataforma para revisar este serviço." };
+      } else if (item.ref_kind === null && item.ref_id === null) {
         destination = p.geral
           ? permite(papel, p.geral.papel) ? { estado: "disponivel", href: p.geral.href, rotulo: p.geral.rotulo, orientacao: p.orientacao } : semPermissao(p.geral.papel)
           : { estado: "sem_destino", orientacao: p.orientacao };
@@ -162,8 +165,8 @@ export async function resolverDestinosDosAvisos<T extends ReferenciaDoAviso>(
         } else if (item.ref_kind === "ai_budget" || item.ref_kind === "organization") {
           destination = item.ref_id !== organizationId ? INDISPONIVEL
             : item.kind === "contact_proposal_expired" ? { estado: "sem_destino", orientacao: p.orientacao }
-            : !permite(papel, item.ref_kind === "ai_budget" ? "manager" : "agent") ? semPermissao("manager")
-            : { estado: "disponivel", href: item.ref_kind === "ai_budget" ? "/app/ai/usage" : "/app/radar", rotulo: item.ref_kind === "ai_budget" ? "Abrir uso de IA" : "Abrir Radar" };
+            : !permite(papel, item.ref_kind === "ai_budget" ? acessoTecnico ? "manager" : "admin" : "agent") ? semPermissao("admin")
+            : { estado: "disponivel", href: item.ref_kind === "ai_budget" ? acessoTecnico ? "/app/ai/usage" : "/app/settings/billing" : "/app/radar", rotulo: item.ref_kind === "ai_budget" ? acessoTecnico ? "Abrir uso de IA" : "Meu plano" : "Abrir Radar" };
         } else destination = { estado: "sem_destino", orientacao: p.orientacao };
       }
     }
