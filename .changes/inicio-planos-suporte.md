@@ -14,11 +14,11 @@ O comando de casos pendentes apresenta o que aguarda decisão humana. Uma orient
 
 A landing e Faturamento apresentam Básico, Pro recomendado e Empresarial, com seis ofertas Hotmart semestrais/anuais. Os totais do período acompanham o valor mensal equivalente e a economia anual. Administração → Planos comerciais permite ajustar limites iniciais e condições. Checkout real continua desligado.
 
-A página comercial `/planos` e a landing compartilham o catálogo. A preparação Hotmart inclui cadastro da oferta, referência de checkout vinculada à empresa, webhook idempotente, histórico e fila de eventos para conferência. Cobrança real nasce desligada e aguarda homologação completa; o caminho legado conserva seu comportamento. A extensão SaaS 0248 aplica permissões e saldo às organizações gerenciadas; uma resposta lógica inteira equivale a um crédito. Venda de extras permanece desativada.
+A página comercial `/planos` e a landing compartilham o catálogo. A preparação Hotmart inclui cadastro da oferta, referência de checkout vinculada à empresa, webhook idempotente, histórico e fila de eventos para conferência. Cobrança real nasce desligada e aguarda homologação completa; o caminho legado conserva seu comportamento. A régua comercial vigente para novos contratos usa dez créditos por mensagem completa do agente, mesmo dividida em vários envios, preservando as condições e os recibos anteriores. Venda de extras permanece desativada.
 
 As telas novas, o manual e as etapas acompanham o idioma do perfil. A edição dos planos preserva os ajustes quando o salvamento falha, permitindo corrigir e tentar novamente.
 
-Faturamento mostra a contagem de respostas da IA enviadas neste mês e os últimos registros, sem contar fila, falhas ou duplicações de confirmação. A medida começa nesta atualização e preserva a régua histórica por mensagem. O modo gerenciado tem saldo separado e débito por resposta lógica. Cancelamentos de assinatura recebidos da Hotmart atualizam o contrato sem apagar pagamentos nem bloquear acesso automaticamente.
+Faturamento mostra créditos consumidos e disponíveis, renovação e últimos registros. A quantidade de mensagens permanece uma métrica separada; fila, falhas definitivas e reenvios não geram novos débitos. Recibos anteriores conservam sua régua histórica. Cancelamentos de assinatura recebidos da Hotmart atualizam o contrato sem apagar pagamentos e preservam o período já pago.
 
 A Edge Function `handle-payment-webhook` usa o mesmo receptor e os mesmos processadores do Next, com segredo de cabeçalho, vínculo confiável e confirmação transacional. O empacotamento parte dos módulos canônicos, sem cópia de regras mantida à mão.
 
