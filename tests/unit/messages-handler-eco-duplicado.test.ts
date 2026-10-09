@@ -76,8 +76,9 @@ function makeSupabase(preexistentes: Row[] = []) {
 
   const from = (table: string) => {
     if (table === 'conversations') {
+      const query = {eq: () => query, maybeSingle: async () => ({ data: conversationRow(), error: null })};
       return {
-        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: conversationRow(), error: null }) }) }),
+        select: () => query,
         update: () => ({ eq: async () => ({ error: null }) }),
       };
     }

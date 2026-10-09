@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { AVATAR_IDS } from "@/lib/profile/avatars";
+import { BUSINESS_SEGMENTS } from "@/lib/onboarding/business-templates";
 
 export const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -22,6 +24,8 @@ export const organizationNameSchema = z
 export const signupSchema = z
   .object({
     org_name: organizationNameSchema,
+    business_segment: z.enum(BUSINESS_SEGMENTS).optional(),
+    avatar_id: z.enum(AVATAR_IDS).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),
@@ -56,6 +60,7 @@ export const signupComConviteSchema = z
      * inventar o próprio remendo para a ausência.
      */
     full_name: z.string().trim().min(2, "Informe seu nome").max(120),
+    avatar_id: z.enum(AVATAR_IDS).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),

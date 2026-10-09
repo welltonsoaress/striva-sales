@@ -62,7 +62,10 @@ vi.mock("@/lib/auth/server", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso() }));
 
-import { createDefaultAgent, type CreateAgentResult } from "@/app/actions/onboarding/createDefaultAgent";
+import {
+  createDefaultAgent,
+  type CreateAgentResult,
+} from "@/app/actions/onboarding/createDefaultAgent";
 
 /**
  * Construtor de consulta no formato do PostgREST: encadeável, thenable, e com
@@ -126,8 +129,7 @@ function clienteFalso() {
   };
   return {
     from: abrir,
-    rpc: (nome: string, args: Record<string, unknown>) =>
-      Promise.resolve(responderRpc(nome, args)),
+    rpc: (nome: string, args: Record<string, unknown>) => Promise.resolve(responderRpc(nome, args)),
   } as never;
 }
 
@@ -219,10 +221,7 @@ function montarBanco(mundo: Mundo = {}): Estado {
         v.organization_id === args.p_org_id,
     );
     if (!versao) return { data: null, error: { message: "version_not_found" } };
-    if (
-      args.p_expected_provenance &&
-      versao.provisioning_origin !== args.p_expected_provenance
-    ) {
+    if (args.p_expected_provenance && versao.provisioning_origin !== args.p_expected_provenance) {
       return { data: null, error: { message: "existing_version_requires_review" } };
     }
     const agente = estado.agentes.find(
@@ -233,12 +232,14 @@ function montarBanco(mundo: Mundo = {}): Estado {
     versao.status = "published";
     agente.published_version_id = versao.id;
     return {
-      data: [{
-        agent_id: agente.id,
-        version_id: versao.id,
-        previous_version_id: anterior,
-        published_at: "2026-09-06T12:00:00.000Z",
-      }],
+      data: [
+        {
+          agent_id: agente.id,
+          version_id: versao.id,
+          previous_version_id: anterior,
+          published_at: "2026-09-06T12:00:00.000Z",
+        },
+      ],
       error: null,
     };
   };
@@ -254,6 +255,12 @@ function montarBanco(mundo: Mundo = {}): Estado {
   }
 
   responder = (c) => {
+    // Estes cenários preservam o onboarding legado da instalação existente.
+    // A leitura continua passando pela guarda comercial real, com escopo.
+    if (c.table === "organization_ai_accounts") {
+      expect(c.filtros.organization_id).toBe(ORG);
+      return { data: { mode: "legacy", state: "pending", access_until: null }, error: null };
+    }
     if (c.table === "channel_sessions") return canais;
     if (c.table === "ai_models") {
       // Consciente do filtro: antes respondia o MESMO modelo para qualquer
@@ -283,25 +290,35 @@ function montarBanco(mundo: Mundo = {}): Estado {
 
     if (c.table === "ai_agents") {
       if (c.op === "insert") {
-        const linha = { id: `agente-${estado.agentes.length + 1}`, published_version_id: null, ...c.payload };
+        const linha = {
+          id: `agente-${estado.agentes.length + 1}`,
+          published_version_id: null,
+          ...c.payload,
+        };
         estado.agentes.push(linha);
         return { data: { id: linha.id, published_version_id: null }, error: null };
       }
       // `is_default` no filtro = a busca pelo agente padrão da org (reaproveitar).
       const alvo =
         c.filtros.is_default === true
-          ? estado.agentes.find((a) => a.is_default === true && a.organization_id === c.filtros.organization_id)
+          ? estado.agentes.find(
+              (a) => a.is_default === true && a.organization_id === c.filtros.organization_id,
+            )
           : estado.agentes.find((a) => a.id === c.filtros.id);
       if (!alvo) return { data: null, error: null };
       if (c.op === "update") Object.assign(alvo, c.payload);
-      return { data: { id: alvo.id, published_version_id: alvo.published_version_id ?? null }, error: null };
+      return {
+        data: { id: alvo.id, published_version_id: alvo.published_version_id ?? null },
+        error: null,
+      };
     }
 
     if (c.table === "ai_agent_versions") {
       if (c.op === "insert") {
         if (mundo.erroVersao) return { data: null, error: mundo.erroVersao };
         const colide = estado.versoes.some(
-          (v) => v.agent_id === c.payload?.agent_id && v.version_number === c.payload?.version_number,
+          (v) =>
+            v.agent_id === c.payload?.agent_id && v.version_number === c.payload?.version_number,
         );
         // `ai_agent_versions_unique_number UNIQUE (agent_id, version_number)`.
         if (colide) {
@@ -309,7 +326,8 @@ function montarBanco(mundo: Mundo = {}): Estado {
             data: null,
             error: {
               code: "23505",
-              message: 'duplicate key value violates unique constraint "ai_agent_versions_unique_number"',
+              message:
+                'duplicate key value violates unique constraint "ai_agent_versions_unique_number"',
             },
           };
         }
@@ -345,7 +363,10 @@ function montarBanco(mundo: Mundo = {}): Estado {
         if (mundo.erroSettings) return { data: null, error: mundo.erroSettings };
         return { data: { settings: mundo.settings ?? null }, error: null };
       }
-      return { data: { onboarding_state: estado.onboardingState, onboarded_at: null }, error: null };
+      return {
+        data: { onboarding_state: estado.onboardingState, onboarded_at: null },
+        error: null,
+      };
     }
 
     if (c.table === "org_memory_versions") {
@@ -367,8 +388,6 @@ function montarBanco(mundo: Mundo = {}): Estado {
       estado.ponteiroDaMemoria = String((c.payload as { version_id?: unknown })?.version_id ?? "");
       return { data: null, error: null };
     }
-
-
 
     if (c.table === "ai_provider_credentials") {
       return { data: mundo.credencial ?? null, error: null };
@@ -496,17 +515,21 @@ describe("onboarding: publicação impossível não pode terminar em silêncio",
 
   it("versão do próprio onboarding já gravada: concluir o retry sem duplicar", async () => {
     const estado = montarBanco({
-      agentes: [{ id: "agente-1", organization_id: ORG, is_default: true, published_version_id: null }],
-      versoes: [{
-        id: "versao-1",
-        organization_id: ORG,
-        agent_id: "agente-1",
-        version_number: 1,
-        provisioning_origin: "onboarding",
-        status: "draft",
-        provider: "anthropic",
-        credential_id: null,
-      }],
+      agentes: [
+        { id: "agente-1", organization_id: ORG, is_default: true, published_version_id: null },
+      ],
+      versoes: [
+        {
+          id: "versao-1",
+          organization_id: ORG,
+          agent_id: "agente-1",
+          version_number: 1,
+          provisioning_origin: "onboarding",
+          status: "draft",
+          provider: "anthropic",
+          credential_id: null,
+        },
+      ],
     });
 
     const res = await clicar();
@@ -519,17 +542,21 @@ describe("onboarding: publicação impossível não pode terminar em silêncio",
 
   it("rascunho criado por uma pessoa não é publicado pelo retry do onboarding", async () => {
     const estado = montarBanco({
-      agentes: [{ id: "agente-1", organization_id: ORG, is_default: true, published_version_id: null }],
-      versoes: [{
-        id: "versao-1",
-        organization_id: ORG,
-        agent_id: "agente-1",
-        version_number: 1,
-        provisioning_origin: null,
-        status: "draft",
-        provider: "anthropic",
-        credential_id: null,
-      }],
+      agentes: [
+        { id: "agente-1", organization_id: ORG, is_default: true, published_version_id: null },
+      ],
+      versoes: [
+        {
+          id: "versao-1",
+          organization_id: ORG,
+          agent_id: "agente-1",
+          version_number: 1,
+          provisioning_origin: null,
+          status: "draft",
+          provider: "anthropic",
+          credential_id: null,
+        },
+      ],
     });
 
     const res = await clicar();
@@ -544,7 +571,9 @@ describe("onboarding: publicação impossível não pode terminar em silêncio",
   });
 
   it("falha ao gravar a versão também chega à tela (era um return mudo)", async () => {
-    montarBanco({ erroVersao: { code: "42501", message: "permission denied for table ai_agent_versions" } });
+    montarBanco({
+      erroVersao: { code: "42501", message: "permission denied for table ai_agent_versions" },
+    });
 
     const res = (await clicar()) as CreateAgentResult;
 

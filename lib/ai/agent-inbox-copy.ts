@@ -25,6 +25,8 @@ export const KIND_LABEL = {
   job_dead: "Uma tarefa do assistente falhou e parou de tentar",
   event_dead: "Um evento recebido não pôde ser processado",
   budget_exceeded: "O orçamento de IA foi atingido",
+  commercial_reminder: "Confira sua contratação",
+  commercial_ai_paused: "Seu agente precisa de atenção",
   handoff: "O assistente passou um atendimento para um humano",
   promotion_review: "Proposta de melhoria do assistente aguardando sua revisão",
   judge_unaligned: "O avaliador de qualidade precisa de recalibragem",

@@ -75,16 +75,88 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
-  { tabela: "management_bindings", razao: "tests/invariants/management-whatsapp-rls.test.ts — admin local vê, admin vizinho e viewer não; FK composta rejeita sessão do vizinho" },
-  { tabela: "management_messages", razao: "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê/escreve, JWT da outra empresa não lê nem escreve" },
-  { tabela: "management_outbox", razao: "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê, vizinho e viewer não; anon sem grant" },
-  { tabela: "management_actions", razao: "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê, vizinho e viewer não; escrita authenticated vedada" },
-  { tabela: "channel_routing_policies", razao: "tests/invariants/channel-routing.test.ts — dois tenants reais, leitura positiva local e negativa cruzada por JWT; FK composta rejeita canal de outra org" },
-  { tabela: "channel_routing_responsibles", razao: "tests/invariants/channel-routing.test.ts — JWT do tenant B não lê responsáveis de A; revogação remove vínculo e claim revalida membro ativo" },
-  { tabela: "channel_connection_requests", razao: "tests/invariants/channel-routing.test.ts — recibo privado sem SELECT authenticated; reserva admin com MFA e finalização service-only cercada por org e lease" },
-  { tabela: "appointment_recovery_receipts", razao: "tests/invariants/agenda-presenca-acl.test.ts — leitura/escrita direta anon/authenticated negadas, escrita service_role negada e RPC service-only valida a tupla org/evento nos dois sentidos A/B" },
-  { tabela: "event_service_origins", razao: "tests/invariants/service-event-origin.test.ts — recibo server-only, authenticated sem leitura/escrita, RPC rejeita tenant B real" },
-  { tabela: "platform_support_sessions", razao: "tests/invariants/suporte-temporario.test.ts — grant por sessão, readonly e nenhuma escrita direta authenticated" },
+  { tabela: "commercial_notices", razao: "tests/invariants/jornada-comercial.test.ts — JWTs de duas empresas provam leitura própria, negação cruzada e escrita exclusiva do servidor na caixa de saída." },
+  ...['organization_ai_accounts','ai_credit_ledger','ai_response_reservations','ai_response_parts','ai_trial_claims','ai_paid_access','ai_trial_exceptions','ai_operational_buckets'].map(tabela=>({tabela,razao:'tests/invariants/saas-ia-incluida.test.ts — JWTs A/B provam leitura própria e negativa cruzada nos extratos, ou negação de leitura e escrita nas tabelas exclusivas do servidor; RPCs service-only e referências compostas.'})),
+  {
+    tabela: "ai_response_usage",
+    razao:
+      "tests/invariants/respostas-ia-consumo.test.ts — leitura admin própria positiva, negativas cross-tenant e viewer; escrita direta vedada e status forjado pelo browser não gera consumo",
+  },
+  {
+    tabela: "platform_support_threads",
+    razao:
+      "tests/invariants/suporte-da-plataforma.test.ts — JWT de dois tenants lê o próprio chamado e zero linhas do vizinho; colega também não lê histórico pessoal",
+  },
+  {
+    tabela: "billing_checkouts",
+    razao:
+      "tests/invariants/hotmart-faturamento.test.ts — leitura admin positiva em dois tenants, negativas cruzadas e viewer, nenhuma escrita authenticated",
+  },
+  {
+    tabela: "billing_contracts",
+    razao:
+      "tests/invariants/hotmart-faturamento.test.ts — JWT de dois tenants e viewer, vínculo apenas por referência previamente criada e FK composta",
+  },
+  {
+    tabela: "billing_payments",
+    razao:
+      "tests/invariants/hotmart-faturamento.test.ts — extrato isolado nos dois sentidos com JWT, negativa viewer, FK composta e escrita authenticated vedada",
+  },
+  {
+    tabela: "platform_support_messages",
+    razao:
+      "tests/invariants/suporte-da-plataforma.test.ts — leitura positiva própria e negativa cruzada nos dois sentidos; FK composta e escrita authenticated vedada",
+  },
+  {
+    tabela: "management_bindings",
+    razao:
+      "tests/invariants/management-whatsapp-rls.test.ts — admin local vê, admin vizinho e viewer não; FK composta rejeita sessão do vizinho",
+  },
+  {
+    tabela: "management_messages",
+    razao:
+      "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê/escreve, JWT da outra empresa não lê nem escreve",
+  },
+  {
+    tabela: "management_outbox",
+    razao:
+      "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê, vizinho e viewer não; anon sem grant",
+  },
+  {
+    tabela: "management_actions",
+    razao:
+      "tests/invariants/management-whatsapp-rls.test.ts — JWT admin local lê, vizinho e viewer não; escrita authenticated vedada",
+  },
+  {
+    tabela: "channel_routing_policies",
+    razao:
+      "tests/invariants/channel-routing.test.ts — dois tenants reais, leitura positiva local e negativa cruzada por JWT; FK composta rejeita canal de outra org",
+  },
+  {
+    tabela: "channel_routing_responsibles",
+    razao:
+      "tests/invariants/channel-routing.test.ts — JWT do tenant B não lê responsáveis de A; revogação remove vínculo e claim revalida membro ativo",
+  },
+  {
+    tabela: "channel_connection_requests",
+    razao:
+      "tests/invariants/channel-routing.test.ts — recibo privado sem SELECT authenticated; reserva admin com MFA e finalização service-only cercada por org e lease",
+  },
+  {
+    tabela: "appointment_recovery_receipts",
+    razao:
+      "tests/invariants/agenda-presenca-acl.test.ts — leitura/escrita direta anon/authenticated negadas, escrita service_role negada e RPC service-only valida a tupla org/evento nos dois sentidos A/B",
+  },
+  {
+    tabela: "event_service_origins",
+    razao:
+      "tests/invariants/service-event-origin.test.ts — recibo server-only, authenticated sem leitura/escrita, RPC rejeita tenant B real",
+  },
+  {
+    tabela: "platform_support_sessions",
+    razao:
+      "tests/invariants/suporte-temporario.test.ts — grant por sessão, readonly e nenhuma escrita direta authenticated",
+  },
   {
     tabela: "webhook_lead_captures",
     razao:
@@ -97,14 +169,14 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   {
     tabela: "meta_templates",
     razao:
-      "tests/invariants/meta-templates-rls.test.ts (\"membro da org B NÃO vê " +
-      "o template da org A\") prova isolamento com `countAs` real.",
+      'tests/invariants/meta-templates-rls.test.ts ("membro da org B NÃO vê ' +
+      'o template da org A") prova isolamento com `countAs` real.',
   },
   {
     tabela: "webhook_sources",
     razao:
-      "tests/invariants/webhooks-rls.test.ts (\"manager B (org B) NÃO vê " +
-      "webhook_source/automation_rule da org A\") prova isolamento com " +
+      'tests/invariants/webhooks-rls.test.ts ("manager B (org B) NÃO vê ' +
+      'webhook_source/automation_rule da org A") prova isolamento com ' +
       "`countAs` real.",
   },
   {
@@ -114,8 +186,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   {
     tabela: "automation_rule_runs",
     razao:
-      "tests/invariants/webhooks-rls.test.ts (\"service_role insere " +
-      "automation_rule_runs na org A; manager B não vê, manager A vê\").",
+      'tests/invariants/webhooks-rls.test.ts ("service_role insere ' +
+      'automation_rule_runs na org A; manager B não vê, manager A vê").',
   },
   {
     tabela: "calendar_event_types",
@@ -135,8 +207,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     tabela: "calendar_connections",
     razao:
       "tests/invariants/agenda-rls.test.ts — TABELAS_DA_AGENDA prova o " +
-      "isolamento cross-org, e o describe seguinte (\"o gate de papel que as " +
-      "outras cinco não têm\") ainda prova o gate de dono/role por cima.",
+      'isolamento cross-org, e o describe seguinte ("o gate de papel que as ' +
+      'outras cinco não têm") ainda prova o gate de dono/role por cima.',
   },
   {
     tabela: "calendar_connection_calendars",
@@ -150,7 +222,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     tabela: "followup_flow_versions",
     razao:
       "tests/invariants/followup-schema.test.ts — `FOLLOWUP_TABLES`, com " +
-      "\"user of org A reads 0 rows of org B\" por tabela (mesmo molde de " +
+      '"user of org A reads 0 rows of org B" por tabela (mesmo molde de ' +
       "rls-isolation.test.ts).",
   },
   {
@@ -168,8 +240,8 @@ const PROVA_PROPRIA: readonly Excecao[] = [
   {
     tabela: "user_organizations",
     razao:
-      "tests/invariants/gov-1b-team-manager-read.test.ts (\"cross-org: " +
-      "manager da org A NÃO lê linhas da org B (0 rows)\") prova isolamento " +
+      'tests/invariants/gov-1b-team-manager-read.test.ts ("cross-org: ' +
+      'manager da org A NÃO lê linhas da org B (0 rows)") prova isolamento ' +
       "com `countAs` real, além do self-read do agent.",
   },
   // ─── As três do eixo de anúncios (migrations 0213/0214) ───
@@ -405,7 +477,10 @@ describe("varredura: completude de RLS sobre toda tabela com organization_id", (
     const porTabela = new Map(inventario().map((t) => [t.tabela, t]));
     for (const { tabela } of DEBITO_CONHECIDO) {
       const achada = porTabela.get(tabela);
-      expect(achada, `DEBITO_CONHECIDO cita tabela inexistente: ${tabela} — remova a entrada`).toBeDefined();
+      expect(
+        achada,
+        `DEBITO_CONHECIDO cita tabela inexistente: ${tabela} — remova a entrada`,
+      ).toBeDefined();
       expect(
         achada?.rlsLigada,
         `${tabela} está em DEBITO_CONHECIDO mas perdeu RLS — isto não é mais só falta de teste, é tabela exposta`,

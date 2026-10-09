@@ -16,6 +16,7 @@ ser fonte sem ninguém decidir isso.
 
 | arquivo | escopo |
 |---|---|
+| `saas-ia-incluida.architecture.json` | Campanha clínica, cadastro com segmento, templates, teste verificado, créditos transacionais, custo operacional, pagamentos e operação administrativa |
 | `avaliacao-atendimento.architecture.json` | avaliação de turnos novos, lock antes da IA, vereditos que impedem repetição e revisão humana de propostas |
 | `assistente-gestao-whatsapp.architecture.json` | vínculo do gestor com cada empresa, classificação fora do funil, MCP de leitura, resumos, avisos e desfecho do comercial |
 | `pre-go-live-whatsapp.architecture.json` | modo de teste por canal (issue #573): configuração administrativa, gate compartilhado, releitura no envio e validação pelo Inbox |
@@ -33,6 +34,8 @@ ser fonte sem ninguém decidir isso.
 | `indice-de-atrito.architecture.json` | índice de atrito — 24 peças, 31 arestas; a régua do atrito, o rádio que a lê e as demandas que entram nela |
 | `marca-propria.architecture.json` | marca própria (white-label) — 37 peças, 54 arestas, 6 faixas; a pilha org → instalação → `.env` → padrão, as saídas SEM DOM (`marcaDaSaida`) e a **não-ligação declarada** do PDF de LGPD, que imprime o CONTROLADOR e nunca a marca de quem revende |
 | `retencao-de-historico.architecture.json` | poda do histórico (issue #261) — 16 peças, 18 arestas, 6 faixas; o que sai (`done`/`failed`/`dead` velho), o que tem dono e **não** sai (`pending`/`running`, e `dead` com aviso ainda aberto), e por que o expurgo do audit é uma `security definer` sem seletor de linha em vez de uma porta |
+
+| `inicio-suporte.architecture.json` | Início e configuração retomável; manual/IA → fila humana → histórico; catálogo em rascunho e avatares privados |
 
 > **Esta tabela já apodreceu uma vez:** ela listava 8 mapas quando o disco tinha 9 — faltava
 > `indice-de-atrito`. Nenhum teste lê este README (o gate lê os `.json`), então mapa novo que

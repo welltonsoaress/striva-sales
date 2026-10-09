@@ -140,7 +140,6 @@ const DOCS = versionados("*.md").filter(
   (d) => referenciasBrutas(fs.readFileSync(path.join(RAIZ, d), "utf8")).length > 0,
 );
 
-
 /**
  * DÍVIDA PRÉ-EXISTENTE, enumerada — não escondida.
  *
@@ -205,8 +204,12 @@ function refsNormalizadas(doc: string): string[] {
         // o guarda aceitaria a citação e depois não acharia o arquivo — mudei um
         // lado e o outro não acompanhou, que é o defeito desta wave inteira.
         if (SUBPASTAS.has(limpa.split("/")[0]!)) return path.posix.join("evidence", limpa);
-        // Caminho próprio (fora de evidence/): respeita como está.
-        return limpa;
+        // Diretório da raiz → caminho do repo. Os demais são relativos ao
+        // documento, como links Markdown em approved/product dentro da biblioteca.
+        const first = limpa.split("/")[0]!;
+        return first !== ".." && fs.existsSync(path.join(RAIZ, first))
+          ? limpa
+          : path.posix.normalize(path.posix.join(dir, limpa));
       }),
     ),
   ];
@@ -249,9 +252,10 @@ describe("evidência citada", () => {
   it("a descoberta de documentos não pode vir vazia", () => {
     // Sem esta guarda, um erro no `git ls-files` ou no filtro faria a suíte
     // inteira passar sem verificar nada — verde vácuo no nível do arquivo.
-    expect(DOCS.length, "nenhum documento versionado citando imagem foi encontrado").toBeGreaterThan(
-      0,
-    );
+    expect(
+      DOCS.length,
+      "nenhum documento versionado citando imagem foi encontrado",
+    ).toBeGreaterThan(0);
   });
 
   for (const doc of DOCS) {
@@ -260,7 +264,9 @@ describe("evidência citada", () => {
       // saber. A versão anterior fazia `return` em silêncio: renomear um handoff
       // evaporava a cobertura dele sem nada ficar vermelho.
       const caminho = path.join(RAIZ, doc);
-      expect(fs.existsSync(caminho), `${doc} está em git ls-files e não existe no disco`).toBe(true);
+      expect(fs.existsSync(caminho), `${doc} está em git ls-files e não existe no disco`).toBe(
+        true,
+      );
 
       const entregues = new Set(versionados("."));
       const mortas = refsNormalizadas(doc).filter((ref) => !entregues.has(ref));

@@ -26,6 +26,7 @@ export interface AgentVersionRow {
   cases_enabled: boolean;
   operator_enabled: boolean;
   operator_model: string | null;
+  operator_prompt?: string | null;
   operator_tool_ids: string[];
   pipeline_ids: string[];
   knowledge_source_ids: string[];

@@ -102,7 +102,7 @@ export default async function LoginPage({
         <p className="text-muted-foreground">
           {t("Não tem conta?")}{" "}
           <Link
-            href="/signup"
+            href={next?.startsWith("/app/settings/billing?") ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
             className="font-medium text-foreground underline underline-offset-4"
           >
             {t("Criar conta")}

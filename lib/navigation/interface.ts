@@ -18,12 +18,16 @@ export const interfaceSettingsSchema = z
 export type InterfaceSettings = z.infer<typeof interfaceSettingsSchema>;
 export const INTERFACE_COMPLETA: InterfaceSettings = { preset: "completa" };
 const SIMPLIFICADA: readonly NavDestinationId[] = [
+  "/app/inicio",
+  "/app/ajuda",
   "/app/inbox",
   "/app/agenda",
   "/app/kanban",
   "/app/contacts",
   "/app/tasks",
   "/app/connections",
+  "/app/ai/agents",
+  "/app/settings/billing",
 ];
 /** Portas pessoais e recuperação administrativa não são removíveis. Atualização
  * e administração de plataforma têm consumidores próprios com seus gates atuais. */
@@ -34,6 +38,8 @@ export const PORTAS_ESSENCIAIS = [
 ] as const;
 export function essencial(d: NavMetadata, role: Role | null, platform = false): boolean {
   return (
+    d.href === "/app/inicio" ||
+    d.href === "/app/ajuda" ||
     d.href === PORTAS_ESSENCIAIS[0] ||
     d.href === PORTAS_ESSENCIAIS[1] ||
     (d.href === "/app/ai/cases" && canSee(d, platform, role)) ||
@@ -45,6 +51,7 @@ export function canSee(
   platform: boolean,
   role: Role | null,
 ): boolean {
+  if (d.href === "/app/ai/credentials") return platform;
   return platform || (!!role && ROLE_RANK[role] >= ROLE_RANK[d.minRole ?? "viewer"]);
 }
 export function permitidos(platform: boolean, role: Role | null): NavMetadata[] {
@@ -93,8 +100,15 @@ export function interfaceTemDestino(
 }
 export function homeDaInterface(raw: unknown, platform: boolean, role: Role | null): string {
   const visible = destinosDaInterface(raw, platform, role);
+  const { settings } = lerInterface(raw);
+  // A seleção explícita conserva a área inicial escolhida. Início permanece
+  // acessível como porta essencial, sem substituir a personalização do vínculo.
+  if (settings.destinos) {
+    const selectedHome = visible.find((d) => !essencial(d, role, platform));
+    if (selectedHome) return selectedHome.href;
+  }
   return (
-    visible.find((d) => d.href === "/app/inbox")?.href ??
+    visible.find((d) => d.href === "/app/inicio")?.href ??
     visible.find((d) => !essencial(d, role, platform))?.href ??
     "/app/settings/profile"
   );

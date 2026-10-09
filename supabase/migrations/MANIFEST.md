@@ -303,3 +303,20 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20260926100000` | `0241_case_human_wait_occurrence` | Marca cada entrada em `awaiting_human` sem confundir edições comuns do caso com uma nova ocorrência; sustenta avisos estáveis e reabertura após novo retorno ao humano. |
 
 | `20260926120000` | `0242_striva_product_brand_default` | Migra para Striva Sales apenas o nome padrão legado semeado do ambiente e sem logo próprio; mantém marcas da instalação escolhidas por alguém, logos e marcas das organizações, registrando a conversão no audit log. |
+| `20261005120000` | `0243_inicio_planos_suporte_avatares` | Catálogo comercial em rascunho com Pro de referência a R$ 297, chamados internos de suporte com isolamento por organização e autor, e bucket privado de fotos pessoais. Sem ativação de cobrança. |
+
+| `20261005150000` | `0244_hotmart_e_orientacao_de_casos` | Ofertas Hotmart opcionais, checkout ligado à organização, contratos e pagamentos com RLS admin, recepção global minimizada de eventos e orientação de casos pelo gestor com confirmação. Sem bloqueio de acesso ou créditos implícitos. |
+| `20261005180000` | `0245_respostas_ia_e_cancelamento_hotmart` | Contagem prospectiva e idempotente de respostas de IA aceitas pelo canal, origem protegida e leitura admin isolada; cancelamento de assinatura preserva pagamento e período informado. Sem cobrança ou bloqueio automático. |
+| `20261005190000` | `0246_origem_ia_imutavel` | Impede que navegador transfira um envio de IA para outra empresa/conversa antes do recibo; preserva a origem confiável do consumo. |
+
+| `20261005220709` | `0247_ofertas_hotmart_semestral_anual` | Ofertas Hotmart semestral/anual, limites iniciais e período no checkout. |
+
+| `20261006135900` | `0248_saas_ia_e_templates` | Contas de IA gerenciada, saldo transacional por resposta, elegibilidade do teste, limites de membros/canais, acesso contratado, precificação e cadastro atômico; preserva organizações legadas. |
+| `20261007132500` | `0249_storage_periodo_comercial` | Restringe gravações diretas no Storage ao período contratado, mantendo as policies de empresa e suporte, leitura/exportação e o comportamento das organizações legadas. |
+| `20261007141500` | `0250_storage_helper_escopo` | A RPC auxiliar de Storage confere os vínculos autenticados antes de consultar o período comercial, sem revelar disponibilidade de outra empresa. |
+
+| `20261007225042` | `0251_creditos_comerciais` | Régua versionada de 10 créditos por mensagem completa, reserva com franquia e extras, conversão de saldos anteriores sem reduzir capacidade, pacote de 1.000 créditos por R$49,99 em rascunho e publicação auditada. |
+
+| `20261008183000` | `0252_revisao_creditos_e_versoes` | Reserva e recuperação de automações, timeout incerto, imutabilidade das instruções do organizador, origem histórica do orçamento e extrato/auditoria de créditos; apêndice idempotente no baseline. |
+
+| `20261008220952` | `0253_jornada_comercial_e_credenciais` | Navegação simples para novos vínculos, credenciais/bindings operados somente pela plataforma, proteção do vínculo de chave em versões, caixa de saída isolada de lembretes e proposta de checkout única por solicitação, com vínculo à empresa. |

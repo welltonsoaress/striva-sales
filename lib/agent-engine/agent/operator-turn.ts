@@ -506,7 +506,7 @@ export function createOperatorTurnHandler(deps: InboundTurnDeps) {
             // pergunta que o dono do negócio vai fazer — não teria resposta.
             purpose: 'operator_turn',
             agentId: agentConfig.agentId,
-            system: SYSTEM_DO_OPERADOR,
+            system: agentConfig.operatorPrompt ? `${SYSTEM_DO_OPERADOR}\n\n${agentConfig.operatorPrompt}` : SYSTEM_DO_OPERADOR,
             messages: [
               {
                 role: 'user',

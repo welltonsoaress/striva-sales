@@ -26,6 +26,7 @@ import { recusaDeCapacidadeParaOModelo } from "@/lib/mcp/recusa-para-o-modelo";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { podeChamarFerramenta, recusaParaOModelo } from "@/lib/leads/escopo-de-funil";
+import { assertTenantOperation } from "@/lib/billing/operation-access-server";
 
 export interface RuntimeHandoffSignal {
   triggered: boolean;
@@ -58,10 +59,7 @@ function shapeToZodObject(shape: Record<string, z.ZodTypeAny>): z.ZodTypeAny {
   return z.object(shape);
 }
 
-function wrapMcpTool(
-  def: McpToolDefinition,
-  input: PickToolsInput,
-): Tool {
+function wrapMcpTool(def: McpToolDefinition, input: PickToolsInput): Tool {
   const inputSchema = shapeToZodObject(def.inputSchema as Record<string, z.ZodTypeAny>);
 
   return tool({
@@ -96,16 +94,22 @@ function wrapMcpTool(
       }
       try {
         if (input.ctx.delegatedUserId) {
-          const current = await input.supabase.from("user_organizations").select("id")
+          const current = await input.supabase
+            .from("user_organizations")
+            .select("id")
             .eq("organization_id", input.ctx.organizationId)
             .eq("user_id", input.ctx.delegatedUserId)
-            .in("role", ["manager", "admin"]).is("revoked_at", null)
-            .not("accepted_at", "is", null).maybeSingle();
-          if (current.error || !current.data)
-            throw new Error("delegated_manager_access_changed");
+            .in("role", ["manager", "admin"])
+            .is("revoked_at", null)
+            .not("accepted_at", "is", null)
+            .maybeSingle();
+          if (current.error || !current.data) throw new Error("delegated_manager_access_changed");
         }
         ensureScope(input.auth.scopes, def.requiresScope);
         ensureRole(input.auth.role, def.requiresRole);
+        // Revalidar no efeito: um turno pode atravessar o fim do período pago.
+        if (def.requiresScope === "mcp:write")
+          await assertTenantOperation(input.supabase, input.ctx.organizationId);
 
         // ── ESCOPO DE FUNIL (spec 17 passo 3) ────────────────────────────────
         //
@@ -185,7 +189,8 @@ function wrapMcpTool(
             // Diagnóstico interno, sem dados pessoais: identifica a configuração
             // responsável pela recusa. Nunca autoriza uma tentativa alternativa.
             agent_id: input.ctx.actor.type === "ai_agent" ? input.ctx.actor.agent_id : undefined,
-            pipeline_id: veredito.motivo === "funil_fora_do_escopo" ? veredito.pipelineId : undefined,
+            pipeline_id:
+              veredito.motivo === "funil_fora_do_escopo" ? veredito.pipelineId : undefined,
           };
         }
 

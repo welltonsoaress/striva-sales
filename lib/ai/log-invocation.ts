@@ -1,20 +1,16 @@
 /**
- * Fire-and-forget insert into `ai_invocations`.
- *
- * Caller should NOT await. We use `queueMicrotask` so the parent handler can
- * return without waiting for the audit insert; failures bubble to logger only.
+ * Registro operacional aguardado pelo worker antes de concluir seu trabalho.
+ * Falhas de telemetria são registradas sem repetir a chamada ao provedor.
  */
 
 import { normalizarErro } from "@/lib/agent-engine/edge/llm/run-model-call";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/database.types";
 
 /** Espelha o CHECK de `ai_invocations.invocation_kind` (ver o invariante). */
 export type InvocationKind =
-  | "bot_respond"
-  | "sentiment_classify"
-  | "triage_classify"
-  | "embedding_generate";
+  "bot_respond" | "sentiment_classify" | "triage_classify" | "embedding_generate";
 
 export interface LogInvocationInput {
   organization_id: string;
@@ -44,79 +40,77 @@ export interface LogInvocationInput {
    */
   invocation_kind: InvocationKind;
   model: string;
+  provider?: string;
+  pricing_snapshot?: Json | null;
   prompt_tokens: number;
   completion_tokens: number;
   latency_ms: number;
-  cost_cents: number;
+  cost_cents: number | null;
   finish_reason?: string | null;
   citations?: Array<Record<string, unknown>>;
   error_payload?: Record<string, unknown> | null;
 }
 
-export function logInvocation(row: LogInvocationInput): void {
-  queueMicrotask(() => {
-    void (async () => {
-      try {
-        const admin = createAdminClient();
-        // ─── Escreve em llm_calls, não mais em ai_invocations (migration 0130) ──
-        //
-        // As duas tabelas contavam a mesma coisa em lugares diferentes, e toda
-        // leitura nova de telemetria precisava lembrar das duas — a que
-        // esquecesse mentia. Foi o que aconteceu com a tela de uso: mostrava
-        // ZERO custo enquanto o dinheiro saía.
-        //
-        // O mapa de nomes é o mesmo eixo com rótulos diferentes:
-        // invocation_kind → purpose, prompt/completion → input/output.
-        const { error } = await admin.from("llm_calls").insert({
-          organization_id: row.organization_id,
-          // NORMALIZA AQUI, e não no chamador (issue #160). O tipo já diz
-          // `string | null`, mas `string` aceita `""` — e foi exatamente `?? ""`
-          // que fez a tabela ficar vazia numa VPS com tráfego real, porque o
-          // Postgres recusa string vazia como uuid e o insert é
-          // fire-and-forget. A rede embaixo continua sendo esta função.
-          agent_id:
-            row.agent_id === null || row.agent_id.trim() === "" ? null : row.agent_id,
-          purpose: row.invocation_kind,
-          // `provider` não existia no shape antigo; deriva-se do id do modelo, e
-          // vira 'desconhecido' quando não dá para saber — chute viraria
-          // estatística, e estatística errada é pior que lacuna declarada.
-          provider: providerDoModelo(row.model),
-          model: row.model,
-          input_tokens: row.prompt_tokens,
-          output_tokens: row.completion_tokens,
-          cost_cents: row.cost_cents,
-          latency_ms: row.latency_ms,
-          status: row.error_payload ? "erro" : "ok",
-          // MESMA RÉGUA do motor (`normalizarErro`), e não um rótulo de balde.
-          //
-          // Aqui era `"erro_legado"` fixo para QUALQUER falha — o que apagava a
-          // causa justamente na tabela que a tela `/app/ai/runs` lê para dizer
-          // "o que aconteceu e o que fazer". Medido numa instalação real
-          // (2026-08-18): a chave da OpenRouter sem saldo devolvia
-          // `Insufficient credits`, a tela mostrava três vezes `erro_legado`
-          // sem uma linha de conserto, e o dono passou horas procurando bug de
-          // código num problema de fatura. `normalizarErro` já reconhece esse
-          // texto como `limite_ou_saldo`, que é a linha que resolve.
-          error_code: row.error_payload ? codigoDoErro(row.error_payload) : null,
-          error_message: row.error_payload
-            ? String(JSON.stringify(row.error_payload)).slice(0, 500)
-            : null,
-        });
-        if (error) {
-          logger.warn("[llm-calls] insert failed", {
-            error: error.message,
-            organization_id: row.organization_id,
-            invocation_kind: row.invocation_kind,
-          });
-        }
-      } catch (err) {
-        logger.warn("[llm-calls] insert threw", {
-          error: err instanceof Error ? err.message : String(err),
-          organization_id: row.organization_id,
-        });
-      }
-    })();
-  });
+export async function logInvocation(row: LogInvocationInput): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    // ─── Escreve em llm_calls, não mais em ai_invocations (migration 0130) ──
+    //
+    // As duas tabelas contavam a mesma coisa em lugares diferentes, e toda
+    // leitura nova de telemetria precisava lembrar das duas — a que
+    // esquecesse mentia. Foi o que aconteceu com a tela de uso: mostrava
+    // ZERO custo enquanto o dinheiro saía.
+    //
+    // O mapa de nomes é o mesmo eixo com rótulos diferentes:
+    // invocation_kind → purpose, prompt/completion → input/output.
+    const { error } = await admin.from("llm_calls").insert({
+      organization_id: row.organization_id,
+      // NORMALIZA AQUI, e não no chamador (issue #160). O tipo já diz
+      // `string | null`, mas `string` aceita `""` — e foi exatamente `?? ""`
+      // que fez a tabela ficar vazia numa VPS com tráfego real, porque o
+      // Postgres recusa string vazia como uuid e o insert é
+      // fire-and-forget. A rede embaixo continua sendo esta função.
+      agent_id: row.agent_id === null || row.agent_id.trim() === "" ? null : row.agent_id,
+      purpose: row.invocation_kind,
+      // `provider` não existia no shape antigo; deriva-se do id do modelo, e
+      // vira 'desconhecido' quando não dá para saber — chute viraria
+      // estatística, e estatística errada é pior que lacuna declarada.
+      provider: row.provider ?? providerDoModelo(row.model),
+      model: row.model,
+      input_tokens: row.prompt_tokens,
+      output_tokens: row.completion_tokens,
+      cost_cents: row.cost_cents,
+      pricing_snapshot: row.pricing_snapshot ?? null,
+      latency_ms: row.latency_ms,
+      status: row.error_payload ? "erro" : "ok",
+      // MESMA RÉGUA do motor (`normalizarErro`), e não um rótulo de balde.
+      //
+      // Aqui era `"erro_legado"` fixo para QUALQUER falha — o que apagava a
+      // causa justamente na tabela que a tela `/app/ai/runs` lê para dizer
+      // "o que aconteceu e o que fazer". Medido numa instalação real
+      // (2026-08-18): a chave da OpenRouter sem saldo devolvia
+      // `Insufficient credits`, a tela mostrava três vezes `erro_legado`
+      // sem uma linha de conserto, e o dono passou horas procurando bug de
+      // código num problema de fatura. `normalizarErro` já reconhece esse
+      // texto como `limite_ou_saldo`, que é a linha que resolve.
+      error_code: row.error_payload ? codigoDoErro(row.error_payload) : null,
+      error_message: row.error_payload
+        ? String(JSON.stringify(row.error_payload)).slice(0, 500)
+        : null,
+    });
+    if (error) {
+      logger.warn("[llm-calls] insert failed", {
+        error: error.message,
+        organization_id: row.organization_id,
+        invocation_kind: row.invocation_kind,
+      });
+    }
+  } catch (err) {
+    logger.warn("[llm-calls] insert threw", {
+      error: err instanceof Error ? err.message : String(err),
+      organization_id: row.organization_id,
+    });
+  }
 }
 
 /**
@@ -157,7 +151,8 @@ export function codigoDoErro(payload: Record<string, unknown>): string {
 export function providerDoModelo(model: string): string {
   const m = model.toLowerCase();
   if (m.startsWith("anthropic/") || m.startsWith("claude")) return "anthropic";
-  if (m.startsWith("openai/") || m.startsWith("gpt") || m.startsWith("text-embedding")) return "openai";
+  if (m.startsWith("openai/") || m.startsWith("gpt") || m.startsWith("text-embedding"))
+    return "openai";
   if (m.startsWith("google/") || m.startsWith("gemini")) return "google";
   if (m.includes("/")) return "openrouter";
   return "desconhecido";

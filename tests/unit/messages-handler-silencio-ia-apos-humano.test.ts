@@ -27,7 +27,8 @@ import type { ActionCtx } from "@/lib/automation/types";
 import { avisarLeadDoCrm } from "@/lib/ai/handoff/aviso-ao-lead";
 const generation = vi.hoisted(() => ({ run: async () => ({ ok: true as const, texto: "Resposta gerada" }), authorize: vi.fn(async () => {}) }));
 vi.mock("@/lib/agent-engine/agent/abordagem-de-formulario", () => ({ gerarAbordagemDeFormulario: () => generation.run() }));
-vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({}) }));
+// Empresa legada: a reserva devolve null e conserva os caminhos de automação.
+vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({ query: vi.fn(async () => ({ rows: [{ id: null }] })) }) }));
 vi.mock("@/lib/automation/dados-do-formulario", () => ({ dadosDoFormularioDoContexto: async () => ({ dados: {}, origem: "form", veioDeFormulario: true }) }));
 vi.mock("@/lib/ai/elegibilidade/autorizacao", () => ({ autorizarContatoParaIA: generation.authorize }));
 const pacing = vi.hoisted(() => ({ run: async () => {} }));

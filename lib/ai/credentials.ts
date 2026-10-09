@@ -62,6 +62,7 @@ export async function loadCredential(
       "id, organization_id, provider, label, api_key_encrypted, api_key_iv, api_key_tag, is_active, validated_at",
     )
     .eq("id", id)
+    .eq("organization_id", organizationId)
     .maybeSingle<CredentialRow>();
 
   if (error) {

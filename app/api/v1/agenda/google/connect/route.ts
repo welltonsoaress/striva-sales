@@ -44,9 +44,9 @@ import { env } from "@/lib/env";
 export const dynamic = "force-dynamic";
 
 /** Volta para a Agenda com um código que a tela sabe traduzir. */
-function voltarComErro(codigo: string): NextResponse {
+function voltarComErro(codigo: string, onboarding = false): NextResponse {
   const base = env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return NextResponse.redirect(new URL(`/app/agenda?erro=${codigo}`, base));
+  return NextResponse.redirect(new URL(`${onboarding ? "/onboarding/setup-ai" : "/app/agenda"}?erro=${codigo}`, base));
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -58,11 +58,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!autorizado.ok) return autorizado.response;
   const { user, org } = autorizado;
 
+  const onboarding = req.nextUrl.searchParams.get("return_to") === "onboarding";
   const app = await configuracaoDoGoogle();
   if (!app) {
     // Não audita: não houve tentativa de conectar nada, e encher o audit log de
     // "a instalação não tem chave" é ruído numa tabela que se paga por linha.
-    return voltarComErro("google_nao_configurado");
+    return voltarComErro("google_nao_configurado", onboarding);
   }
 
   // O nonce é gerado AQUI (em vez de deixar `emitirEstado` sortear) porque ele
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let state: string;
   try {
     state = emitirEstado(
-      { organizationId: org.orgId, userId: user.id, authSessionId: await authenticatedSessionId() },
+      { organizationId: org.orgId, userId: user.id, authSessionId: await authenticatedSessionId(), ...(onboarding ? { returnTo: "onboarding" as const } : {}) },
       { segredo: env.INTERNAL_SECRET, agora: new Date(), nonce },
     );
   } catch {
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       organizationId: org.orgId,
       metadata: { reason: "segredo_de_state_indisponivel" },
     });
-    return voltarComErro("segredo_indisponivel");
+    return voltarComErro("segredo_indisponivel", onboarding);
   }
 
   // `contaSugerida` evita o erro mais comum do fluxo: autorizar com a conta

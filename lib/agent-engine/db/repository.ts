@@ -33,6 +33,8 @@ export type InboxKind =
   | 'job_dead'
   | 'event_dead'
   | 'budget_exceeded'
+  | 'commercial_ai_paused'
+  | 'commercial_reminder'
   | 'handoff'
   | 'promotion_review'
   | 'judge_unaligned'

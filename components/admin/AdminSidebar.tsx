@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   CalendarBlank,
   Palette,
+  Receipt,
   ArrowRight,
 } from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
@@ -29,20 +30,24 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: Gauge },
-  { href: "/admin/inbox", label: "Inbox", icon: ChatsCircle },
-  { href: "/admin/tenants", label: "Tenants", icon: Buildings },
-  { href: "/admin/audit", label: "Audit", icon: ClipboardText },
+  { href: "/admin/dashboard", label: "Visão geral", icon: Gauge },
+  { href: "/admin/inbox", label: "Central da plataforma", icon: ChatsCircle },
+  { href: "/admin/tenants", label: "Empresas", icon: Buildings },
+  { href: "/admin/audit", label: "Histórico de ações", icon: ClipboardText },
   { href: "/admin/lgpd", label: "LGPD", icon: Scales },
-  { href: "/admin/incidents", label: "Incidents", icon: Warning },
-  { href: "/admin/usage", label: "Usage", icon: ChartBar },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/platform-admins", label: "Platform Admins", icon: ShieldCheck },
+  { href: "/admin/incidents", label: "Incidentes", icon: Warning },
+  { href: "/admin/usage", label: "Consumo", icon: ChartBar },
+  { href: "/admin/ai", label: "IA da plataforma", icon: ChartBar },
+  { href: "/admin/users", label: "Usuários", icon: Users },
+  { href: "/admin/platform-admins", label: "Administradores da plataforma", icon: ShieldCheck },
   // A porta da tela de marca. Ela NÃO entra em `lib/navigation/registry.ts`:
   // aquele registro descreve a navegação do tenant (`app/app/**`) e o teste de
   // completude que o vigia varre só aquela raiz. O admin de plataforma tem
   // navegação própria, e é esta lista.
   { href: "/admin/marca", label: "Marca", icon: Palette },
+  { href: "/admin/plans", label: "Planos comerciais", icon: Receipt },
+  { href: "/admin/finance", label: "Pagamentos e contratos", icon: Receipt },
+  { href: "/admin/support", label: "Suporte", icon: ChatsCircle },
   // A porta da tela do app OAuth do Google — mesma razão da de cima: é
   // configuração da INSTALAÇÃO, e /admin tem navegação própria.
   { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
@@ -92,26 +97,44 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
         )}
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação plataforma")}>
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden />
-              <span className="truncate">{t(item.label)}</span>
-            </Link>
-          );
-        })}
+        {(
+          [
+            [t("Operação"), ["/admin/dashboard", "/admin/tenants", "/admin/users"]],
+            ["Financeiro", ["/admin/finance", "/admin/plans"]],
+            [t("Inteligência artificial"), ["/admin/ai", "/admin/usage"]],
+            ["Suporte", ["/admin/support", "/admin/inbox", "/admin/incidents"]],
+            [t("Segurança"), ["/admin/audit", "/admin/lgpd", "/admin/platform-admins"]],
+            [t("Configuração"), ["/admin/marca", "/admin/google"]],
+          ] as const
+        ).map(([label, paths]) => (
+          <div key={String(label)} className="mb-4">
+            <p className="px-3 pt-3 pb-2 text-[11px] font-semibold tracking-wide text-muted-foreground">
+              {t(String(label))}
+            </p>
+            {NAV_ITEMS.filter((item) => (paths as readonly string[]).includes(item.href)).map(
+              (item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                      isActive
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    )}
+                  >
+                    <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden />
+                    <span className="truncate">{t(item.label)}</span>
+                  </Link>
+                );
+              },
+            )}
+          </div>
+        ))}
       </nav>
       <div className="space-y-2 border-t p-3">
         <Link
@@ -119,7 +142,7 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         >
           <ArrowRight size={14} aria-hidden />
-          <span>{t("Voltar pra app")}</span>
+          <span>{t("Voltar ao sistema")}</span>
         </Link>
         <p className="truncate px-2 text-xs text-muted-foreground" title={userEmail}>
           {userEmail}

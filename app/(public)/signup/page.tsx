@@ -1,3 +1,4 @@
+import { planHintFromDestination, selectedPlanHint } from "@/lib/billing/journey";
 import Link from "next/link";
 
 import { SignupForm } from "@/components/auth/SignupForm";
@@ -6,6 +7,7 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { businessSegmentHint } from "@/lib/onboarding/segment-hint";
 
 export const metadata = { title: "Criar conta" };
 
@@ -21,9 +23,9 @@ export const metadata = { title: "Criar conta" };
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; segment?: string; next?: string; plan?: string }>;
 }) {
-  const { invite } = await searchParams;
+  const { invite,segment,next,plan } = await searchParams;
   const marca = await marcaDaSaida(null);
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
@@ -60,11 +62,11 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} />
+      <SignupForm selectedPlan={convite ? undefined : selectedPlanHint(plan) ?? planHintFromDestination(next)} convite={convite} suggestedSegment={convite ? undefined : businessSegmentHint(segment)} />
 
       <p className="text-center text-sm text-muted-foreground">
         {t("Já tem conta?")}{" "}
-        <Link href="/login" className="font-medium text-foreground underline underline-offset-4">
+        <Link href={next?.startsWith("/app/settings/billing?") ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="font-medium text-foreground underline underline-offset-4">
           {t("Entrar")}
         </Link>
       </p>

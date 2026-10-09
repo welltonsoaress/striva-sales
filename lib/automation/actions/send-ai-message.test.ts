@@ -57,7 +57,9 @@ vi.mock("@/lib/agent-engine/agent/abordagem-de-formulario", () => ({
 }));
 // `SUPABASE_DB_URL` não existe na suíte unitária, e sem isto a ação sai por
 // `ia_indisponivel` antes de chegar a qualquer coisa que importe.
-vi.mock("@/lib/agent-engine/db/request-pool", () => ({ getRequestPool: () => ({}) }));
+vi.mock("@/lib/agent-engine/db/request-pool", () => ({
+  getRequestPool: () => ({ query: vi.fn(async () => ({ rows: [{ id: null }] })) }),
+}));
 vi.mock("@/lib/automation/start-conversation", () => ({
   ensureConversation: (...args: unknown[]) => ensureConversation(...args),
 }));

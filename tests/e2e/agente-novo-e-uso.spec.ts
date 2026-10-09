@@ -20,7 +20,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
 
@@ -49,16 +49,13 @@ test.describe("Criar um agente pela tela", () => {
     const criar = page.getByRole("button", { name: /criar agent/i });
     await expect(criar).toBeDisabled();
 
-    // E ela diz o que falta — as três exigências que o servidor também impõe.
-    // Escritas como instrução, não como acusação — um formulário recém-aberto
-    // que já diz "obrigatório" em vermelho trata o usuário como quem errou.
-    for (const exigencia of [
-      /escolha o modelo/i,
-      /escolha a chave de acesso/i,
-      /escolha por qual número de whatsapp/i,
-    ]) {
-      await expect(page.getByText(exigencia).first()).toBeVisible();
-    }
+    // O tenant herda a conexão autorizada. Nome e canal seguem necessários,
+    // mas o cliente não tem de escolher nem pode trocar a chave/modelo.
+    await expect(page.getByText(/escolha por qual número de whatsapp/i).first()).toBeVisible();
+    await expect(page.getByText(/a conexão de IA é administrada pela equipe/i)).toBeVisible();
+    for (const id of ["provider", "model", "credential_id"])
+      await expect(page.locator(`#${id}`)).toBeDisabled();
+    await expect(page.locator("#model")).not.toContainText(/^Selecione/);
 
     await page.screenshot({
       path: path.join(EVIDENCIA, "w1-nova-01-tela-de-criar.png"),
@@ -84,7 +81,7 @@ test.describe("Criar um agente pela tela", () => {
     // nativo: não existe `<option>` no DOM até o menu abrir, e procurar por
     // `option` devolve zero — que lê como "a tela não tem modelo nenhum" quando
     // na verdade o instrumento é que estava olhando o lugar errado.
-    for (const id of ["model", "credential_id", "channel_session_id"]) {
+    for (const id of ["channel_session_id"]) {
       const gatilho = page.locator(`#${id}`);
       if ((await gatilho.count()) === 0) continue;
       await gatilho.click();

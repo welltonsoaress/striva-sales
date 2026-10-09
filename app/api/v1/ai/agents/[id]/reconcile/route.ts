@@ -1,13 +1,18 @@
-import {recordLegacyNotice,legacyRecoveryCause,legacyRecoveryMessage} from '@/lib/ai/agents/legacy-notice';
+import {
+  recordLegacyNotice,
+  legacyRecoveryCause,
+  legacyRecoveryMessage,
+} from "@/lib/ai/agents/legacy-notice";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 import { requireSupportWrite } from "@/lib/impersonate/support";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publishFirstVersion } from "@/lib/ai/agents/first-publication";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { guardAgentCredential } from "@/lib/ai/agents/credential-access";
 const input = z.object({
   channel_id: z.uuid(),
   provider: z.string().min(1).max(80),
@@ -18,7 +23,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const denied = await requireSupportWrite();
   if (denied) return denied;
   const requestId = randomUUID(),
-    auth = await requireRole("admin", { requestId, resource: "ai_agents" });
+    auth = await requireAiPlatformAdmin();
   if (!auth.ok) return auth.response;
   const { id } = await ctx.params,
     parsed = input.safeParse(await req.json().catch(() => null));
@@ -34,7 +39,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!agent || agent.kind === "mcp_agent" || agent.archived_at)
     return fail("not_found", "Agente legado indisponível.", 404, { requestId });
   if (agent.published_version_id) {
-    await recordLegacyNotice(admin,auth.org.orgId,id,'pronto');
+    await recordLegacyNotice(admin, auth.org.orgId, id, "pronto");
     return ok({ published: true }, { requestId });
   }
   const { data: versions, error } = await admin
@@ -55,6 +60,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       409,
       { requestId },
     );
+  const credentialDenied = await guardAgentCredential(
+    auth.org.orgId,
+    id,
+    parsed.data.credential_id,
+  );
+  if (credentialDenied) return credentialDenied;
   const p = parsed.data,
     result = await publishFirstVersion(
       admin,
@@ -69,8 +80,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         credentialId: p.credential_id,
       },
     );
-  const cause=legacyRecoveryCause(result);
-  await recordLegacyNotice(admin,auth.org.orgId,id,cause);
+  const cause = legacyRecoveryCause(result);
+  await recordLegacyNotice(admin, auth.org.orgId, id, cause);
   void audit({
     action: "ai_agent.reconciled",
     actorUserId: auth.user.id,
@@ -80,12 +91,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     requestId,
     metadata: { published: result.published },
   });
-  if (!result.published)
-    return fail(
-      cause,
-      legacyRecoveryMessage(cause),
-      422,
-      { requestId },
-    );
+  if (!result.published) return fail(cause, legacyRecoveryMessage(cause), 422, { requestId });
   return ok(result, { requestId });
 }

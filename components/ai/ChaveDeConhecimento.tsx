@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 /**
  * A CHAVE QUE FAZ O MATERIAL VIRAR CONHECIMENTO — dita na tela, resolvida ali.
@@ -57,6 +58,7 @@ interface Props {
 
 export function ChaveDeConhecimento({ estado, onChaveCadastrada }: Props) {
   const t = useT();
+  const { user } = useAuth();
   const [abrindo, setAbrindo] = useState(false);
   // O rótulo padrão é traduzido porque é o que a pessoa vê preenchido e o que
   // ela grava — não um identificador técnico.
@@ -96,6 +98,10 @@ export function ChaveDeConhecimento({ estado, onChaveCadastrada }: Props) {
   const conferindo =
     !estado.pode_indexar &&
     estado.credenciais_openai.some((c) => c.is_active && !c.validated_at && !c.validation_error);
+
+  if (!estado.pode_indexar && (!user?.is_platform_admin || user.support)) {
+    return <p data-testid="conhecimento-ajuda-plataforma" role="status" className="rounded-lg border border-amber-500/40 p-4 text-sm">{t("A conexão para preparar o conhecimento precisa de atenção da equipe da plataforma.")} <Link className="text-primary underline" href="/app/ajuda">{t("Abrir ajuda")}</Link></p>;
+  }
 
   if (conferindo) {
     return (

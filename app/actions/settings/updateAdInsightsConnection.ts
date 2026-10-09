@@ -1,6 +1,6 @@
 "use server";
 
-import { supportWriteError } from "@/lib/impersonate/support";
+import { supportWriteError, requireSupportWrite } from "@/lib/impersonate/support";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -107,6 +107,7 @@ export async function updateAdInsightsConnection(
   // nem tem o papel recebe a verdade sobre ele, não uma cobrança de segundo fator.
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden_role" };
   const admin = createAdminClient();
 
   const { data: existente, error: erroDeLeitura } = await admin
@@ -205,6 +206,7 @@ export async function disconnectAdInsights(): Promise<UpdateAdInsightsConnection
   }
   if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
+  if (await requireSupportWrite(activeOrg.orgId)) return { ok: false, error: "forbidden_role" };
   const admin = createAdminClient();
   const { error } = await admin
     .from("ad_insights_connections")

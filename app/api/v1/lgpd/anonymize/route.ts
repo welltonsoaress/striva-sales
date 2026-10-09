@@ -37,7 +37,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const supportDenied = await requireSupportWrite();
+  const supportDenied = await requireSupportWrite(undefined, {commercialExempt:true});
   if (supportDenied) return supportDenied;
 
   const requestId = randomUUID();

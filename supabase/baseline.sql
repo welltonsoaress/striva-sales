@@ -10039,86 +10039,8 @@ on conflict (model) do update set
 -- migration que reconstrói a constraint. `kind-check-migration-x-baseline.test.ts`
 -- reprova quando as duas divergem.
 
-alter table public.agent_inbox_items
-  drop constraint if exists agent_inbox_items_kind_check;
+-- Vocabulário consolidado no apêndice 0248; evita reconstruir constraints antigas no update.
 
-alter table public.agent_inbox_items
-  add constraint agent_inbox_items_kind_check check (kind in (
-    'appointment_outcome_required',
-    'appointment_recovery_review',
-    'qr_rescan',
-    'routing_unassigned',
-    'job_dead',
-    'event_dead',
-    'budget_exceeded',
-    'handoff',
-    'promotion_review',
-    'judge_unaligned',
-    'followup_dead',
-    'snooze_expired',
-    'next_action_ambiguous',
-    'risk_backlog_seeded',
-    'reactivation_expired',
-    'capabilities_missing',
-    -- (migration 0109, issue #129) Mensagem outbound nasce `sending` e, quando o
-    -- envio nunca acontece, fica `sending` para sempre — o self-hoster vê uma
-    -- mensagem eternamente "enviando", sinal de progresso para algo que não vai
-    -- acontecer. O cron `recover-stuck-messages` marca `failed` e usa este kind
-    -- para o defeito APARECER na Central de avisos.
-    --
-    -- Entra NESTA lista, e não num bloco novo no fim do arquivo: o #159 do @jmpo
-    -- mostrou que reconstruir a mesma constraint em N blocos quebra o
-    -- `update.sh` de todo clone que já tenha uma linha de vocabulário posterior
-    -- — os blocos antigos rodam antes e falham em cadeia. Um bloco por
-    -- constraint, vigiado por tests/unit/baseline-constraint-reconstruida.test.ts.
-    'message_send_stuck',
-    -- (migration 0129) O cliente manda foto/áudio e o agente age como se nada
-    -- tivesse chegado. Acontece quando o modelo configurado não enxerga imagem,
-    -- ou quando falta a chave de transcrição — e antes disto a derivação
-    -- devolvia string vazia EM SILÊNCIO: nenhum erro, nenhum log, e o operador
-    -- concluindo que o agente ignorou o cliente de propósito.
-    'midia_nao_lida',
-    'channel_template_review',
-    'channel_number_alert',
-    -- (migration 0111, spec 16 §3.2) O papel Operador declara promessa em aberto:
-    -- o assistente prometeu algo ao cliente e o cumprimento não foi registrado.
-    -- A invariante sagrada da spec é "nenhuma promessa deixa de ser cumprida", e
-    -- uma promessa sem dono precisa aparecer onde o humano olha — não no log do
-    -- worker. Entra NESTA lista pela mesma razão que a de cima.
-    'promise_unfulfilled',
-    -- (migration 0124, spec 17 §4b) Dado que o assistente ouviu na conversa e
-    -- ninguém confirmou até o prazo. `info`, não `warn`: nada quebrou — uma
-    -- informação não foi aproveitada, e tratar isso como falha ensinaria a
-    -- ignorar os avisos que são falha de verdade. Entra NESTA lista pela mesma
-    -- razão das de cima (bloco único por constraint, #159).
-    'contact_proposal_expired',
-    -- (migration 0159) O gasto passou do aviso que a pessoa definiu e a IA
-    -- CONTINUA respondendo — `warn`, nunca `critical`, e um kind SEPARADO de
-    -- `budget_exceeded`: colapsar os dois faria o alerta de "parou" perder o
-    -- significado. É este kind que torna possível a condição do gate "ninguém é
-    -- bloqueado sem ter sido avisado no mês" — sem ele, o salto de 79% para 101%
-    -- entre duas chamadas calaria a IA sem nenhum sinal anterior.
-    --
-    -- Entra NESTA lista, e AQUI no fim, por duas razões distintas: bloco único
-    -- por constraint (#159), e porque `tests/unit/midia-nao-lida.test.ts` procura
-    -- `'midia_nao_lida'` nos primeiros 2000 caracteres a partir do `add
-    -- constraint` — um valor comentado inserido ACIMA dele empurra-o para fora da
-    -- janela e reprova um teste que não tem nada a ver com o kind novo (medido:
-    -- offset 1532 -> 2275). Kind novo entra no fim da lista.
-    'budget_warning',
-    -- (migration 0181) O material que a pessoa enviou não entrou na base: falta
-    -- chave de embedding, a extração do arquivo falhou, ou nenhum trecho foi
-    -- gravado. Antes disto o worker devolvia `skipped` para o próprio log, o drain
-    -- tratava `skipped` como sucesso, e a linha da fonte seguia dizendo `ready`.
-    -- Irmão direto de `midia_nao_lida`: mesma chave, mesmo silêncio.
-    'conhecimento_nao_indexado',
-    -- (migration 0206, spec 18) Chamada de voz WhatsApp (WaCalls) recebida que
-    -- nunca teve answered_at — o "chamou e ninguém atendeu" precisa de dono,
-    -- mesma razão de midia_nao_lida/conhecimento_nao_indexado. Entra NESTA
-    -- lista, não em bloco novo (#159, bloco único por constraint).
-    'voice_call_missed',
-    'other'
-  ));
 
 
 
@@ -24213,6 +24135,1859 @@ select
     'source', 'distribution_migration'
   )
 from migrada;
+
+
+-- ---- Início, planos, suporte e avatares (migration 0243) ----
+-- Catálogo comercial em rascunho. R$ 297 é referência aprovada para o Pro;
+-- periodicidade, limites e cobrança precisam de decisão antes da publicação.
+create table if not exists public.commercial_plans (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  description text not null default '',
+  price_cents integer check (price_cents >= 0),
+  currency text not null default 'BRL' check (currency = 'BRL'),
+  billing_interval text check (billing_interval in ('month', 'year')),
+  recommended boolean not null default false,
+  limits jsonb not null default '{}'::jsonb,
+  position integer not null default 0,
+  publication_state text not null default 'draft' check (publication_state in ('draft', 'published')),
+  updated_at timestamptz not null default now()
+);
+alter table public.commercial_plans enable row level security;
+drop policy if exists commercial_plans_read on public.commercial_plans;
+create policy commercial_plans_read on public.commercial_plans for select to authenticated using (true);
+revoke all on public.commercial_plans from anon, authenticated;
+grant select on public.commercial_plans to authenticated;
+grant all on public.commercial_plans to service_role;
+insert into public.commercial_plans (slug, name, description, price_cents, recommended, position)
+values
+  ('essencial', 'Essencial', 'Uma oferta para começar a organizar seu atendimento.', null, false, 0),
+  ('pro', 'Pro', 'A oferta recomendada para conectar atendimento, agente e gestão comercial.', 29700, true, 1),
+  ('empresarial', 'Empresarial', 'Uma oferta para operações que precisam de uma composição personalizada.', null, false, 2)
+on conflict (slug) do nothing;
+
+-- O suporte da plataforma é separado das conversas comerciais de cada tenant.
+-- Escritas só passam pelas rotas autenticadas; usuários leem seus chamados.
+create table if not exists public.platform_support_threads (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'open' check (status in ('open', 'waiting_human', 'human_active', 'closed')),
+  assigned_to uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, id)
+);
+create index if not exists platform_support_queue on public.platform_support_threads(status, updated_at);
+create index if not exists platform_support_owner on public.platform_support_threads(organization_id, created_by);
+alter table public.platform_support_threads enable row level security;
+drop policy if exists tenant_isolation_platform_support_threads_all on public.platform_support_threads;
+create policy tenant_isolation_platform_support_threads_all on public.platform_support_threads
+  using (organization_id in (select * from public.fn_user_org_ids()) and created_by = auth.uid())
+  with check (organization_id in (select * from public.fn_user_org_ids()) and created_by = auth.uid());
+revoke all on public.platform_support_threads from anon, authenticated;
+grant select on public.platform_support_threads to authenticated;
+grant all on public.platform_support_threads to service_role;
+
+-- A fila observa mudanças em realtime sem expor o conteúdo das mensagens.
+-- Repete a exigência de MFA do guard da plataforma também no banco.
+drop policy if exists platform_support_queue_read on public.platform_support_threads;
+create policy platform_support_queue_read on public.platform_support_threads for select to authenticated
+  using (status in ('waiting_human', 'human_active') and exists (
+    select 1 from public.platform_admins p where p.user_id = auth.uid()
+      and p.revoked_at is null and (not p.mfa_required or auth.jwt()->>'aal' = 'aal2')
+  ));
+
+create table if not exists public.platform_support_messages (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  thread_id uuid not null,
+  client_message_id uuid not null,
+  author_kind text not null check (author_kind in ('user', 'assistant', 'human', 'system')),
+  author_user_id uuid references auth.users(id) on delete set null,
+  body text not null check (char_length(body) between 1 and 4000),
+  source text check (source in ('model', 'manual')),
+  created_at timestamptz not null default now(),
+  foreign key (organization_id, thread_id) references public.platform_support_threads(organization_id, id) on delete cascade,
+  unique (thread_id, client_message_id)
+);
+create index if not exists platform_support_history on public.platform_support_messages(organization_id, thread_id, created_at);
+alter table public.platform_support_messages enable row level security;
+drop policy if exists tenant_isolation_platform_support_messages_all on public.platform_support_messages;
+create policy tenant_isolation_platform_support_messages_all on public.platform_support_messages
+  using (organization_id in (select * from public.fn_user_org_ids()) and exists (
+    select 1 from public.platform_support_threads t where t.id = thread_id and t.organization_id = platform_support_messages.organization_id and t.created_by = auth.uid()
+  ));
+revoke all on public.platform_support_messages from anon, authenticated;
+grant select on public.platform_support_messages to authenticated;
+grant all on public.platform_support_messages to service_role;
+
+-- Fotos pessoais privadas: a API valida dono/vínculo antes de entregar os bytes.
+insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-avatars', 'profile-avatars', false, 524288, array['image/png', 'image/jpeg'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'platform_support_threads') then
+      alter publication supabase_realtime add table public.platform_support_threads;
+    end if;
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'platform_support_messages') then
+      alter publication supabase_realtime add table public.platform_support_messages;
+    end if;
+  end if;
+end $$;
+
+-- ---- Hotmart e orientação de casos (migration 0244) ----
+-- 0244: ofertas Hotmart desligadas até configuração + vínculo confiável da compra.
+alter table public.commercial_plans add column if not exists hotmart_offer jsonb;
+alter table public.management_actions drop constraint if exists management_actions_action_check;
+alter table public.management_actions add constraint management_actions_action_check
+  check (action in ('move_lead_stage', 'create_task', 'book_appointment', 'request_appointment',
+    'assign_conversation', 'pause_attendance', 'resume_attendance', 'reply_case'));
+
+create table if not exists public.billing_checkouts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  reference text not null unique check (reference ~ '^[a-f0-9]{24}$'),
+  plan_id uuid not null references public.commercial_plans(id) on delete restrict,
+  product_ucode uuid not null, offer_code text not null,
+  price_cents bigint not null check (price_cents >= 0), currency text not null default 'BRL' check (currency = 'BRL'),
+  transaction_code text unique,
+  created_at timestamptz not null default now(),
+  unique (organization_id, id)
+);
+create table if not exists public.billing_contracts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  checkout_id uuid not null,
+  external_key text not null unique,
+  subscriber_code text unique,
+  subscription_status text,
+  next_charge_at timestamptz,
+  last_event_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  unique (organization_id, id),
+  foreign key (organization_id, checkout_id) references public.billing_checkouts(organization_id, id) on delete restrict
+);
+create table if not exists public.billing_payments (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  contract_id uuid not null,
+  transaction_code text not null unique,
+  amount_cents bigint not null check (amount_cents >= 0), currency text not null,
+  status text not null, last_event_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  foreign key (organization_id, contract_id) references public.billing_contracts(organization_id, id) on delete restrict
+);
+-- Caixa GLOBAL de entrada: pode ainda não ter vínculo com organização. Somente
+-- operador de plataforma por rota guardada; nada de payload bruto com dados pessoais.
+create table if not exists public.billing_webhook_events (
+  event_id text primary key, event text not null, occurred_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  state text not null check (state in ('received', 'applied', 'unmatched', 'obsolete', 'unsupported')),
+  reason text, normalized jsonb not null
+);
+alter table public.billing_webhook_events enable row level security;
+revoke all on public.billing_webhook_events from public, anon, authenticated;
+grant all on public.billing_webhook_events to service_role;
+
+do $$ declare t text; begin
+  foreach t in array array['billing_checkouts', 'billing_contracts', 'billing_payments'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from public, anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('grant all on public.%I to service_role', t);
+    execute format('drop policy if exists %I on public.%I', 'tenant_isolation_' || t || '_select', t);
+    execute format('create policy %I on public.%I for select to authenticated using
+      (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, ''admin''))',
+      'tenant_isolation_' || t || '_select', t);
+    execute format('create index if not exists %I on public.%I (organization_id, created_at desc)', t || '_org_idx', t);
+  end loop;
+end $$;
+notify pgrst, 'reload schema';
+
+-- ---- Respostas de IA e cancelamento Hotmart (migration 0245) ----
+
+-- Contagem prospectiva de respostas aceitas pelo canal. Nenhuma franquia é
+-- concedida, bloqueada ou cobrada pela aplicação desta migration.
+alter table public.messages add column if not exists ai_credit_eligible boolean not null default false;
+alter table public.billing_contracts add column if not exists cancelled_at timestamptz;
+alter table public.billing_contracts add column if not exists access_until timestamptz;
+
+create table if not exists public.ai_response_usage (
+  -- Identidade do recibo = messages.id. Não é FK: o recibo sem conteúdo deve
+  -- sobreviver à retenção/redação de mensagens, sem apagar consumo financeiro.
+  id uuid primary key,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  accepted_at timestamptz not null default now(),
+  units smallint not null default 1 check (units = 1)
+);
+create index if not exists ai_response_usage_org_accepted_idx on public.ai_response_usage(organization_id, accepted_at desc, id);
+alter table public.ai_response_usage enable row level security;
+revoke all on public.ai_response_usage from public, anon, authenticated, service_role;
+grant select on public.ai_response_usage to authenticated, service_role;
+drop policy if exists tenant_isolation_ai_response_usage_select on public.ai_response_usage;
+create policy tenant_isolation_ai_response_usage_select on public.ai_response_usage for select to authenticated using
+  (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id, 'admin'));
+
+create or replace function public.fn_proteger_origem_credito_ia() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  -- Um cliente com acesso direto à REST de messages não pode declarar origem
+  -- de IA. A origem é contexto interno do handler/worker, nunca metadata/body.
+  if current_setting('role', true) in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then new.ai_credit_eligible := false;
+    else new.ai_credit_eligible := old.ai_credit_eligible; end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_proteger_origem_credito_ia() from public, anon, authenticated, service_role;
+drop trigger if exists trg_messages_proteger_credito_ia on public.messages;
+create trigger trg_messages_proteger_credito_ia before insert or update on public.messages
+for each row execute function public.fn_proteger_origem_credito_ia();
+
+create or replace function public.fn_registrar_resposta_ia() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare inserted_id uuid;
+begin
+  -- Mudança de status pelo browser não é recibo do provedor. O serviço de
+  -- entrega/webhook pode reconhecer a aceitação mesmo após replay/crash.
+  if current_setting('role', true) in ('authenticated', 'anon') then return new; end if;
+  if not new.ai_credit_eligible or new.direction <> 'outbound' or new.status not in ('sent', 'delivered', 'read') then return new; end if;
+  insert into public.ai_response_usage(id, organization_id) values(new.id, new.organization_id)
+    on conflict (id) do nothing returning id into inserted_id;
+  if inserted_id is not null then
+    insert into public.api_audit_log(organization_id, action, resource_type, resource_id, metadata)
+      values(new.organization_id, 'ai.response_counted', 'ai_response_usage', inserted_id, '{"units":1}'::jsonb);
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_registrar_resposta_ia() from public, anon, authenticated, service_role;
+drop trigger if exists trg_messages_registrar_resposta_ia on public.messages;
+create trigger trg_messages_registrar_resposta_ia after insert or update on public.messages
+for each row execute function public.fn_registrar_resposta_ia();
+-- Sem backfill: sent_at em mensagens antigas é a intenção, não a aceitação.
+-- Ambas as funções são exclusivas de triggers; não possuem consumidor RPC.
+notify pgrst, 'reload schema';
+
+
+-- 0246 — Origem de envio de IA imutável para o navegador.
+
+-- A revisão adversarial do consumo encontrou outra superfície: uma pessoa
+-- membro de duas empresas não pode mover um envio de IA entre elas pela REST.
+create or replace function public.fn_proteger_origem_credito_ia() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if current_setting('role', true) in ('authenticated', 'anon') then
+    if tg_op = 'INSERT' then
+      new.ai_credit_eligible := false;
+    else
+      if old.ai_credit_eligible and
+        row(new.organization_id, new.conversation_id, new.contact_id, new.channel_session_id, new.direction)
+        is distinct from row(old.organization_id, old.conversation_id, old.contact_id, old.channel_session_id, old.direction) then
+        raise exception 'A origem de um envio de IA não pode ser alterada.' using errcode = '42501';
+      end if;
+      new.ai_credit_eligible := old.ai_credit_eligible;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_proteger_origem_credito_ia() from public, anon, authenticated, service_role;
+notify pgrst, 'reload schema';
+
+-- 20261005220709_0247_ofertas_hotmart_semestral_anual.sql
+-- 0247: seis ofertas fornecidas pelo proprietário. Valores conferidos no checkout
+-- público Hotmart em 05/10/2026. Limites iniciais definidos com sua autorização;
+-- editáveis no painel. Checkout segue desligado até homologação da operação.
+alter table public.commercial_plans drop constraint if exists commercial_plans_billing_interval_check;
+alter table public.commercial_plans add constraint commercial_plans_billing_interval_check
+  check (billing_interval in ('month', 'semester', 'year'));
+alter table public.billing_checkouts add column if not exists billing_interval text
+  check (billing_interval in ('month', 'semester', 'year'));
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('essencial','Básico','Organize o atendimento e acompanhe suas primeiras oportunidades.',118200,'semester',false,0,'{"users": 2, "whatsapp_numbers": 1, "ai_credits": 1000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "ywwwcw8z", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=ywwwcw8z&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('pro','Pro','Conecte atendimento, acompanhamento e gestão para sua equipe vender com mais organização.',178200,'semester',true,1,'{"users": 5, "whatsapp_numbers": 2, "ai_credits": 3000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "k8dnfot7", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=k8dnfot7&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('empresarial','Empresarial','Mais capacidade para equipes com maior volume de atendimento.',238200,'semester',false,2,'{"users": 10, "whatsapp_numbers": 3, "ai_credits": 6000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "vgjipy7o", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=vgjipy7o&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('essencial-anual','Básico','Organize o atendimento e acompanhe suas primeiras oportunidades.',164400,'year',false,3,'{"users": 2, "whatsapp_numbers": 1, "ai_credits": 1000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "n35rbszu", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=n35rbszu&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('pro-anual','Pro','Conecte atendimento, acompanhamento e gestão para sua equipe vender com mais organização.',284400,'year',true,4,'{"users": 5, "whatsapp_numbers": 2, "ai_credits": 3000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "xeibh38j", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=xeibh38j&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+insert into public.commercial_plans
+  (slug,name,description,price_cents,billing_interval,recommended,position,limits,hotmart_offer,publication_state)
+values ('empresarial-anual','Empresarial','Mais capacidade para equipes com maior volume de atendimento.',356400,'year',false,5,'{"users": 10, "whatsapp_numbers": 3, "ai_credits": 6000, "ai_credits_period": "month"}'::jsonb,'{"product_ucode": "1e932b14-f2e8-4139-bf8e-3374ea86ca2c", "offer_code": "32t83f4b", "checkout_url": "https://pay.hotmart.com/Q107903903G?off=32t83f4b&checkoutMode=6", "enabled": false}'::jsonb,'published')
+on conflict (slug) do update set name=excluded.name, description=excluded.description,
+  price_cents=excluded.price_cents, billing_interval=excluded.billing_interval,
+  recommended=excluded.recommended, limits=excluded.limits, hotmart_offer=excluded.hotmart_offer,
+  publication_state=excluded.publication_state, updated_at=now()
+where commercial_plans.hotmart_offer is null and commercial_plans.publication_state='draft'
+  and commercial_plans.billing_interval is null;
+notify pgrst, 'reload schema';
+
+-- 0248_saas_ia_e_templates
+-- 0248: IA incluída. Organizações anteriores ficam explicitamente no modo legado.
+alter table public.llm_calls add column if not exists pricing_snapshot jsonb;
+alter table public.ai_models add column if not exists cache_read_price_per_million_cents numeric;
+alter table public.ai_models add column if not exists cache_write_price_per_million_cents numeric;
+alter table public.ai_models add column if not exists pricing_verified_at timestamptz;
+alter table public.ai_models add column if not exists pricing_source text;
+alter table public.organizations add column if not exists signup_origin text;
+alter table public.ai_agents add column if not exists business_segment text;
+alter table public.ai_agents add column if not exists template_version integer;
+alter table public.ai_agent_versions add column if not exists operator_prompt text;
+alter table public.channel_sessions add column if not exists verified_at timestamptz;
+alter table public.channel_sessions add column if not exists verification_phone_hash text;
+alter table public.billing_checkouts add column if not exists limits_snapshot jsonb;
+alter table public.billing_payments add column if not exists first_paid_at timestamptz;
+alter table public.billing_payments add column if not exists paid_date_inferred boolean not null default false;
+alter table public.billing_payments add column if not exists paid_access_until timestamptz;
+update public.billing_payments set first_paid_at=last_event_at,paid_date_inferred=true where first_paid_at is null and status in('APPROVED','COMPLETE');
+update public.billing_checkouts c set limits_snapshot=p.limits from public.commercial_plans p where c.plan_id=p.id and c.limits_snapshot is null;
+
+create table if not exists public.organization_ai_accounts (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  mode text not null default 'legacy' check(mode in ('legacy','platform')),
+  state text not null default 'pending' check(state in ('pending','trial','active','expired','suspended')),
+  plan_id uuid references public.commercial_plans(id),
+  anchor_at timestamptz, access_until timestamptz,
+  period_start timestamptz, period_end timestamptz,
+  monthly_allowance integer not null default 0 check(monthly_allowance>=0),
+  monthly_remaining integer not null default 0 check(monthly_remaining>=0),
+  extra_remaining integer not null default 0 check(extra_remaining>=0),
+  user_limit integer not null default 1 check(user_limit>0),
+  channel_limit integer not null default 1 check(channel_limit>0),
+  updated_at timestamptz not null default now()
+);
+insert into public.organization_ai_accounts(organization_id,mode) select id,'legacy' from public.organizations on conflict do nothing;
+
+create table if not exists public.ai_credit_ledger (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  reference text not null, kind text not null check(kind in ('trial','subscription','renewal','extra','adjustment','debit','refund')),
+  units integer not null, reason text, actor_user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(), unique(organization_id,reference)
+);
+create table if not exists public.ai_response_reservations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  reference text not null, source text not null check(source in ('monthly','extra')),
+  period_start timestamptz not null,
+  state text not null default 'reserved' check(state in ('reserved','committed','released','uncertain')),
+  expected_parts integer check(expected_parts>0),
+  sealed_at timestamptz,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique(organization_id,id), unique(organization_id,reference)
+);
+alter table public.messages add column if not exists ai_response_id uuid;
+alter table public.messages add column if not exists ai_response_part integer;
+alter table public.ai_response_usage add column if not exists meter text not null default 'message_v1';
+create table if not exists public.ai_response_parts (
+  organization_id uuid not null, response_id uuid not null, part integer not null check(part>0), accepted_at timestamptz not null default now(),
+  primary key(organization_id,response_id,part),
+  foreign key(organization_id,response_id) references public.ai_response_reservations(organization_id,id) on delete cascade
+);
+do $$ begin
+  if not exists(select 1 from pg_constraint where conname='messages_ai_response_org_fk') then
+    alter table public.messages add constraint messages_ai_response_org_fk foreign key(organization_id,ai_response_id)
+      references public.ai_response_reservations(organization_id,id);
+  end if;
+end $$;
+create index if not exists messages_ai_response_idx on public.messages(organization_id,ai_response_id);
+
+create table if not exists public.ai_trial_claims (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  owner_hash text not null unique, phone_hash text not null unique,
+  device_hash text, ip_hash text, created_at timestamptz not null default now(),
+  unique(organization_id)
+);
+create table if not exists public.ai_paid_access (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  transaction_code text not null,
+  paid_at timestamptz not null, access_until timestamptz not null,
+  revoked_at timestamptz,
+  primary key(organization_id,transaction_code)
+);
+alter table public.ai_trial_claims add column if not exists risk_signals text[] not null default '{}';
+create table if not exists public.ai_trial_exceptions (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  actor_user_id uuid not null references auth.users(id), reason text not null check(length(reason)>=10),
+  expires_at timestamptz not null, consumed_at timestamptz, created_at timestamptz not null default now()
+);
+create table if not exists public.platform_ai_settings (
+  id boolean primary key default true check(id),
+  enabled boolean not null default false,
+  provider text, model text, operator_model text,
+  max_output_tokens integer not null default 2048 check(max_output_tokens between 128 and 16000),
+  max_steps integer not null default 10 check(max_steps between 1 and 25),
+  monthly_cost_limit_cents numeric not null default 0 check(monthly_cost_limit_cents>=0),
+  updated_at timestamptz not null default now()
+);
+alter table public.platform_ai_settings add column if not exists purpose_models jsonb not null default '{}';
+alter table public.platform_ai_settings add column if not exists transcription_price_per_minute_cents numeric check(transcription_price_per_minute_cents>=0);
+alter table public.platform_ai_settings add column if not exists transcription_pricing_source text;
+alter table public.platform_ai_settings add column if not exists requests_per_minute integer not null default 60 check(requests_per_minute between 1 and 1000);
+alter table public.ai_response_reservations add column if not exists sealed_at timestamptz;
+insert into public.platform_ai_settings(id) values(true) on conflict do nothing;
+create table if not exists public.ai_credit_packs (
+  id uuid primary key default gen_random_uuid(), name text not null,
+  units integer not null check(units>0), price_cents bigint check(price_cents>0),
+  currency text not null default 'BRL' check(currency='BRL'),
+  hotmart_offer jsonb, publication_state text not null default 'draft' check(publication_state in ('draft','published')),
+  created_at timestamptz not null default now()
+);
+create table if not exists public.ai_operational_buckets (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  minute timestamptz not null,hits integer not null default 0,primary key(organization_id,minute)
+);
+alter table public.billing_checkouts alter column plan_id drop not null;
+alter table public.billing_checkouts add column if not exists credit_pack_id uuid references public.ai_credit_packs(id);
+alter table public.billing_checkouts add column if not exists credit_units integer;
+do $$ begin
+  if not exists(select 1 from pg_constraint where conname='billing_checkout_purchase_kind') then
+    alter table public.billing_checkouts add constraint billing_checkout_purchase_kind check
+      ((plan_id is not null and credit_pack_id is null) or (plan_id is null and credit_pack_id is not null and credit_units>0));
+  end if;
+end $$;
+
+do $$ declare t text; begin
+  foreach t in array array['organization_ai_accounts','ai_credit_ledger','ai_response_reservations','ai_response_parts'] loop
+    execute format('alter table public.%I enable row level security',t);
+    execute format('revoke all on public.%I from public,anon,authenticated',t);
+    execute format('grant select on public.%I to authenticated',t);
+    execute format('grant select,insert,update,delete on public.%I to service_role',t);
+    execute format('drop policy if exists %I on public.%I','tenant_isolation_'||t||'_select',t);
+    execute format('create policy %I on public.%I for select to authenticated using(organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,''admin''))','tenant_isolation_'||t||'_select',t);
+  end loop;
+  foreach t in array array['platform_ai_settings','ai_trial_claims','ai_credit_packs','ai_paid_access','ai_trial_exceptions','ai_operational_buckets'] loop
+    execute format('alter table public.%I enable row level security',t);
+    execute format('revoke all on public.%I from public,anon,authenticated',t);
+    execute format('grant select,insert,update,delete on public.%I to service_role',t);
+  end loop;
+end $$;
+revoke update,delete on public.ai_credit_ledger from service_role;
+create index if not exists ai_credit_ledger_org_time_idx on public.ai_credit_ledger(organization_id,created_at desc);
+-- INVOKER distingue REST direta de funções canônicas SECURITY DEFINER.
+create or replace function public.fn_protect_channel_verification() returns trigger
+language plpgsql set search_path='' as $$ begin
+  if current_user in('authenticated','anon') then
+    if tg_op='INSERT' then
+      new.verified_at:=null; new.verification_phone_hash:=null;
+      if exists(select 1 from public.organization_ai_accounts where organization_id=new.organization_id and mode='platform') then raise exception 'canonical_channel_connection_required'; end if;
+    else
+      new.verified_at:=old.verified_at; new.verification_phone_hash:=old.verification_phone_hash;
+      if new.organization_id is distinct from old.organization_id then raise exception 'channel_tenant_immutable'; end if;
+      if exists(select 1 from public.organization_ai_accounts where organization_id=old.organization_id and mode='platform') and (
+        new.status is distinct from old.status or new.phone_number is distinct from old.phone_number or
+        new.organization_id is distinct from old.organization_id or
+        new.waha_session_name is distinct from old.waha_session_name or new.provider is distinct from old.provider or
+        new.meta_phone_number_id is distinct from old.meta_phone_number_id or new.meta_waba_id is distinct from old.meta_waba_id or
+        new.meta_token_encrypted is distinct from old.meta_token_encrypted or new.zernio_account_id is distinct from old.zernio_account_id or
+        new.zernio_token_encrypted is distinct from old.zernio_token_encrypted
+      ) then raise exception 'channel_verification_server_owned'; end if;
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_protect_channel_verification() from public,anon,authenticated,service_role;
+drop trigger if exists trg_protect_channel_verification on public.channel_sessions;
+create trigger trg_protect_channel_verification before insert or update on public.channel_sessions for each row execute function public.fn_protect_channel_verification();
+create unique index if not exists org_memory_versions_org_id_unique on public.org_memory_versions(organization_id,id);
+do $$ begin
+  if not exists(select 1 from pg_constraint where conname='org_memory_pointer_same_org') then
+    alter table public.org_memory_pointers add constraint org_memory_pointer_same_org foreign key(organization_id,version_id) references public.org_memory_versions(organization_id,id);
+  end if;
+end $$;
+create or replace function public.fn_onboarding_memory(p_org uuid,p_user uuid,p_content text) returns uuid
+language plpgsql set search_path='' as $$ declare ver uuid; n integer; begin
+  perform 1 from public.organizations where id=p_org for update;
+  if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_user and role='admin' and revoked_at is null and accepted_at is not null) then raise exception 'admin_required'; end if;
+  if length(p_content)>20000 then raise exception 'content_too_long'; end if;
+  select v.id into ver from public.org_memory_pointers p join public.org_memory_versions v on v.id=p.version_id and v.organization_id=p.organization_id where p.organization_id=p_org and v.content=p_content;
+  if found then return ver; end if;
+  select coalesce(max(version_number),0)+1 into n from public.org_memory_versions where organization_id=p_org;
+  insert into public.org_memory_versions(organization_id,version_number,content,created_by) values(p_org,n,p_content,p_user) returning id into ver;
+  insert into public.org_memory_pointers(organization_id,version_id,updated_at) values(p_org,ver,now()) on conflict(organization_id) do update set version_id=excluded.version_id,updated_at=excluded.updated_at;
+  return ver;
+end $$;
+revoke all on function public.fn_onboarding_memory(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_onboarding_memory(uuid,uuid,text) to service_role;
+-- Catálogo público não contém ofertas administrativas ou rascunhos.
+drop policy if exists commercial_plans_read on public.commercial_plans;
+create policy commercial_plans_read on public.commercial_plans for select to authenticated using(publication_state='published');
+revoke select on public.commercial_plans from authenticated;
+grant select(id,slug,name,description,price_cents,currency,billing_interval,recommended,limits,position,publication_state) on public.commercial_plans to authenticated;
+alter table public.commercial_plans add column if not exists checkout_available boolean generated always as
+  (publication_state='published' and price_cents is not null and billing_interval is not null and hotmart_offer @> '{"enabled":true}'::jsonb) stored;
+grant select(checkout_available) on public.commercial_plans to authenticated;
+
+alter table public.organization_ai_accounts add column if not exists extra_debt integer not null default 0 check(extra_debt>=0);
+alter table public.agent_inbox_items drop constraint if exists agent_inbox_items_kind_check;
+alter table public.agent_inbox_items add constraint agent_inbox_items_kind_check check(kind in
+ ('appointment_outcome_required','appointment_recovery_review','qr_rescan','routing_unassigned','job_dead','event_dead','budget_exceeded','handoff','promotion_review','judge_unaligned','followup_dead','snooze_expired','next_action_ambiguous','risk_backlog_seeded','reactivation_expired','capabilities_missing','message_send_stuck','midia_nao_lida','channel_template_review','channel_number_alert','promise_unfulfilled','contact_proposal_expired','budget_warning','conhecimento_nao_indexado','voice_call_missed','commercial_ai_paused','commercial_reminder','other'));
+create or replace function public.fn_ai_commercial_notice(p_org uuid,p_code text) returns void
+language plpgsql set search_path='' as $$ begin
+  perform 1 from public.organization_ai_accounts where organization_id=p_org for update;
+  insert into public.agent_inbox_items(organization_id,kind,severity,title,body)
+    select p_org,'commercial_ai_paused','warn','Seu agente precisa de atenção',
+      'A IA incluída está pausada ('||left(p_code,80)||'). Confira Respostas disponíveis e o período contratado. Atendimento humano continua disponível enquanto houver acesso ao período.'
+    where not exists(select 1 from public.agent_inbox_items where organization_id=p_org and kind='commercial_ai_paused' and status='open');
+end $$;
+revoke all on function public.fn_ai_commercial_notice(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_commercial_notice(uuid,text) to service_role;
+create or replace function public.fn_ai_account_notice() returns trigger
+language plpgsql security definer set search_path='' as $$ begin
+  if new.mode='platform' and (new.state in('expired','suspended') or new.state in('active','trial') and new.monthly_remaining=0 and (new.state='trial' or new.extra_remaining=0)) then
+    perform public.fn_ai_commercial_notice(new.organization_id,new.state);
+  elsif new.mode='platform' and new.state in('active','trial') and new.monthly_remaining+new.extra_remaining>0 then
+    update public.agent_inbox_items set status='resolved' where organization_id=new.organization_id and kind='commercial_ai_paused' and status='open';
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_ai_account_notice() from public,anon,authenticated,service_role;
+drop trigger if exists trg_ai_account_notice on public.organization_ai_accounts;
+create trigger trg_ai_account_notice after update on public.organization_ai_accounts for each row execute function public.fn_ai_account_notice();
+
+create or replace function public.fn_billing_first_payment() returns trigger
+language plpgsql set search_path='' as $$ begin
+  if tg_op='UPDATE' then new.first_paid_at:=old.first_paid_at; new.paid_date_inferred:=old.paid_date_inferred; end if;
+  if new.first_paid_at is null and new.status in('APPROVED','COMPLETE') then new.first_paid_at:=new.last_event_at; new.paid_date_inferred:=false; end if;
+  return new;
+end $$;
+revoke all on function public.fn_billing_first_payment() from public,anon,authenticated,service_role;
+drop trigger if exists trg_billing_first_payment on public.billing_payments;
+create trigger trg_billing_first_payment before insert or update on public.billing_payments for each row execute function public.fn_billing_first_payment();
+
+create or replace function public.fn_new_ai_account() returns trigger
+language plpgsql security definer set search_path='' as $$ begin
+  insert into public.organization_ai_accounts(organization_id,mode) values(new.id,case when new.signup_origin='self_service' or current_setting('role',true) in('authenticated','anon') then 'platform' else 'legacy' end) on conflict do nothing;
+  return new;
+end $$;
+revoke all on function public.fn_new_ai_account() from public,anon,authenticated,service_role;
+drop trigger if exists trg_new_ai_account on public.organizations;
+create trigger trg_new_ai_account after insert on public.organizations for each row execute function public.fn_new_ai_account();
+create or replace function public.fn_protect_signup_origin() returns trigger
+language plpgsql set search_path='' as $$ begin
+  if current_setting('role',true) in('authenticated','anon') then
+    if tg_op='INSERT' then new.signup_origin:='self_service'; else new.signup_origin:=old.signup_origin; end if;
+  end if;
+  if tg_op='INSERT' and new.signup_origin is null and current_user not in('authenticated','anon') then
+    if exists(select 1 from public.platform_admins where user_id=new.created_by and scope='full' and revoked_at is null)
+      then new.signup_origin:='manual'; end if;
+  end if;
+  return new;
+end $$;
+revoke execute on function public.fn_protect_signup_origin() from public,anon,authenticated,service_role;
+drop trigger if exists trg_protect_signup_origin on public.organizations;
+create trigger trg_protect_signup_origin before insert or update on public.organizations for each row execute function public.fn_protect_signup_origin();
+
+-- A âncora original nunca é substituída pelo último dia de fevereiro.
+create or replace function public.fn_ai_anniversary(p_anchor timestamptz,p_months integer) returns timestamptz
+language sql immutable set search_path='' as $$
+  select ((date_trunc('month',p_anchor at time zone 'UTC')+make_interval(months=>p_months))
+    +make_interval(days=>least(extract(day from p_anchor at time zone 'UTC')::integer,
+      extract(day from date_trunc('month',p_anchor at time zone 'UTC')+make_interval(months=>p_months+1)-interval '1 day')::integer)-1)
+    +((p_anchor at time zone 'UTC')::time)) at time zone 'UTC'
+$$;
+revoke all on function public.fn_ai_anniversary(timestamptz,integer) from public,anon,authenticated;
+grant execute on function public.fn_ai_anniversary(timestamptz,integer) to service_role;
+
+create or replace function public.fn_ai_renew(p_org uuid) returns void
+language plpgsql set search_path='' as $$
+declare a public.organization_ai_accounts; m integer; s timestamptz; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return; end if;
+  if a.access_until<=now() and a.state in('trial','active') then
+    update public.organization_ai_accounts set state='expired',updated_at=now() where organization_id=p_org; return;
+  end if;
+  if a.state<>'active' or a.anchor_at is null or a.period_end>now() then return; end if;
+  m:=greatest(0,(extract(year from now() at time zone 'UTC')::integer-extract(year from a.anchor_at at time zone 'UTC')::integer)*12
+    +extract(month from now() at time zone 'UTC')::integer-extract(month from a.anchor_at at time zone 'UTC')::integer);
+  s:=public.fn_ai_anniversary(a.anchor_at,m);
+  if s>now() then m:=m-1; s:=public.fn_ai_anniversary(a.anchor_at,m); end if;
+  insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(p_org,'renewal:'||s::text,'renewal',a.monthly_allowance) on conflict do nothing;
+  update public.organization_ai_accounts set monthly_remaining=monthly_allowance,period_start=s,
+    period_end=public.fn_ai_anniversary(a.anchor_at,m+1),updated_at=now() where organization_id=p_org;
+end $$;
+revoke all on function public.fn_ai_renew(uuid) from public,anon,authenticated;
+grant execute on function public.fn_ai_renew(uuid) to service_role;
+
+create or replace function public.fn_ai_reserve(p_org uuid,p_reference text) returns uuid
+language plpgsql set search_path='' as $$
+declare a public.organization_ai_accounts; r public.ai_response_reservations; src text; begin
+  perform public.fn_ai_renew(p_org);
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return null; end if;
+  select * into r from public.ai_response_reservations where organization_id=p_org and reference=p_reference;
+  if found then
+    if r.state='released' then raise exception 'ai_reservation_released'; end if;
+    return r.id;
+  end if;
+  if a.state not in('trial','active') or a.access_until is null or a.access_until<=now() then raise exception 'ai_access_inactive'; end if;
+  if a.monthly_remaining>0 then src:='monthly';
+  elsif a.state='active' and a.extra_remaining>0 then src:='extra';
+  else raise exception 'ai_credits_exhausted'; end if;
+  update public.organization_ai_accounts set monthly_remaining=monthly_remaining-case when src='monthly' then 1 else 0 end,
+    extra_remaining=extra_remaining-case when src='extra' then 1 else 0 end,updated_at=now() where organization_id=p_org;
+  insert into public.ai_response_reservations(organization_id,reference,source,period_start)
+    values(p_org,p_reference,src,a.period_start) returning * into r;
+  return r.id;
+end $$;
+revoke all on function public.fn_ai_reserve(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_reserve(uuid,text) to service_role;
+
+create or replace function public.fn_ai_check_access(p_org uuid,p_purpose text,p_job uuid default null) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; cap integer; used integer; budget numeric; begin
+  perform public.fn_ai_renew(p_org);
+  select * into a from public.organization_ai_accounts where organization_id=p_org;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return; end if;
+  if not (a.state='pending' and p_purpose in('agent_test','agent_preview','checkpoint','connection_test')) then
+    if a.state not in('active','trial') or a.access_until is null or a.access_until<=now() then raise exception 'ai_access_inactive'; end if;
+    if a.monthly_remaining=0 and (a.state<>'active' or a.extra_remaining=0) and not exists(
+      select 1 from public.ai_response_reservations r where r.organization_id=p_org and r.state in('reserved','uncertain','committed') and
+        (r.reference='job:'||p_job or r.reference='job:'||(select j.payload->>'origin_job_id' from public.job_queue j where j.id=p_job and j.organization_id=p_org))
+    ) then raise exception 'ai_credits_exhausted'; end if;
+  end if;
+  select requests_per_minute,monthly_cost_limit_cents into cap,budget from public.platform_ai_settings where id=true and enabled;
+  if cap is null then raise exception 'ai_platform_unavailable'; end if;
+  -- Limite de contenção operacional. Custos desconhecidos seguem destacados no admin.
+  if budget>0 and (select coalesce(sum(l.cost_cents),0) from public.llm_calls l join public.organization_ai_accounts o on o.organization_id=l.organization_id and o.mode='platform' where l.created_at>=date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')>=budget then
+    raise exception 'ai_platform_budget_exhausted';
+  end if;
+  insert into public.ai_operational_buckets(organization_id,minute,hits) values(p_org,date_trunc('minute',now()),1)
+    on conflict(organization_id,minute) do update set hits=public.ai_operational_buckets.hits+1 where public.ai_operational_buckets.hits<cap returning hits into used;
+  if used is null then raise exception 'ai_frequency_limit'; end if;
+  delete from public.ai_operational_buckets where organization_id=p_org and minute<now()-interval '1 day';
+end $$;
+revoke all on function public.fn_ai_check_access(uuid,text,uuid) from public,anon,authenticated;
+grant execute on function public.fn_ai_check_access(uuid,text,uuid) to service_role;
+
+create or replace function public.fn_ai_settle(p_org uuid,p_id uuid,p_release boolean default false) returns text
+language plpgsql set search_path='' as $$
+declare r public.ai_response_reservations; a public.organization_ai_accounts; n integer; accepted integer; uncertain integer; begin
+  -- Mesma ordem de travas que a reserva: conta antes da resposta.
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  select * into r from public.ai_response_reservations where organization_id=p_org and id=p_id for update;
+  if not found then raise exception 'ai_reservation_not_found'; end if;
+  if r.state in('committed','released') then return r.state; end if;
+  select count(*) into accepted from public.ai_response_parts where organization_id=p_org and response_id=p_id and part<=r.expected_parts;
+  select count(*) into uncertain from public.messages m where m.organization_id=p_org and m.ai_response_id=p_id and m.status in('sending','queued')
+    and not exists(select 1 from public.ai_response_parts p where p.organization_id=p_org and p.response_id=p_id and p.part=m.ai_response_part);
+  if r.sealed_at is not null and r.expected_parts is not null and accepted=r.expected_parts then
+    update public.ai_response_reservations set state='committed',updated_at=now() where id=p_id;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(p_org,'response:'||p_id,'debit',-1) on conflict do nothing;
+    return 'committed';
+  end if;
+  if p_release and uncertain=0 then
+    if r.source='extra' then update public.organization_ai_accounts set extra_remaining=extra_remaining+case when extra_debt=0 then 1 else 0 end,extra_debt=greatest(0,extra_debt-1) where organization_id=p_org;
+    elsif a.period_start=r.period_start then update public.organization_ai_accounts set monthly_remaining=monthly_remaining+1 where organization_id=p_org;
+    end if;
+    update public.ai_response_reservations set state='released',updated_at=now() where id=p_id; return 'released';
+  end if;
+  update public.ai_response_reservations set state='uncertain',updated_at=now() where id=p_id; return 'uncertain';
+end $$;
+revoke all on function public.fn_ai_settle(uuid,uuid,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ai_settle(uuid,uuid,boolean) to service_role;
+
+create or replace function public.fn_ai_protect_response() returns trigger
+language plpgsql security definer set search_path='' as $$ begin
+  if current_setting('role',true) in('anon','authenticated') then
+    if tg_op='INSERT' then new.ai_response_id:=null; new.ai_response_part:=null;
+    else new.ai_response_id:=old.ai_response_id; new.ai_response_part:=old.ai_response_part; end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_ai_protect_response() from public,anon,authenticated,service_role;
+drop trigger if exists trg_ai_protect_response on public.messages;
+create trigger trg_ai_protect_response before insert or update on public.messages for each row execute function public.fn_ai_protect_response();
+
+-- As funções existentes usam nomes não qualificados; caminho fixo preserva seu contrato.
+alter function public.fn_agent_versions_immutable() set search_path=public,pg_temp;
+alter function public.fn_ai_agent_version_content_immutable() set search_path=public,pg_temp;
+alter function public.fn_contato_anonimizado_limpa_campos_personalizados() set search_path=public,pg_temp;
+revoke execute on function public.fn_agent_versions_immutable(),public.fn_ai_agent_version_content_immutable(),public.fn_contato_anonimizado_limpa_campos_personalizados() from public,anon,authenticated,service_role;
+create or replace function public.fn_ai_start_trial(p_org uuid,p_user uuid,p_owner_hash text,p_phone_hash text,p_device_hash text,p_ip_hash text) returns void
+language plpgsql security definer set search_path='' as $$
+declare a public.organization_ai_accounts; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found or a.mode<>'platform' then raise exception 'ai_trial_not_eligible'; end if;
+  if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_user and role='admin' and revoked_at is null and accepted_at is not null)
+    or not exists(select 1 from auth.users where id=p_user and email_confirmed_at is not null) then raise exception 'ai_trial_identity_unverified'; end if;
+  if a.state in('trial','active') then return; end if;
+  if a.state<>'pending' then raise exception 'ai_trial_already_used'; end if;
+  if not exists(select 1 from public.platform_ai_settings where enabled and provider is not null and model is not null) then raise exception 'ai_platform_unavailable'; end if;
+  if p_owner_hash !~ '^[a-f0-9]{64}$' or p_phone_hash !~ '^[a-f0-9]{64}$' then raise exception 'ai_trial_identity_unverified'; end if;
+  if not exists(select 1 from public.channel_sessions where organization_id=p_org and archived_at is null and status='WORKING' and verified_at is not null and verification_phone_hash=p_phone_hash) then raise exception 'whatsapp_verification_required'; end if;
+  if (select count(*) from public.user_organizations where organization_id=p_org and revoked_at is null)>1 or
+     (select count(*) from public.channel_sessions where organization_id=p_org and archived_at is null)>1 then raise exception 'ai_trial_capacity_exceeded'; end if;
+  -- Os índices únicos também protegem ativações concorrentes entre empresas.
+  if exists(select 1 from public.ai_trial_exceptions where organization_id=p_org and consumed_at is null and expires_at>now()) then
+    update public.ai_trial_exceptions set consumed_at=now() where organization_id=p_org;
+  else
+    insert into public.ai_trial_claims(organization_id,owner_hash,phone_hash,device_hash,ip_hash,risk_signals) values(p_org,p_owner_hash,p_phone_hash,p_device_hash,p_ip_hash,
+      array_remove(array[
+        case when p_ip_hash is not null and exists(select 1 from public.ai_trial_claims where ip_hash=p_ip_hash) then 'shared_network_verified' end,
+        case when p_device_hash is not null and exists(select 1 from public.ai_trial_claims where device_hash=p_device_hash) then 'shared_device_verified' end
+      ],null));
+  end if;
+  update public.organization_ai_accounts set state='trial',anchor_at=now(),access_until=now()+interval '7 days',
+    period_start=now(),period_end=now()+interval '7 days',monthly_allowance=100,monthly_remaining=100,user_limit=1,channel_limit=1,updated_at=now()
+    where organization_id=p_org;
+  insert into public.ai_credit_ledger(organization_id,reference,kind,units,actor_user_id) values(p_org,'trial','trial',100,p_user);
+end $$;
+revoke all on function public.fn_ai_start_trial(uuid,uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_start_trial(uuid,uuid,text,text,text,text) to service_role;
+
+create or replace function public.fn_ai_apply_payment(p_org uuid,p_transaction text) returns void
+language plpgsql set search_path='' as $$
+declare payment public.billing_payments; c public.billing_contracts; o public.billing_checkouts; a public.organization_ai_accounts; months integer; until_at timestamptz; limits jsonb; begin
+  select * into payment from public.billing_payments where organization_id=p_org and transaction_code=p_transaction;
+  if not found then raise exception 'payment_not_found'; end if;
+  select * into c from public.billing_contracts where organization_id=payment.organization_id and id=payment.contract_id;
+  select * into o from public.billing_checkouts where organization_id=payment.organization_id and id=c.checkout_id;
+  select * into a from public.organization_ai_accounts where organization_id=payment.organization_id for update;
+  if not found or a.mode='legacy' then return; end if;
+  if payment.status in('APPROVED','COMPLETE') then
+    if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code) then return; end if;
+    if o.credit_pack_id is not null then
+      if a.state not in('active','suspended') or a.access_until<=now() or not exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then raise exception 'ai_subscription_required_for_extra'; end if;
+      update public.organization_ai_accounts set extra_remaining=extra_remaining+greatest(0,o.credit_units-extra_debt),extra_debt=greatest(0,extra_debt-o.credit_units) where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'extra',o.credit_units);
+    else
+      months:=case o.billing_interval when 'year' then 12 when 'semester' then 6 else 1 end;
+      limits:=o.limits_snapshot;
+      if limits is null or (limits->>'ai_credits') is null or (limits->>'users') is null or (limits->>'whatsapp_numbers') is null then raise exception 'ai_plan_limits_missing'; end if;
+      until_at:=coalesce(payment.paid_access_until,public.fn_ai_anniversary(payment.first_paid_at,months));
+      insert into public.ai_paid_access(organization_id,transaction_code,paid_at,access_until)
+        values(payment.organization_id,payment.transaction_code,payment.first_paid_at,until_at) on conflict do nothing;
+      -- Uma renovação estende o acesso sem resetar a franquia no meio do ciclo.
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' else 'active' end,plan_id=o.plan_id,
+        anchor_at=case when a.state in('active','suspended') and a.anchor_at is not null then a.anchor_at else payment.first_paid_at end,
+        access_until=case when a.state in('active','suspended') then greatest(coalesce(a.access_until,until_at),until_at) else until_at end,
+        monthly_allowance=(limits->>'ai_credits')::integer,
+        monthly_remaining=case when a.state in('active','suspended') and a.anchor_at is not null then a.monthly_remaining else (limits->>'ai_credits')::integer end,
+        period_start=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_start else payment.first_paid_at end,
+        period_end=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_end else public.fn_ai_anniversary(payment.first_paid_at,1) end,
+        user_limit=(limits->>'users')::integer,channel_limit=(limits->>'whatsapp_numbers')::integer,updated_at=now()
+      where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'subscription',case when a.state='active' then 0 else (limits->>'ai_credits')::integer end);
+    end if;
+  elsif payment.status in('REFUNDED','CHARGEBACK') then
+    if o.credit_pack_id is not null then
+      if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code)
+        and not exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='refund:'||payment.transaction_code) then
+        update public.organization_ai_accounts set extra_debt=extra_debt+greatest(0,o.credit_units-extra_remaining),extra_remaining=greatest(0,extra_remaining-o.credit_units) where organization_id=payment.organization_id;
+        insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'refund:'||payment.transaction_code,'refund',-o.credit_units);
+      end if;
+    else
+      update public.ai_paid_access set revoked_at=now() where organization_id=payment.organization_id and transaction_code=payment.transaction_code and revoked_at is null;
+      select max(p.access_until) into until_at from public.ai_paid_access p where p.organization_id=payment.organization_id and p.revoked_at is null;
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' when until_at>now() then 'active' else 'expired' end,
+        access_until=coalesce(until_at,now()),updated_at=now() where organization_id=payment.organization_id;
+    end if;
+  end if;
+  return;
+end $$;
+revoke all on function public.fn_ai_apply_payment(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_apply_payment(uuid,text) to service_role;
+create or replace function public.fn_ai_payment_entitlements() returns trigger
+language plpgsql security definer set search_path='' as $$ begin
+  if tg_op='UPDATE' and new.status=old.status then return new; end if;
+  perform public.fn_ai_apply_payment(new.organization_id,new.transaction_code);
+  return new;
+end $$;
+revoke all on function public.fn_ai_payment_entitlements() from public,anon,authenticated,service_role;
+drop trigger if exists trg_ai_payment_entitlements on public.billing_payments;
+create trigger trg_ai_payment_entitlements after insert or update on public.billing_payments for each row execute function public.fn_ai_payment_entitlements();
+-- Limite serializado no banco: protege REST direta, convites e workers também.
+create or replace function public.fn_ai_capacity_limit() returns trigger
+language plpgsql security definer set search_path='' as $$
+declare a public.organization_ai_accounts; used integer; begin
+  select * into a from public.organization_ai_accounts where organization_id=new.organization_id for update;
+  if not found or a.mode='legacy' then return new; end if;
+  if tg_table_name='user_organizations' then
+    if new.revoked_at is not null then return new; end if;
+    if tg_op='UPDATE' and old.revoked_at is null and old.organization_id=new.organization_id then return new; end if;
+    if a.state in('expired','suspended') or a.state in('active','trial') and a.access_until<=now() then raise exception 'commercial_read_only'; end if;
+    select count(*) into used from public.user_organizations where organization_id=new.organization_id and revoked_at is null and id<>new.id;
+    if used>=a.user_limit then raise exception 'commercial_user_limit'; end if;
+  else
+    if new.archived_at is not null then return new; end if;
+    if tg_op='UPDATE' and old.archived_at is null and old.organization_id=new.organization_id then return new; end if;
+    if a.state in('expired','suspended') or a.state in('active','trial') and a.access_until<=now() then raise exception 'commercial_read_only'; end if;
+    select count(*) into used from public.channel_sessions where organization_id=new.organization_id and archived_at is null and id<>new.id;
+    if used>=a.channel_limit then raise exception 'commercial_channel_limit'; end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_ai_capacity_limit() from public,anon,authenticated,service_role;
+drop trigger if exists trg_ai_user_limit on public.user_organizations;
+create trigger trg_ai_user_limit before insert or update on public.user_organizations for each row execute function public.fn_ai_capacity_limit();
+drop trigger if exists trg_ai_channel_limit on public.channel_sessions;
+create trigger trg_ai_channel_limit before insert or update on public.channel_sessions for each row execute function public.fn_ai_capacity_limit();
+
+create or replace function public.fn_provision_self_service(p_user uuid,p_name text,p_slug text) returns uuid
+language plpgsql security definer set search_path='' as $$ declare org uuid; attempt integer; begin
+  perform pg_advisory_xact_lock(hashtextextended('signup:'||p_user::text,0));
+  select organization_id into org from public.user_organizations where user_id=p_user and revoked_at is null and accepted_at is not null limit 1;
+  if found then return org; end if;
+  if not exists(select 1 from auth.users where id=p_user and email_confirmed_at is not null) then raise exception 'signup_email_unverified'; end if;
+  for attempt in 0..4 loop
+    begin
+      insert into public.organizations(slug,display_name,legal_name,status,created_by,signup_origin)
+        values(left(p_slug,32)||case when attempt=0 then '' else '-'||substr(gen_random_uuid()::text,1,8) end,
+          left(p_name,200),left(p_name,200),'active',p_user,'self_service') returning id into org;
+      exit;
+    exception when unique_violation then if attempt=4 then raise; end if; end;
+  end loop;
+  insert into public.user_organizations(user_id,organization_id,role,accepted_at) values(p_user,org,'admin',now());
+  return org;
+end $$;
+revoke all on function public.fn_provision_self_service(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.fn_provision_self_service(uuid,text,text) to service_role;
+
+create or replace function public.fn_ai_finish_job() returns trigger
+language plpgsql security definer set search_path='' as $$ declare response uuid; begin
+  if new.status not in('done','dead','failed') or new.status=old.status then return new; end if;
+  select id into response from public.ai_response_reservations where organization_id=new.organization_id and reference='job:'||new.id;
+  if response is null then return new; end if;
+  update public.ai_response_reservations set sealed_at=now() where organization_id=new.organization_id and id=response;
+  if new.status='done' then
+    perform public.fn_ai_settle(new.organization_id,response,true);
+  else perform public.fn_ai_settle(new.organization_id,response,true); end if;
+  return new;
+end $$;
+revoke all on function public.fn_ai_finish_job() from public,anon,authenticated,service_role;
+drop trigger if exists trg_ai_finish_job on public.job_queue;
+create trigger trg_ai_finish_job after update on public.job_queue for each row execute function public.fn_ai_finish_job();
+
+-- Um pacote inicial inteiro ou nenhum: retomada não duplica agentes/versões.
+drop function if exists public.fn_prepare_business_agent(uuid,uuid,text,integer,text,text,text[],text[],jsonb);
+create or replace function public.fn_prepare_business_agent(p_org uuid,p_user uuid,p_segment text,p_template integer,p_prompt text,p_operator_prompt text,p_tools text[],p_operator_tools text[],p_funnel jsonb,p_agenda jsonb default null) returns jsonb
+language plpgsql set search_path='' as $$
+declare a public.ai_agents; v uuid; next_version integer; channel uuid; pipeline uuid; platform_config public.platform_ai_settings; applied jsonb; stage_data jsonb; begin
+  perform 1 from public.organizations where id=p_org for update;
+  if not exists(select 1 from public.organization_ai_accounts where organization_id=p_org and mode='platform') then raise exception 'managed_account_required'; end if;
+  if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_user and role='admin' and revoked_at is null and accepted_at is not null) then raise exception 'admin_required'; end if;
+  select * into platform_config from public.platform_ai_settings where id=true and enabled;
+  if not found or platform_config.model is null or platform_config.provider is null then raise exception 'ai_platform_unavailable'; end if;
+  select id into channel from public.channel_sessions where organization_id=p_org and archived_at is null and status='WORKING' and phone_number is not null and verified_at is not null order by created_at limit 1;
+  if channel is null then raise exception 'whatsapp_verification_required'; end if;
+  select * into a from public.ai_agents where organization_id=p_org and is_default and archived_at is null for update;
+  if found and a.published_version_id is not null then return jsonb_build_object('agent_id',a.id,'version_id',a.published_version_id,'preserved',true); end if;
+  if a.id is null then
+    insert into public.ai_agents(organization_id,name,system_prompt,kind,is_default,is_active,created_by,business_segment,template_version)
+      values(p_org,'Seu agente',p_prompt,'mcp_agent',true,false,p_user,p_segment,p_template) returning * into a;
+  end if;
+  select id into v from public.ai_agent_versions where organization_id=p_org and agent_id=a.id and provisioning_origin='onboarding' and status='draft' and system_prompt=p_prompt and operator_prompt=p_operator_prompt and tool_ids=p_tools and operator_tool_ids=p_operator_tools and channel_session_id=channel order by version_number desc limit 1;
+  if v is not null and a.business_segment=p_segment and a.template_version=p_template and (select onboarding_state->'ai'->'agenda' from public.organizations where id=p_org) is not distinct from coalesce(p_agenda,'null'::jsonb) then return jsonb_build_object('agent_id',a.id,'version_id',v,'preserved',true); end if;
+  if exists(select 1 from public.ai_agent_versions where organization_id=p_org and agent_id=a.id and provisioning_origin<>'onboarding') then raise exception 'existing_version_requires_review'; end if;
+  select id into pipeline from public.crm_pipelines where organization_id=p_org and is_default and not is_archived limit 1;
+  if pipeline is null then raise exception 'pipeline_not_found'; end if;
+  select jsonb_agg(jsonb_build_object('nome',e->>'nome','slug','etapa-'||n,'position',n*1000,'is_won',e->>'passo'='won','is_lost',e->>'passo'='lost','agent_stage_hint',e->>'passo'))
+    into stage_data from jsonb_array_elements(p_funnel->'etapas') with ordinality items(e,n);
+  applied:=public.fn_aplicar_quadro_do_onboarding(p_org,pipeline,p_funnel->>'nome','atendimento',stage_data);
+  if not coalesce((applied->>'ok')::boolean,false) then raise exception 'pipeline_requires_review'; end if;
+  update public.crm_pipelines set settings=coalesce(settings,'{}')::jsonb||jsonb_build_object('flow',jsonb_build_object('stage_guidance',
+    (select jsonb_object_agg(s.id::text,jsonb_build_object('purpose',e->>'orientacao')) from public.crm_stages s
+      join jsonb_array_elements(p_funnel->'etapas') e on e->>'nome'=s.name where s.organization_id=p_org and s.pipeline_id=pipeline and not s.is_archived),
+    'template_id',p_segment)) where organization_id=p_org and id=pipeline;
+  if p_agenda is not null then
+    if jsonb_array_length(p_agenda->'schedule'->'windows')=0 then raise exception 'agenda_availability_required'; end if;
+    insert into public.calendar_event_types(organization_id,name,slug,category,duration_minutes,default_owner_user_id,requires_confirmation,is_active,reminder_enabled)
+      values(p_org,p_agenda->>'name','onboarding-atendimento','outro',(p_agenda->>'duration_minutes')::integer,p_user,true,true,false)
+      on conflict(organization_id,slug) do update set name=excluded.name,duration_minutes=excluded.duration_minutes,default_owner_user_id=excluded.default_owner_user_id,is_active=true;
+    insert into public.attendant_availability(organization_id,user_id,is_available,schedule) values(p_org,p_user,true,p_agenda->'schedule')
+      on conflict(organization_id,user_id) do update set schedule=excluded.schedule,is_available=true,updated_at=now();
+  end if;
+  select coalesce(max(version_number),0)+1 into next_version from public.ai_agent_versions where organization_id=p_org and agent_id=a.id;
+  insert into public.ai_agent_versions(organization_id,agent_id,version_number,provisioning_origin,system_prompt,operator_prompt,provider,model,credential_id,
+    tool_ids,operator_enabled,operator_model,operator_tool_ids,pipeline_ids,channel_session_id,status,created_by,split_messages,split_max_chars,max_steps,history_message_window,history_token_window)
+    values(p_org,a.id,next_version,'onboarding',p_prompt,p_operator_prompt,platform_config.provider,platform_config.model,null,p_tools,true,coalesce(platform_config.operator_model,platform_config.model),p_operator_tools,array[pipeline],channel,'draft',p_user,true,250,platform_config.max_steps,20,8000) returning id into v;
+  update public.ai_agents set business_segment=p_segment,template_version=p_template where organization_id=p_org and id=a.id;
+  update public.organizations set onboarding_state=coalesce(onboarding_state,'{}')::jsonb||jsonb_build_object('ai',jsonb_build_object('agent_id',a.id,'prompt_template',p_segment,'template_version',p_template,'agenda',p_agenda),
+    'funil',jsonb_build_object('pipeline_id',pipeline,'origem','pacote','etapas',jsonb_array_length(stage_data))) where id=p_org;
+  return jsonb_build_object('agent_id',a.id,'version_id',v,'preserved',false);
+end $$;
+revoke all on function public.fn_prepare_business_agent(uuid,uuid,text,integer,text,text,text[],text[],jsonb,jsonb) from public,anon,authenticated;
+grant execute on function public.fn_prepare_business_agent(uuid,uuid,text,integer,text,text,text[],text[],jsonb,jsonb) to service_role;
+
+create or replace function public.fn_activate_business_agent(p_org uuid,p_user uuid,p_agent uuid,p_version uuid,p_owner_hash text,p_phone_hash text,p_device_hash text,p_ip_hash text) returns void
+language plpgsql set search_path='' as $$ begin
+  perform 1 from public.organization_ai_accounts where organization_id=p_org for update;
+  -- Ajustar a agenda pode produzir vários rascunhos. A publicação só admite
+  -- versões do onboarding e nunca substitui uma publicação anterior.
+  if exists(select 1 from public.ai_agents where organization_id=p_org and id=p_agent and published_version_id is not null and published_version_id<>p_version)
+    or exists(select 1 from public.ai_agent_versions where organization_id=p_org and agent_id=p_agent and provisioning_origin is distinct from 'onboarding')
+    then raise exception 'existing_version_requires_review'; end if;
+  if not exists(select 1 from public.ai_agent_versions v join public.channel_sessions c on c.id=v.channel_session_id and c.organization_id=v.organization_id
+    where v.organization_id=p_org and v.agent_id=p_agent and v.id=p_version and c.status='WORKING' and c.phone_number is not null and c.verified_at is not null and c.verification_phone_hash=p_phone_hash and c.archived_at is null) then raise exception 'whatsapp_verification_required'; end if;
+  perform public.fn_ai_start_trial(p_org,p_user,p_owner_hash,p_phone_hash,p_device_hash,p_ip_hash);
+  if not exists(select 1 from public.ai_agents where organization_id=p_org and id=p_agent and published_version_id=p_version) then
+    perform public.fn_publish_ai_agent_version(p_org,p_agent,p_version,true,null);
+  end if;
+  update public.ai_agents set is_active=true where organization_id=p_org and id=p_agent;
+  update public.organizations set onboarded_at=coalesce(onboarded_at,now()),
+    onboarding_state=jsonb_set(coalesce(onboarding_state,'{}'),'{ai,activated_at}',to_jsonb(now()::text)) where id=p_org;
+end $$;
+revoke all on function public.fn_activate_business_agent(uuid,uuid,uuid,uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.fn_activate_business_agent(uuid,uuid,uuid,uuid,text,text,text,text) to service_role;
+
+create or replace function public.fn_admin_ai_account(p_org uuid,p_actor uuid,p_action text,p_reason text,p_units integer,p_reference uuid) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; payment_code text; begin
+  if length(trim(p_reason))<10 then raise exception 'reason_required'; end if;
+  if not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'organization_not_found'; end if;
+  if exists(select 1 from public.api_audit_log where organization_id=p_org and action='platform_admin.ai_account_changed' and metadata->>'reference'=p_reference::text) then return; end if;
+  if p_action='migrate' then
+    if a.mode<>'legacy' then raise exception 'already_managed'; end if;
+    if not exists(select 1 from public.platform_ai_settings s join public.ai_models m on m.provider=s.provider and m.model_id=s.model
+      where s.enabled and m.pricing_verified_at is not null and m.deprecated_at is null and m.supports_tools) then raise exception 'ai_platform_unavailable'; end if;
+    if exists(select 1 from public.ai_agents where organization_id=p_org and published_version_id is not null) and not exists(
+      select 1 from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') and paid_access_until>now()
+    ) then raise exception 'confirmed_paid_period_required'; end if;
+    update public.organization_ai_accounts set mode='platform',state='pending',updated_at=now() where organization_id=p_org;
+    for payment_code in select transaction_code from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') order by first_paid_at loop
+      perform public.fn_ai_apply_payment(p_org,payment_code);
+    end loop;
+    perform public.fn_ai_renew(p_org);
+  elsif p_action='adjust' then
+    if a.mode<>'platform' or p_units=0 or abs(p_units)>1000000 or a.extra_remaining+p_units<0 then raise exception 'invalid_adjustment'; end if;
+    update public.organization_ai_accounts set extra_remaining=extra_remaining+case when p_units>0 then greatest(0,p_units-extra_debt) else p_units end,
+      extra_debt=case when p_units>0 then greatest(0,extra_debt-p_units) else extra_debt end,updated_at=now() where organization_id=p_org;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units,reason,actor_user_id) values(p_org,'admin:'||p_reference,'adjustment',p_units,p_reason,p_actor);
+  elsif p_action='suspend' then
+    if a.mode<>'platform' then raise exception 'managed_account_required'; end if;
+    update public.organization_ai_accounts set state='suspended',updated_at=now() where organization_id=p_org;
+  elsif p_action='reactivate' then
+    if a.mode<>'platform' or a.access_until is null or a.access_until<=now() then raise exception 'paid_period_required'; end if;
+    update public.organization_ai_accounts set state=case when exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then 'active' else 'trial' end,updated_at=now() where organization_id=p_org;
+  elsif p_action='trial_exception' then
+    if a.state<>'pending' or a.mode<>'platform' then raise exception 'pending_trial_required'; end if;
+    insert into public.ai_trial_exceptions(organization_id,actor_user_id,reason,expires_at) values(p_org,p_actor,p_reason,now()+interval '7 days')
+      on conflict(organization_id) do update set actor_user_id=excluded.actor_user_id,reason=excluded.reason,expires_at=excluded.expires_at;
+  else raise exception 'invalid_admin_action'; end if;
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata)
+    values(p_org,p_actor,'platform_admin.ai_account_changed','organization',p_org,jsonb_build_object('operation',p_action,'reason',p_reason,'units',p_units,'reference',p_reference));
+end $$;
+revoke all on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) to service_role;
+
+create or replace function public.fn_admin_saas_overview() returns jsonb
+language sql stable set search_path='' as $$ select jsonb_build_object(
+  'companies',(select count(*) from public.organizations where status<>'redacted'),
+  'trial',(select count(*) from public.organization_ai_accounts where mode='platform' and state='trial' and access_until>now()),
+  'active',(select count(*) from public.organization_ai_accounts where mode='platform' and state='active' and access_until>now()),
+  'expired',(select count(*) from public.organization_ai_accounts where mode='platform' and (state='expired' or state in('trial','active') and access_until<=now())),
+  'suspended',(select count(*) from public.organization_ai_accounts where state='suspended'),
+  'legacy',(select count(*) from public.organization_ai_accounts where mode='legacy'),
+  'responses',(select count(*) from public.ai_credit_ledger where kind='debit' and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'received_brl_cents',(select coalesce(sum(amount_cents),0) from public.billing_payments where status in('APPROVED','COMPLETE') and first_paid_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'known_cost_usd_cents',(select sum(cost_cents) from public.llm_calls where created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'measured_calls',(select count(*) from public.llm_calls where cost_cents is not null and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'total_calls',(select count(*) from public.llm_calls where created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'unknown_cost_calls',(select count(*) from public.llm_calls where cost_cents is null and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'uncertain_responses',(select count(*) from public.ai_response_reservations where state='uncertain'),
+  'webhook_pending',(select count(*) from public.billing_webhook_events where state in('unmatched','failed')),
+  'empty_balance',(select count(*) from public.organization_ai_accounts where mode='platform' and state in('trial','active') and access_until>now() and monthly_remaining+extra_remaining=0),
+  'offline_channels',(select count(*) from public.channel_sessions where archived_at is null and status<>'WORKING'),
+  'failed_jobs',(select count(*) from public.job_queue where status='dead')
+) $$;
+revoke all on function public.fn_admin_saas_overview() from public,anon,authenticated;
+grant execute on function public.fn_admin_saas_overview() to service_role;
+
+-- O vencimento impede escrita operacional inclusive pela REST direta.
+-- Preparação inicial, financeiro, exportação e suporte têm superfícies próprias.
+create or replace function public.fn_ai_operational_write_guard() returns trigger
+language plpgsql security definer set search_path='' as $$ declare org uuid; a public.organization_ai_accounts; begin
+  if tg_table_name='organizations' then
+    org:=case when tg_op='DELETE' then old.id else new.id end;
+  else org:=case when tg_op='DELETE' then old.organization_id else new.organization_id end; end if;
+  select * into a from public.organization_ai_accounts where organization_id=org;
+  if not found and current_setting('role',true) in('anon','authenticated') then raise exception 'commercial_account_unavailable'; end if;
+  if found and a.mode='platform' and (a.state in('expired','suspended') or a.state in('trial','active') and (a.access_until is null or a.access_until<=now())) then
+    -- Retenção/LGPD, entrada de mensagens e reconciliação continuam operando.
+    -- IA tem sua própria barreira antes da chamada; envio novo ainda é bloqueado.
+    if current_setting('role',true) not in('anon','authenticated') then
+      if tg_op='DELETE' then return old; end if;
+      if tg_table_name<>'messages' or tg_op='UPDATE' then return new; end if;
+      if new.direction='inbound' then return new; end if;
+    end if;
+    raise exception 'commercial_read_only';
+  end if;
+  if tg_op='DELETE' then return old; end if; return new;
+end $$;
+revoke all on function public.fn_ai_operational_write_guard() from public,anon,authenticated,service_role;
+do $$ declare t text; begin
+  foreach t in array array['contacts','crm_leads','crm_tasks','messages','calendar_appointments','crm_pipelines','crm_stages'] loop
+    if to_regclass('public.'||t) is not null then
+      execute format('drop trigger if exists trg_commercial_write_guard on public.%I',t);
+      execute format('create trigger trg_commercial_write_guard before insert or update or delete on public.%I for each row execute function public.fn_ai_operational_write_guard()',t);
+    end if;
+  end loop;
+end $$;
+
+-- A régua antiga continua intacta para recibos sem identidade de resposta.
+create or replace function public.fn_registrar_resposta_ia() returns trigger
+language plpgsql security definer set search_path='' as $$ declare inserted_id uuid; begin
+  if current_setting('role',true) in('authenticated','anon') then return new; end if;
+  if new.ai_response_id is not null then
+    if new.direction='outbound' and new.status in('sent','delivered','read') and new.ai_response_part is not null then
+      insert into public.ai_response_parts(organization_id,response_id,part) values(new.organization_id,new.ai_response_id,new.ai_response_part) on conflict do nothing;
+    end if;
+    perform public.fn_ai_settle(new.organization_id,new.ai_response_id,false); return new;
+  end if;
+  if not new.ai_credit_eligible or new.direction<>'outbound' or new.status not in('sent','delivered','read') then return new; end if;
+  insert into public.ai_response_usage(id,organization_id) values(new.id,new.organization_id) on conflict do nothing returning id into inserted_id;
+  if inserted_id is not null then
+    insert into public.api_audit_log(organization_id,action,resource_type,resource_id,metadata)
+      values(new.organization_id,'ai.response_counted','ai_response_usage',inserted_id,'{"units":1}'::jsonb);
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_registrar_resposta_ia() from public,anon,authenticated,service_role;
+
+-- Preserva o job que ainda explica um envio com saldo reservado ou entrega incerta.
+create or replace function public.fn_podar_fila_de_jobs(p_retencao_dias int default null,p_limite int default null) returns int
+language plpgsql security definer set search_path='' as $$ declare removed integer; begin
+  with candidates as (
+    select j.id from public.job_queue j where j.status in('done','failed','dead')
+      and j.created_at<now()-make_interval(days=>greatest(coalesce(p_retencao_dias,90),7))
+      and not exists(select 1 from public.agent_inbox_items i where i.ref_kind='job_queue' and i.ref_id=j.id and i.status='open')
+      and not exists(select 1 from public.ai_response_reservations r where r.organization_id=j.organization_id and r.reference='job:'||j.id and r.state in('reserved','uncertain'))
+    order by j.created_at limit least(greatest(coalesce(p_limite,1000),1),10000)
+  ) delete from public.job_queue j using candidates c where j.id=c.id;
+  get diagnostics removed=row_count; return removed;
+end $$;
+revoke execute on function public.fn_podar_fila_de_jobs(int,int) from public,anon,authenticated;
+grant execute on function public.fn_podar_fila_de_jobs(int,int) to service_role;
+
+-- Sinais operacionais seguem a retenção da fila; prova de concessão segue a auditoria L-10.
+create or replace function public.fn_ai_trial_retention(p_audit_days int,p_signal_days int,p_limit int default 1000) returns int
+language plpgsql set search_path='' as $$ declare removed integer; changed integer; begin
+  with candidates as (select id from public.ai_trial_claims where created_at<now()-make_interval(days=>greatest(p_audit_days,90)) order by created_at limit least(greatest(p_limit,1),10000))
+    delete from public.ai_trial_claims t using candidates c where t.id=c.id;
+  get diagnostics removed=row_count;
+  with candidates as (select id from public.ai_trial_claims where (device_hash is not null or ip_hash is not null) and created_at<now()-make_interval(days=>greatest(p_signal_days,7)) order by created_at limit least(greatest(p_limit,1),10000))
+    update public.ai_trial_claims t set device_hash=null,ip_hash=null from candidates c where t.id=c.id;
+  get diagnostics changed=row_count; return removed+changed;
+end $$;
+revoke execute on function public.fn_ai_trial_retention(int,int,int) from public,anon,authenticated;
+grant execute on function public.fn_ai_trial_retention(int,int,int) to service_role;
+
+create or replace function public.fn_admin_ai_usage(p_start timestamptz,p_end timestamptz,p_offset int default 0,p_limit int default 50) returns jsonb
+language sql stable set search_path='' as $$
+  with groups as (
+    select l.organization_id,o.display_name,l.purpose,l.provider,l.model,count(*) calls,
+      count(*) filter(where l.status='erro') failures,count(*) filter(where l.cost_cents is null) unknown_cost_calls,
+      sum(l.cost_cents) known_cost_usd_cents,sum(l.input_tokens) input_tokens,sum(l.output_tokens) output_tokens
+    from public.llm_calls l join public.organizations o on o.id=l.organization_id where l.created_at>=p_start and l.created_at<p_end
+    group by l.organization_id,o.display_name,l.purpose,l.provider,l.model
+  ), page as (select * from groups order by calls desc,organization_id,purpose,provider,model offset greatest(p_offset,0) limit least(greatest(p_limit,1),200))
+  select jsonb_build_object('total',(select count(*) from groups),'rows',coalesce((select jsonb_agg(to_jsonb(page)) from page),'[]'::jsonb))
+$$;
+revoke execute on function public.fn_admin_ai_usage(timestamptz,timestamptz,int,int) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_usage(timestamptz,timestamptz,int,int) to service_role;
+
+-- Somente o saldo comercial, sujeito à policy de leitura própria, entra no Realtime.
+create or replace function public.fn_admin_ai_reconcile(p_org uuid,p_actor uuid,p_response uuid,p_reason text) returns text
+language plpgsql set search_path='' as $$ declare result text; begin
+  if length(trim(p_reason))<10 or not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  perform 1 from public.organization_ai_accounts where organization_id=p_org for update;
+  if not exists(select 1 from public.ai_response_reservations r join public.job_queue j on r.reference='job:'||j.id and j.organization_id=r.organization_id where r.organization_id=p_org and r.id=p_response and j.status in('done','dead','failed')) then raise exception 'terminal_job_required'; end if;
+  update public.ai_response_reservations set sealed_at=coalesce(sealed_at,now()) where organization_id=p_org and id=p_response;
+  result:=public.fn_ai_settle(p_org,p_response,true);
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata) values(p_org,p_actor,'platform_admin.ai_account_changed','ai_response_reservation',p_response,jsonb_build_object('operation','reconcile_response','reason',p_reason,'result',result));
+  return result;
+end $$;
+revoke execute on function public.fn_admin_ai_reconcile(uuid,uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_reconcile(uuid,uuid,uuid,text) to service_role;
+
+do $$ begin
+  if exists(select 1 from pg_publication where pubname='supabase_realtime') and not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='organization_ai_accounts') then
+    alter publication supabase_realtime add table public.organization_ai_accounts;
+  end if;
+end $$;
+notify pgrst,'reload schema';
+
+-- Suporte do cliente é leitura na REST. Efeitos passam pelas rotas auditadas.
+drop policy if exists tenant_isolation_platform_support_threads_all on public.platform_support_threads;
+drop policy if exists tenant_isolation_platform_support_threads_select on public.platform_support_threads;
+create policy tenant_isolation_platform_support_threads_select on public.platform_support_threads
+  for select to authenticated using(organization_id in(select public.fn_user_org_ids()) and created_by=auth.uid());
+drop policy if exists tenant_isolation_platform_support_messages_all on public.platform_support_messages;
+drop policy if exists tenant_isolation_platform_support_messages_select on public.platform_support_messages;
+create policy tenant_isolation_platform_support_messages_select on public.platform_support_messages
+  for select to authenticated using(organization_id in(select public.fn_user_org_ids()) and exists(
+    select 1 from public.platform_support_threads t where t.id=thread_id
+      and t.organization_id=platform_support_messages.organization_id and t.created_by=auth.uid()));
+
+-- A REST direta e RPCs privilegiadas também respeitam o período. A guarda
+-- observa o ROLE original, inclusive dentro de SECURITY DEFINER. Backend,
+-- retenção e reconciliação conservam as exceções já delimitadas no corpo.
+do $$ declare t text; begin
+  for t in select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relkind='r' and c.relrowsecurity
+      and (c.relname='organizations' or exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='organization_id' and not a.attisdropped))
+      and c.relname not like 'billing_%' and c.relname not like 'platform_support_%'
+  loop
+    execute format('drop trigger if exists trg_commercial_write_guard on public.%I',t);
+    execute format('create trigger trg_commercial_write_guard before insert or update or delete on public.%I for each row execute function public.fn_ai_operational_write_guard()',t);
+  end loop;
+end $$;
+notify pgrst,'reload schema';
+
+-- 0249_storage_periodo_comercial
+-- A policy restritiva existente conserva isolamento e modo de suporte.
+-- O período comercial também vale para uploads diretos com JWT do cliente.
+create or replace function public.fn_support_storage_write_allowed(p_name text)
+returns boolean language plpgsql stable security definer set search_path='' as $$
+declare v_org uuid; a public.organization_ai_accounts;
+begin
+  if split_part(p_name,'/',1) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    -- Paths da plataforma continuam sujeitos às policies permissivas próprias.
+    return true;
+  end if;
+  v_org:=split_part(p_name,'/',1)::uuid;
+  if not public.fn_support_write_allowed(v_org) then return false; end if;
+  select * into a from public.organization_ai_accounts where organization_id=v_org;
+  if not found then return false; end if;
+  return a.mode='legacy' or (a.mode='platform' and (
+    a.state='pending' or (a.state in('trial','active') and a.access_until is not null and a.access_until>now())
+  ));
+end $$;
+revoke execute on function public.fn_support_storage_write_allowed(text) from public,anon;
+grant execute on function public.fn_support_storage_write_allowed(text) to authenticated,service_role;
+notify pgrst,'reload schema';
+
+-- 0250_storage_helper_escopo
+-- O helper de policy também é uma RPC autenticada. Sua resposta não deve
+-- revelar o período comercial de uma organização fora dos vínculos da sessão.
+create or replace function public.fn_support_storage_write_allowed(p_name text)
+returns boolean language plpgsql stable security definer set search_path='' as $$
+declare v_org uuid; a public.organization_ai_accounts;
+begin
+  if split_part(p_name,'/',1) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return true; -- Paths da plataforma continuam nas policies próprias.
+  end if;
+  v_org:=split_part(p_name,'/',1)::uuid;
+  -- SECURITY DEFINER muda current_user, mas conserva a role original da sessão.
+  if current_setting('role',true) in('authenticated','anon') and
+    not (v_org in(select public.fn_user_org_ids())) then return false; end if;
+  if not public.fn_support_write_allowed(v_org) then return false; end if;
+  select * into a from public.organization_ai_accounts where organization_id=v_org;
+  if not found then return false; end if;
+  return a.mode='legacy' or (a.mode='platform' and (
+    a.state='pending' or (a.state in('trial','active') and a.access_until is not null and a.access_until>now())
+  ));
+end $$;
+revoke execute on function public.fn_support_storage_write_allowed(text) from public,anon;
+grant execute on function public.fn_support_storage_write_allowed(text) to authenticated,service_role;
+notify pgrst,'reload schema';
+
+-- ---- Créditos comerciais e pacotes extras (migration 0251) ----
+-- 0251: dez créditos por mensagem completa; contratos antigos mantêm a capacidade.
+-- Os recibos históricos conservam sua unidade original, identificada pela régua.
+alter table public.organization_ai_accounts add column if not exists credit_meter text not null default 'response_v2';
+alter table public.ai_credit_ledger add column if not exists credit_meter text not null default 'response_v2';
+alter table public.ai_response_reservations add column if not exists credit_meter text not null default 'response_v2';
+alter table public.billing_checkouts add column if not exists credit_meter text not null default 'response_v2';
+alter table public.billing_contracts add column if not exists credit_meter text not null default 'response_v2';
+alter table public.ai_response_reservations add column if not exists units integer not null default 1;
+alter table public.ai_response_reservations add column if not exists monthly_units integer not null default 0;
+alter table public.ai_response_reservations add column if not exists extra_units integer not null default 0;
+alter table public.ai_credit_packs add column if not exists slug text;
+create unique index if not exists ai_credit_packs_slug_unique on public.ai_credit_packs(slug);
+
+update public.ai_response_reservations set
+  monthly_units=case when source='monthly' then units else 0 end,
+  extra_units=case when source='extra' then units else 0 end
+where monthly_units+extra_units=0;
+-- Reserva em andamento e saldo passam juntos à nova unidade. Reaplicar não multiplica.
+update public.ai_response_reservations r set units=r.units*10,
+  monthly_units=r.monthly_units*10,extra_units=r.extra_units*10,credit_meter='credit_v3'
+where r.credit_meter='response_v2' and r.state in('reserved','uncertain')
+  and exists(select 1 from public.organization_ai_accounts a where a.organization_id=r.organization_id and a.mode='platform' and a.credit_meter='response_v2');
+update public.organization_ai_accounts set monthly_allowance=monthly_allowance*10,
+  monthly_remaining=monthly_remaining*10,extra_remaining=extra_remaining*10,extra_debt=extra_debt*10,
+  credit_meter='credit_v3' where mode='platform' and credit_meter='response_v2';
+
+alter table public.organization_ai_accounts alter column credit_meter set default 'credit_v3';
+alter table public.ai_credit_ledger alter column credit_meter set default 'credit_v3';
+alter table public.ai_response_reservations alter column credit_meter set default 'credit_v3';
+alter table public.billing_checkouts alter column credit_meter set default 'credit_v3';
+alter table public.billing_contracts alter column credit_meter set default 'credit_v3';
+do $$ begin
+  if not exists(select 1 from pg_constraint where conname='ai_reservation_funding') then
+    alter table public.ai_response_reservations add constraint ai_reservation_funding check
+      (units>0 and monthly_units>=0 and extra_units>=0 and monthly_units+extra_units=units);
+  end if;
+end $$;
+-- Quantidade sempre informada pela função, não por REST ou pelo navegador.
+alter table public.ai_response_reservations drop constraint if exists ai_response_reservations_source_check;
+alter table public.ai_response_reservations add constraint ai_response_reservations_source_check check(source in('monthly','extra','mixed'));
+
+insert into public.ai_credit_packs(slug,name,units,price_cents,publication_state)
+values('extra-1000','1.000 créditos extras',1000,4999,'draft') on conflict(slug) do nothing;
+
+create or replace function public.fn_billing_contract_meter() returns trigger
+language plpgsql set search_path='' as $$ begin
+  if tg_op='UPDATE' then new.credit_meter:=old.credit_meter;
+  else
+    select c.credit_meter into new.credit_meter from public.billing_checkouts c
+      where c.id=new.checkout_id and c.organization_id=new.organization_id;
+    if new.credit_meter is null then raise exception 'checkout_not_found'; end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_billing_contract_meter() from public,anon,authenticated,service_role;
+drop trigger if exists trg_billing_contract_meter on public.billing_contracts;
+create trigger trg_billing_contract_meter before insert or update on public.billing_contracts for each row execute function public.fn_billing_contract_meter();
+
+create or replace function public.fn_ai_reserve(p_org uuid,p_reference text) returns uuid
+language plpgsql set search_path='' as $$
+declare a public.organization_ai_accounts; r public.ai_response_reservations; m integer; e integer; begin
+  perform public.fn_ai_renew(p_org);
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return null; end if;
+  select * into r from public.ai_response_reservations where organization_id=p_org and reference=p_reference;
+  if found then
+    if r.state='released' then raise exception 'ai_reservation_released'; end if;
+    return r.id;
+  end if;
+  if a.state not in('trial','active') or a.access_until is null or a.access_until<=now() then raise exception 'ai_access_inactive'; end if;
+  m:=least(a.monthly_remaining,10); e:=10-m;
+  if e>0 and (a.state<>'active' or a.extra_remaining<e) then raise exception 'ai_credits_exhausted'; end if;
+  update public.organization_ai_accounts set monthly_remaining=monthly_remaining-m,
+    extra_remaining=extra_remaining-e,updated_at=now() where organization_id=p_org;
+  insert into public.ai_response_reservations(organization_id,reference,source,period_start,credit_meter,units,monthly_units,extra_units)
+    values(p_org,p_reference,case when e=0 then 'monthly' when m=0 then 'extra' else 'mixed' end,a.period_start,'credit_v3',10,m,e) returning * into r;
+  return r.id;
+end $$;
+revoke all on function public.fn_ai_reserve(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_reserve(uuid,text) to service_role;
+
+create or replace function public.fn_ai_settle(p_org uuid,p_id uuid,p_release boolean default false) returns text
+language plpgsql set search_path='' as $$
+declare r public.ai_response_reservations; a public.organization_ai_accounts; accepted integer; uncertain integer; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  select * into r from public.ai_response_reservations where organization_id=p_org and id=p_id for update;
+  if not found then raise exception 'ai_reservation_not_found'; end if;
+  if r.state in('committed','released') then return r.state; end if;
+  select count(*) into accepted from public.ai_response_parts where organization_id=p_org and response_id=p_id and part<=r.expected_parts;
+  select count(*) into uncertain from public.messages m where m.organization_id=p_org and m.ai_response_id=p_id and m.status in('sending','queued')
+    and not exists(select 1 from public.ai_response_parts p where p.organization_id=p_org and p.response_id=p_id and p.part=m.ai_response_part);
+  if r.sealed_at is not null and r.expected_parts is not null and accepted=r.expected_parts then
+    update public.ai_response_reservations set state='committed',updated_at=now() where id=p_id;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units,credit_meter)
+      values(p_org,'response:'||p_id,'debit',-r.units,r.credit_meter) on conflict do nothing;
+    return 'committed';
+  end if;
+  if p_release and uncertain=0 then
+    -- Créditos mensais de um ciclo encerrado não voltam ao ciclo seguinte.
+    update public.organization_ai_accounts set
+      monthly_remaining=monthly_remaining+case when a.period_start=r.period_start then r.monthly_units else 0 end,
+      extra_remaining=extra_remaining+greatest(0,r.extra_units-extra_debt),
+      extra_debt=greatest(0,extra_debt-r.extra_units),updated_at=now() where organization_id=p_org;
+    update public.ai_response_reservations set state='released',updated_at=now() where id=p_id; return 'released';
+  end if;
+  update public.ai_response_reservations set state='uncertain',updated_at=now() where id=p_id; return 'uncertain';
+end $$;
+revoke all on function public.fn_ai_settle(uuid,uuid,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ai_settle(uuid,uuid,boolean) to service_role;
+
+create or replace function public.fn_ai_credit_usage(p_org uuid,p_start timestamptz,p_end timestamptz) returns jsonb
+language sql stable set search_path='' as $$ select jsonb_build_object(
+  'credits',coalesce(sum(-units*case when credit_meter='response_v2' then 10 else 1 end),0),
+  'messages',count(*))
+from public.ai_credit_ledger where organization_id=p_org and kind='debit' and created_at>=p_start and created_at<p_end $$;
+revoke all on function public.fn_ai_credit_usage(uuid,timestamptz,timestamptz) from public,anon,authenticated;
+-- INVOKER: leitura autenticada permanece limitada pela RLS administrativa do tenant.
+grant execute on function public.fn_ai_credit_usage(uuid,timestamptz,timestamptz) to authenticated,service_role;
+
+create or replace function public.fn_admin_publish_credit_pack(p_id uuid,p_actor uuid,p_reason text) returns void
+language plpgsql set search_path='' as $$ declare p public.ai_credit_packs; begin
+  if length(trim(p_reason))<10 then raise exception 'reason_required'; end if;
+  if not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  select * into p from public.ai_credit_packs where id=p_id for update;
+  if not found or p.price_cents is null or p.units<=0 or p.hotmart_offer is null
+    or nullif(p.hotmart_offer->>'product_ucode','') is null or nullif(p.hotmart_offer->>'offer_code','') is null
+    or coalesce(p.hotmart_offer->>'checkout_url','') !~ '^https://pay\.hotmart\.com/[^?#]+'
+    then raise exception 'credit_pack_offer_missing'; end if;
+  if p.publication_state='published' and p.hotmart_offer @> '{"enabled":true}'::jsonb then return; end if;
+  update public.ai_credit_packs set publication_state='published',hotmart_offer=jsonb_set(hotmart_offer,'{enabled}','true') where id=p_id;
+  insert into public.api_audit_log(actor_user_id,action,resource_type,resource_id,metadata)
+    values(p_actor,'platform_admin.credit_pack_published','ai_credit_pack',p_id,jsonb_build_object('reason',p_reason,'units',p.units,'price_cents',p.price_cents));
+end $$;
+revoke all on function public.fn_admin_publish_credit_pack(uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_admin_publish_credit_pack(uuid,uuid,text) to service_role;
+
+
+-- ---- Funções compatíveis com a régua credit_v3 ----
+create or replace function public.fn_ai_check_access(p_org uuid,p_purpose text,p_job uuid default null) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; cap integer; used integer; budget numeric; begin
+  perform public.fn_ai_renew(p_org);
+  select * into a from public.organization_ai_accounts where organization_id=p_org;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return; end if;
+  if not (a.state='pending' and p_purpose in('agent_test','agent_preview','checkpoint','connection_test')) then
+    if a.state not in('active','trial') or a.access_until is null or a.access_until<=now() then raise exception 'ai_access_inactive'; end if;
+    if a.monthly_remaining+(case when a.state='active' then a.extra_remaining else 0 end)<10 and not exists(
+      select 1 from public.ai_response_reservations r where r.organization_id=p_org and r.state in('reserved','uncertain','committed') and r.units=10 and
+        (r.reference='job:'||p_job or r.reference='job:'||(select j.payload->>'origin_job_id' from public.job_queue j where j.id=p_job and j.organization_id=p_org))
+    ) then raise exception 'ai_credits_exhausted'; end if;
+  end if;
+  select requests_per_minute,monthly_cost_limit_cents into cap,budget from public.platform_ai_settings where id=true and enabled;
+  if cap is null then raise exception 'ai_platform_unavailable'; end if;
+  -- Limite de contenção operacional. Custos desconhecidos seguem destacados no admin.
+  if budget>0 and (select coalesce(sum(l.cost_cents),0) from public.llm_calls l join public.organization_ai_accounts o on o.organization_id=l.organization_id and o.mode='platform' where l.created_at>=date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')>=budget then
+    raise exception 'ai_platform_budget_exhausted';
+  end if;
+  insert into public.ai_operational_buckets(organization_id,minute,hits) values(p_org,date_trunc('minute',now()),1)
+    on conflict(organization_id,minute) do update set hits=public.ai_operational_buckets.hits+1 where public.ai_operational_buckets.hits<cap returning hits into used;
+  if used is null then raise exception 'ai_frequency_limit'; end if;
+  delete from public.ai_operational_buckets where organization_id=p_org and minute<now()-interval '1 day';
+end $$;
+revoke all on function public.fn_ai_check_access(uuid,text,uuid) from public,anon,authenticated;
+grant execute on function public.fn_ai_check_access(uuid,text,uuid) to service_role;
+create or replace function public.fn_ai_start_trial(p_org uuid,p_user uuid,p_owner_hash text,p_phone_hash text,p_device_hash text,p_ip_hash text) returns void
+language plpgsql security definer set search_path='' as $$
+declare a public.organization_ai_accounts; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found or a.mode<>'platform' then raise exception 'ai_trial_not_eligible'; end if;
+  if not exists(select 1 from public.user_organizations where organization_id=p_org and user_id=p_user and role='admin' and revoked_at is null and accepted_at is not null)
+    or not exists(select 1 from auth.users where id=p_user and email_confirmed_at is not null) then raise exception 'ai_trial_identity_unverified'; end if;
+  if a.state in('trial','active') then return; end if;
+  if a.state<>'pending' then raise exception 'ai_trial_already_used'; end if;
+  if not exists(select 1 from public.platform_ai_settings where enabled and provider is not null and model is not null) then raise exception 'ai_platform_unavailable'; end if;
+  if p_owner_hash !~ '^[a-f0-9]{64}$' or p_phone_hash !~ '^[a-f0-9]{64}$' then raise exception 'ai_trial_identity_unverified'; end if;
+  if not exists(select 1 from public.channel_sessions where organization_id=p_org and archived_at is null and status='WORKING' and verified_at is not null and verification_phone_hash=p_phone_hash) then raise exception 'whatsapp_verification_required'; end if;
+  if (select count(*) from public.user_organizations where organization_id=p_org and revoked_at is null)>1 or
+     (select count(*) from public.channel_sessions where organization_id=p_org and archived_at is null)>1 then raise exception 'ai_trial_capacity_exceeded'; end if;
+  -- Os índices únicos também protegem ativações concorrentes entre empresas.
+  if exists(select 1 from public.ai_trial_exceptions where organization_id=p_org and consumed_at is null and expires_at>now()) then
+    update public.ai_trial_exceptions set consumed_at=now() where organization_id=p_org;
+  else
+    insert into public.ai_trial_claims(organization_id,owner_hash,phone_hash,device_hash,ip_hash,risk_signals) values(p_org,p_owner_hash,p_phone_hash,p_device_hash,p_ip_hash,
+      array_remove(array[
+        case when p_ip_hash is not null and exists(select 1 from public.ai_trial_claims where ip_hash=p_ip_hash) then 'shared_network_verified' end,
+        case when p_device_hash is not null and exists(select 1 from public.ai_trial_claims where device_hash=p_device_hash) then 'shared_device_verified' end
+      ],null));
+  end if;
+  update public.organization_ai_accounts set state='trial',anchor_at=now(),access_until=now()+interval '7 days',
+    period_start=now(),period_end=now()+interval '7 days',credit_meter='credit_v3',monthly_allowance=1000,monthly_remaining=1000,user_limit=1,channel_limit=1,updated_at=now()
+    where organization_id=p_org;
+  insert into public.ai_credit_ledger(organization_id,reference,kind,units,actor_user_id) values(p_org,'trial','trial',1000,p_user);
+end $$;
+revoke all on function public.fn_ai_start_trial(uuid,uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_start_trial(uuid,uuid,text,text,text,text) to service_role;
+create or replace function public.fn_ai_apply_payment(p_org uuid,p_transaction text) returns void
+language plpgsql set search_path='' as $$
+declare payment public.billing_payments; c public.billing_contracts; o public.billing_checkouts; a public.organization_ai_accounts; multiplier integer; pack_units integer; months integer; until_at timestamptz; limits jsonb; begin
+  select * into payment from public.billing_payments where organization_id=p_org and transaction_code=p_transaction;
+  if not found then raise exception 'payment_not_found'; end if;
+  select * into c from public.billing_contracts where organization_id=payment.organization_id and id=payment.contract_id;
+  select * into o from public.billing_checkouts where organization_id=payment.organization_id and id=c.checkout_id;
+  select * into a from public.organization_ai_accounts where organization_id=payment.organization_id for update;
+  if not found or a.mode='legacy' then return; end if;
+  multiplier:=case when o.credit_meter='response_v2' then 10 else 1 end;
+  pack_units:=o.credit_units*multiplier;
+  if payment.status in('APPROVED','COMPLETE') then
+    if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code) then return; end if;
+    if o.credit_pack_id is not null then
+      if a.state not in('active','suspended') or a.access_until<=now() or not exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then raise exception 'ai_subscription_required_for_extra'; end if;
+      update public.organization_ai_accounts set extra_remaining=extra_remaining+greatest(0,pack_units-extra_debt),extra_debt=greatest(0,extra_debt-pack_units) where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'extra',pack_units);
+    else
+      months:=case o.billing_interval when 'year' then 12 when 'semester' then 6 else 1 end;
+      limits:=o.limits_snapshot;
+      if limits is null or (limits->>'ai_credits') is null or (limits->>'users') is null or (limits->>'whatsapp_numbers') is null then raise exception 'ai_plan_limits_missing'; end if;
+      until_at:=coalesce(payment.paid_access_until,public.fn_ai_anniversary(payment.first_paid_at,months));
+      insert into public.ai_paid_access(organization_id,transaction_code,paid_at,access_until)
+        values(payment.organization_id,payment.transaction_code,payment.first_paid_at,until_at) on conflict do nothing;
+      -- Uma renovação estende o acesso sem resetar a franquia no meio do ciclo.
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' else 'active' end,plan_id=o.plan_id,
+        anchor_at=case when a.state in('active','suspended') and a.anchor_at is not null then a.anchor_at else payment.first_paid_at end,
+        access_until=case when a.state in('active','suspended') then greatest(coalesce(a.access_until,until_at),until_at) else until_at end,
+        monthly_allowance=((limits->>'ai_credits')::integer*multiplier),
+        monthly_remaining=case when a.state in('active','suspended') and a.anchor_at is not null then a.monthly_remaining else ((limits->>'ai_credits')::integer*multiplier) end,
+        period_start=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_start else payment.first_paid_at end,
+        period_end=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_end else public.fn_ai_anniversary(payment.first_paid_at,1) end,
+        user_limit=(limits->>'users')::integer,channel_limit=(limits->>'whatsapp_numbers')::integer,updated_at=now()
+      where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'subscription',case when a.state='active' then 0 else ((limits->>'ai_credits')::integer*multiplier) end);
+    end if;
+  elsif payment.status in('REFUNDED','CHARGEBACK') then
+    if o.credit_pack_id is not null then
+      if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code)
+        and not exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='refund:'||payment.transaction_code) then
+        update public.organization_ai_accounts set extra_debt=extra_debt+greatest(0,pack_units-extra_remaining),extra_remaining=greatest(0,extra_remaining-pack_units) where organization_id=payment.organization_id;
+        insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'refund:'||payment.transaction_code,'refund',-pack_units);
+      end if;
+    else
+      update public.ai_paid_access set revoked_at=now() where organization_id=payment.organization_id and transaction_code=payment.transaction_code and revoked_at is null;
+      select max(p.access_until) into until_at from public.ai_paid_access p where p.organization_id=payment.organization_id and p.revoked_at is null;
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' when until_at>now() then 'active' else 'expired' end,
+        access_until=coalesce(until_at,now()),updated_at=now() where organization_id=payment.organization_id;
+    end if;
+  end if;
+  return;
+end $$;
+revoke all on function public.fn_ai_apply_payment(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_apply_payment(uuid,text) to service_role;
+create or replace function public.fn_admin_ai_account(p_org uuid,p_actor uuid,p_action text,p_reason text,p_units integer,p_reference uuid) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; payment_code text; begin
+  if length(trim(p_reason))<10 then raise exception 'reason_required'; end if;
+  if not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'organization_not_found'; end if;
+  if exists(select 1 from public.api_audit_log where organization_id=p_org and action='platform_admin.ai_account_changed' and metadata->>'reference'=p_reference::text) then return; end if;
+  if p_action='migrate' then
+    if a.mode<>'legacy' then raise exception 'already_managed'; end if;
+    if not exists(select 1 from public.platform_ai_settings s join public.ai_models m on m.provider=s.provider and m.model_id=s.model
+      where s.enabled and m.pricing_verified_at is not null and m.deprecated_at is null and m.supports_tools) then raise exception 'ai_platform_unavailable'; end if;
+    if exists(select 1 from public.ai_agents where organization_id=p_org and published_version_id is not null) and not exists(
+      select 1 from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') and paid_access_until>now()
+    ) then raise exception 'confirmed_paid_period_required'; end if;
+    update public.organization_ai_accounts set mode='platform',credit_meter='credit_v3',state='pending',updated_at=now() where organization_id=p_org;
+    for payment_code in select transaction_code from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') order by first_paid_at loop
+      perform public.fn_ai_apply_payment(p_org,payment_code);
+    end loop;
+    perform public.fn_ai_renew(p_org);
+  elsif p_action='adjust' then
+    if a.mode<>'platform' or p_units=0 or abs(p_units)>1000000 or a.extra_remaining+p_units<0 then raise exception 'invalid_adjustment'; end if;
+    update public.organization_ai_accounts set extra_remaining=extra_remaining+case when p_units>0 then greatest(0,p_units-extra_debt) else p_units end,
+      extra_debt=case when p_units>0 then greatest(0,extra_debt-p_units) else extra_debt end,updated_at=now() where organization_id=p_org;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units,reason,actor_user_id) values(p_org,'admin:'||p_reference,'adjustment',p_units,p_reason,p_actor);
+  elsif p_action='suspend' then
+    if a.mode<>'platform' then raise exception 'managed_account_required'; end if;
+    update public.organization_ai_accounts set state='suspended',updated_at=now() where organization_id=p_org;
+  elsif p_action='reactivate' then
+    if a.mode<>'platform' or a.access_until is null or a.access_until<=now() then raise exception 'paid_period_required'; end if;
+    update public.organization_ai_accounts set state=case when exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then 'active' else 'trial' end,updated_at=now() where organization_id=p_org;
+  elsif p_action='trial_exception' then
+    if a.state<>'pending' or a.mode<>'platform' then raise exception 'pending_trial_required'; end if;
+    insert into public.ai_trial_exceptions(organization_id,actor_user_id,reason,expires_at) values(p_org,p_actor,p_reason,now()+interval '7 days')
+      on conflict(organization_id) do update set actor_user_id=excluded.actor_user_id,reason=excluded.reason,expires_at=excluded.expires_at;
+  else raise exception 'invalid_admin_action'; end if;
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata)
+    values(p_org,p_actor,'platform_admin.ai_account_changed','organization',p_org,jsonb_build_object('operation',p_action,'reason',p_reason,'units',p_units,'reference',p_reference));
+end $$;
+revoke all on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) to service_role;
+create or replace function public.fn_admin_saas_overview() returns jsonb
+language sql stable set search_path='' as $$ select jsonb_build_object(
+  'companies',(select count(*) from public.organizations where status<>'redacted'),
+  'trial',(select count(*) from public.organization_ai_accounts where mode='platform' and state='trial' and access_until>now()),
+  'active',(select count(*) from public.organization_ai_accounts where mode='platform' and state='active' and access_until>now()),
+  'expired',(select count(*) from public.organization_ai_accounts where mode='platform' and (state='expired' or state in('trial','active') and access_until<=now())),
+  'suspended',(select count(*) from public.organization_ai_accounts where state='suspended'),
+  'legacy',(select count(*) from public.organization_ai_accounts where mode='legacy'),
+  'responses',(select count(*) from public.ai_credit_ledger where kind='debit' and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'credits',(select coalesce(sum(-units*case when credit_meter='response_v2' then 10 else 1 end),0) from public.ai_credit_ledger where kind='debit' and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'received_brl_cents',(select coalesce(sum(amount_cents),0) from public.billing_payments where status in('APPROVED','COMPLETE') and first_paid_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'known_cost_usd_cents',(select sum(cost_cents) from public.llm_calls where created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'measured_calls',(select count(*) from public.llm_calls where cost_cents is not null and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'total_calls',(select count(*) from public.llm_calls where created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'unknown_cost_calls',(select count(*) from public.llm_calls where cost_cents is null and created_at>=(date_trunc('month',now() at time zone 'UTC') at time zone 'UTC')),
+  'uncertain_responses',(select count(*) from public.ai_response_reservations where state='uncertain'),
+  'webhook_pending',(select count(*) from public.billing_webhook_events where state in('unmatched','failed')),
+  'empty_balance',(select count(*) from public.organization_ai_accounts where mode='platform' and state in('trial','active') and access_until>now() and monthly_remaining+case when state='active' then extra_remaining else 0 end<10),
+  'offline_channels',(select count(*) from public.channel_sessions where archived_at is null and status<>'WORKING'),
+  'failed_jobs',(select count(*) from public.job_queue where status='dead')
+) $$;
+revoke all on function public.fn_admin_saas_overview() from public,anon,authenticated;
+grant execute on function public.fn_admin_saas_overview() to service_role;
+create or replace function public.fn_ai_commercial_notice(p_org uuid,p_code text) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; msg text; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then return; end if;
+  msg:=case when a.state='active' and a.access_until>now() and a.monthly_remaining+a.extra_remaining<10
+    then 'Seus créditos acabaram. A franquia renova em '||to_char(a.period_end at time zone 'UTC','DD/MM/YYYY')||' (UTC). Consulte os pacotes extras no faturamento. Seu time pode continuar atendendo manualmente.'
+    when a.state='trial' then 'Seu teste terminou ou os créditos acabaram. Contrate um plano para continuar com IA. Consulte o faturamento.'
+    else 'Seu atendimento com IA está pausado. Confira o período contratado e a situação no faturamento. Consulta, exportação, suporte e contratação continuam acessíveis.' end;
+  -- Pendências ainda abertas também passam à linguagem atual, sem duplicação.
+  update public.agent_inbox_items set body=msg
+    where organization_id=p_org and kind='commercial_ai_paused' and status='open'
+      and body is distinct from msg;
+  insert into public.agent_inbox_items(organization_id,kind,severity,title,body)
+    select p_org,'commercial_ai_paused','warn','Seu agente precisa de atenção',msg
+    where not exists(select 1 from public.agent_inbox_items where organization_id=p_org and kind='commercial_ai_paused' and status='open');
+end $$;
+revoke all on function public.fn_ai_commercial_notice(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_commercial_notice(uuid,text) to service_role;
+
+create or replace function public.fn_ai_account_notice() returns trigger
+language plpgsql security definer set search_path='' as $$ begin
+  if new.mode='platform' and (new.state in('expired','suspended') or new.state in('active','trial') and
+    (new.access_until<=now() or new.monthly_remaining+(case when new.state='active' then new.extra_remaining else 0 end)<10)) then
+    perform public.fn_ai_commercial_notice(new.organization_id,new.state);
+  elsif new.mode='platform' and new.state in('active','trial') and new.access_until>now() and
+    new.monthly_remaining+(case when new.state='active' then new.extra_remaining else 0 end)>=10 then
+    update public.agent_inbox_items set status='resolved' where organization_id=new.organization_id and kind='commercial_ai_paused' and status='open';
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_ai_account_notice() from public,anon,authenticated,service_role;
+update public.organization_ai_accounts set updated_at=updated_at where mode='platform';
+
+-- ---- Revisão comercial e versões (migration 0252) ----
+-- 0252: revisão dos dois planos; fecha cobrança de automação e preserva instruções.
+-- Timeout não comprova rejeição pelo canal: reserva permanece para reconciliação.
+create or replace function public.fn_ai_settle(p_org uuid,p_id uuid,p_release boolean default false) returns text
+language plpgsql set search_path='' as $$
+declare r public.ai_response_reservations; a public.organization_ai_accounts; accepted integer; uncertain integer; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  select * into r from public.ai_response_reservations where organization_id=p_org and id=p_id for update;
+  if not found then raise exception 'ai_reservation_not_found'; end if;
+  if r.state in('committed','released') then return r.state; end if;
+  select count(*) into accepted from public.ai_response_parts where organization_id=p_org and response_id=p_id and part<=r.expected_parts;
+  select count(*) into uncertain from public.messages m where m.organization_id=p_org and m.ai_response_id=p_id and (m.status in('sending','queued') or (m.status='failed' and m.error_code in('send_timeout','delivery_unknown')))
+    and not exists(select 1 from public.ai_response_parts p where p.organization_id=p_org and p.response_id=p_id and p.part=m.ai_response_part);
+  if r.sealed_at is not null and r.expected_parts is not null and accepted=r.expected_parts then
+    update public.ai_response_reservations set state='committed',updated_at=now() where id=p_id;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units,credit_meter)
+      values(p_org,'response:'||p_id,'debit',-r.units,r.credit_meter) on conflict do nothing;
+    return 'committed';
+  end if;
+  if p_release and uncertain=0 then
+    -- Créditos mensais de um ciclo encerrado não voltam ao ciclo seguinte.
+    update public.organization_ai_accounts set
+      monthly_remaining=monthly_remaining+case when a.period_start=r.period_start then r.monthly_units else 0 end,
+      extra_remaining=extra_remaining+greatest(0,r.extra_units-extra_debt),
+      extra_debt=greatest(0,extra_debt-r.extra_units),updated_at=now() where organization_id=p_org;
+    update public.ai_response_reservations set state='released',updated_at=now() where id=p_id; return 'released';
+  end if;
+  update public.ai_response_reservations set state='uncertain',updated_at=now() where id=p_id; return 'uncertain';
+end $$;
+revoke all on function public.fn_ai_settle(uuid,uuid,boolean) from public,anon,authenticated;
+grant execute on function public.fn_ai_settle(uuid,uuid,boolean) to service_role;
+
+-- A reserva da automação é interna e só autoriza a sua chamada, na mesma empresa.
+create or replace function public.fn_ai_check_access(p_org uuid,p_purpose text,p_job uuid default null) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; cap integer; used integer; budget numeric; begin
+  perform public.fn_ai_renew(p_org);
+  select * into a from public.organization_ai_accounts where organization_id=p_org;
+  if not found then raise exception 'ai_account_missing'; end if;
+  if a.mode='legacy' then return; end if;
+  if not (a.state='pending' and p_purpose in('agent_test','agent_preview','checkpoint','connection_test')) then
+    if a.state not in('active','trial') or a.access_until is null or a.access_until<=now() then raise exception 'ai_access_inactive'; end if;
+    if a.monthly_remaining+(case when a.state='active' then a.extra_remaining else 0 end)<10 and not exists(
+      select 1 from public.ai_response_reservations r where r.organization_id=p_org and r.state in('reserved','uncertain','committed') and r.units=10 and
+        ((p_purpose='automation_ai_message' and r.id=p_job and r.reference like 'automation:%' and r.sealed_at is null) or r.reference='job:'||p_job or r.reference='job:'||(select j.payload->>'origin_job_id' from public.job_queue j where j.id=p_job and j.organization_id=p_org))
+    ) then raise exception 'ai_credits_exhausted'; end if;
+  end if;
+  select requests_per_minute,monthly_cost_limit_cents into cap,budget from public.platform_ai_settings where id=true and enabled;
+  if cap is null then raise exception 'ai_platform_unavailable'; end if;
+  -- Limite operacional: origem histórica legada não consome o orçamento da plataforma.
+  -- Origem não identificada permanece conservadoramente no teto; custo nulo não vira zero.
+  if budget>0 and (select coalesce(sum(l.cost_cents),0) from public.llm_calls l join public.organization_ai_accounts o on o.organization_id=l.organization_id and o.mode='platform' where l.created_at>=date_trunc('month',now() at time zone 'UTC') at time zone 'UTC' and l.pricing_snapshot->>'mode' is distinct from 'legacy')>=budget then
+    raise exception 'ai_platform_budget_exhausted';
+  end if;
+  insert into public.ai_operational_buckets(organization_id,minute,hits) values(p_org,date_trunc('minute',now()),1)
+    on conflict(organization_id,minute) do update set hits=public.ai_operational_buckets.hits+1 where public.ai_operational_buckets.hits<cap returning hits into used;
+  if used is null then raise exception 'ai_frequency_limit'; end if;
+  delete from public.ai_operational_buckets where organization_id=p_org and minute<now()-interval '1 day';
+end $$;
+revoke all on function public.fn_ai_check_access(uuid,text,uuid) from public,anon,authenticated;
+grant execute on function public.fn_ai_check_access(uuid,text,uuid) to service_role;
+
+create or replace function public.fn_admin_ai_reconcile(p_org uuid,p_actor uuid,p_response uuid,p_reason text) returns text
+language plpgsql set search_path='' as $$ declare result text; r public.ai_response_reservations; begin
+  if length(trim(p_reason))<10 or not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  perform 1 from public.organization_ai_accounts where organization_id=p_org for update;
+  select * into r from public.ai_response_reservations where organization_id=p_org and id=p_response;
+  if not found then raise exception 'ai_reservation_not_found'; end if;
+  if r.reference like 'automation:%' then
+    if not pg_try_advisory_xact_lock(hashtextextended(p_org::text||':'||r.reference,0)) then raise exception 'automation_still_running'; end if;
+    if r.sealed_at is null and not exists(select 1 from public.event_log e where e.organization_id=p_org and e.id::text=split_part(r.reference,':',2) and e.status in('done','dead')) then raise exception 'terminal_event_required'; end if;
+  elsif not exists(select 1 from public.job_queue j where j.organization_id=p_org and r.reference='job:'||j.id and j.status in('done','dead','failed')) then raise exception 'terminal_job_required';
+  end if;
+  update public.ai_response_reservations set sealed_at=coalesce(sealed_at,now()) where organization_id=p_org and id=p_response;
+  result:=public.fn_ai_settle(p_org,p_response,true);
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata) values(p_org,p_actor,'platform_admin.ai_account_changed','ai_response_reservation',p_response,jsonb_build_object('operation','reconcile_response','reason',p_reason,'result',result));
+  return result;
+end $$;
+revoke execute on function public.fn_admin_ai_reconcile(uuid,uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_reconcile(uuid,uuid,uuid,text) to service_role;
+
+create or replace function public.fn_ai_agent_version_content_immutable() returns trigger
+language plpgsql set search_path='' as $fn$
+begin
+  if old.status <> 'draft' and (
+       new.system_prompt          is distinct from old.system_prompt
+    or new.provider               is distinct from old.provider
+    or new.model                  is distinct from old.model
+    or new.credential_id          is distinct from old.credential_id
+    or new.tool_ids               is distinct from old.tool_ids
+    or new.trigger_config         is distinct from old.trigger_config
+    or new.channel_session_id     is distinct from old.channel_session_id
+    or new.max_steps              is distinct from old.max_steps
+    or new.token_budget           is distinct from old.token_budget
+    or new.cost_budget_cents      is distinct from old.cost_budget_cents
+    or new.history_message_window is distinct from old.history_message_window
+    or new.history_token_window   is distinct from old.history_token_window
+    or new.handoff_keywords       is distinct from old.handoff_keywords
+    or new.handoff_tool_enabled   is distinct from old.handoff_tool_enabled
+    or new.followup               is distinct from old.followup
+    or new.multimodal_input       is distinct from old.multimodal_input
+    or new.video_frames_enabled   is distinct from old.video_frames_enabled
+    or new.split_messages         is distinct from old.split_messages
+    or new.split_max_chars        is distinct from old.split_max_chars
+    or new.cases_enabled          is distinct from old.cases_enabled
+    or new.operator_enabled       is distinct from old.operator_enabled
+    or new.operator_prompt        is distinct from old.operator_prompt
+    or new.operator_model         is distinct from old.operator_model
+    or new.operator_tool_ids      is distinct from old.operator_tool_ids
+    or new.pipeline_ids           is distinct from old.pipeline_ids
+    or new.knowledge_source_ids   is distinct from old.knowledge_source_ids
+    or new.version_number         is distinct from old.version_number
+    or new.agent_id               is distinct from old.agent_id
+    or new.organization_id        is distinct from old.organization_id
+  ) then
+    raise exception 'ai_agent_versions % é imutável (status=%): mudança de conteúdo = versão draft nova; rollback = revert (clona + publica)',
+      old.id, old.status;
+  end if;
+  return new;
+end;
+$fn$;
+revoke execute on function public.fn_ai_agent_version_content_immutable() from public,anon,authenticated,service_role;
+-- Extrato registra apenas a concessão efetiva; auditoria nova identifica sua régua.
+create or replace function public.fn_ai_apply_payment(p_org uuid,p_transaction text) returns void
+language plpgsql set search_path='' as $$
+declare payment public.billing_payments; c public.billing_contracts; o public.billing_checkouts; a public.organization_ai_accounts; multiplier integer; pack_units integer; months integer; until_at timestamptz; limits jsonb; begin
+  select * into payment from public.billing_payments where organization_id=p_org and transaction_code=p_transaction;
+  if not found then raise exception 'payment_not_found'; end if;
+  select * into c from public.billing_contracts where organization_id=payment.organization_id and id=payment.contract_id;
+  select * into o from public.billing_checkouts where organization_id=payment.organization_id and id=c.checkout_id;
+  select * into a from public.organization_ai_accounts where organization_id=payment.organization_id for update;
+  if not found or a.mode='legacy' then return; end if;
+  multiplier:=case when o.credit_meter='response_v2' then 10 else 1 end;
+  pack_units:=o.credit_units*multiplier;
+  if payment.status in('APPROVED','COMPLETE') then
+    if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code) then return; end if;
+    if o.credit_pack_id is not null then
+      if a.state not in('active','suspended') or a.access_until<=now() or not exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then raise exception 'ai_subscription_required_for_extra'; end if;
+      update public.organization_ai_accounts set extra_remaining=extra_remaining+greatest(0,pack_units-extra_debt),extra_debt=greatest(0,extra_debt-pack_units) where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'extra',pack_units);
+    else
+      months:=case o.billing_interval when 'year' then 12 when 'semester' then 6 else 1 end;
+      limits:=o.limits_snapshot;
+      if limits is null or (limits->>'ai_credits') is null or (limits->>'users') is null or (limits->>'whatsapp_numbers') is null then raise exception 'ai_plan_limits_missing'; end if;
+      until_at:=coalesce(payment.paid_access_until,public.fn_ai_anniversary(payment.first_paid_at,months));
+      insert into public.ai_paid_access(organization_id,transaction_code,paid_at,access_until)
+        values(payment.organization_id,payment.transaction_code,payment.first_paid_at,until_at) on conflict do nothing;
+      -- Uma renovação estende o acesso sem resetar a franquia no meio do ciclo.
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' else 'active' end,plan_id=o.plan_id,
+        anchor_at=case when a.state in('active','suspended') and a.anchor_at is not null then a.anchor_at else payment.first_paid_at end,
+        access_until=case when a.state in('active','suspended') then greatest(coalesce(a.access_until,until_at),until_at) else until_at end,
+        monthly_allowance=((limits->>'ai_credits')::integer*multiplier),
+        monthly_remaining=case when a.state in('active','suspended') and a.anchor_at is not null then a.monthly_remaining else ((limits->>'ai_credits')::integer*multiplier) end,
+        period_start=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_start else payment.first_paid_at end,
+        period_end=case when a.state in('active','suspended') and a.anchor_at is not null then a.period_end else public.fn_ai_anniversary(payment.first_paid_at,1) end,
+        user_limit=(limits->>'users')::integer,channel_limit=(limits->>'whatsapp_numbers')::integer,updated_at=now()
+      where organization_id=payment.organization_id;
+      insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'payment:'||payment.transaction_code,'subscription',case when a.state in('active','suspended') and a.anchor_at is not null then 0 else ((limits->>'ai_credits')::integer*multiplier) end);
+    end if;
+  elsif payment.status in('REFUNDED','CHARGEBACK') then
+    if o.credit_pack_id is not null then
+      if exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='payment:'||payment.transaction_code)
+        and not exists(select 1 from public.ai_credit_ledger where organization_id=payment.organization_id and reference='refund:'||payment.transaction_code) then
+        update public.organization_ai_accounts set extra_debt=extra_debt+greatest(0,pack_units-extra_remaining),extra_remaining=greatest(0,extra_remaining-pack_units) where organization_id=payment.organization_id;
+        insert into public.ai_credit_ledger(organization_id,reference,kind,units) values(payment.organization_id,'refund:'||payment.transaction_code,'refund',-pack_units);
+      end if;
+    else
+      update public.ai_paid_access set revoked_at=now() where organization_id=payment.organization_id and transaction_code=payment.transaction_code and revoked_at is null;
+      select max(p.access_until) into until_at from public.ai_paid_access p where p.organization_id=payment.organization_id and p.revoked_at is null;
+      update public.organization_ai_accounts set state=case when a.state='suspended' then 'suspended' when until_at>now() then 'active' else 'expired' end,
+        access_until=coalesce(until_at,now()),updated_at=now() where organization_id=payment.organization_id;
+    end if;
+  end if;
+  return;
+end $$;
+revoke all on function public.fn_ai_apply_payment(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_apply_payment(uuid,text) to service_role;
+
+create or replace function public.fn_admin_ai_account(p_org uuid,p_actor uuid,p_action text,p_reason text,p_units integer,p_reference uuid) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; payment_code text; begin
+  if length(trim(p_reason))<10 then raise exception 'reason_required'; end if;
+  if not exists(select 1 from public.platform_admins where user_id=p_actor and scope='full' and revoked_at is null) then raise exception 'platform_admin_required'; end if;
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then raise exception 'organization_not_found'; end if;
+  if exists(select 1 from public.api_audit_log where organization_id=p_org and action='platform_admin.ai_account_changed' and metadata->>'reference'=p_reference::text) then return; end if;
+  if p_action='migrate' then
+    if a.mode<>'legacy' then raise exception 'already_managed'; end if;
+    if not exists(select 1 from public.platform_ai_settings s join public.ai_models m on m.provider=s.provider and m.model_id=s.model
+      where s.enabled and m.pricing_verified_at is not null and m.deprecated_at is null and m.supports_tools) then raise exception 'ai_platform_unavailable'; end if;
+    if exists(select 1 from public.ai_agents where organization_id=p_org and published_version_id is not null) and not exists(
+      select 1 from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') and paid_access_until>now()
+    ) then raise exception 'confirmed_paid_period_required'; end if;
+    update public.organization_ai_accounts set mode='platform',credit_meter='credit_v3',state='pending',updated_at=now() where organization_id=p_org;
+    for payment_code in select transaction_code from public.billing_payments where organization_id=p_org and status in('APPROVED','COMPLETE') order by first_paid_at loop
+      perform public.fn_ai_apply_payment(p_org,payment_code);
+    end loop;
+    perform public.fn_ai_renew(p_org);
+  elsif p_action='adjust' then
+    if a.mode<>'platform' or p_units=0 or abs(p_units)>1000000 or a.extra_remaining+p_units<0 then raise exception 'invalid_adjustment'; end if;
+    update public.organization_ai_accounts set extra_remaining=extra_remaining+case when p_units>0 then greatest(0,p_units-extra_debt) else p_units end,
+      extra_debt=case when p_units>0 then greatest(0,extra_debt-p_units) else extra_debt end,updated_at=now() where organization_id=p_org;
+    insert into public.ai_credit_ledger(organization_id,reference,kind,units,reason,actor_user_id) values(p_org,'admin:'||p_reference,'adjustment',p_units,p_reason,p_actor);
+  elsif p_action='suspend' then
+    if a.mode<>'platform' then raise exception 'managed_account_required'; end if;
+    update public.organization_ai_accounts set state='suspended',updated_at=now() where organization_id=p_org;
+  elsif p_action='reactivate' then
+    if a.mode<>'platform' or a.access_until is null or a.access_until<=now() then raise exception 'paid_period_required'; end if;
+    update public.organization_ai_accounts set state=case when exists(select 1 from public.ai_paid_access where organization_id=p_org and revoked_at is null and access_until>now()) then 'active' else 'trial' end,updated_at=now() where organization_id=p_org;
+  elsif p_action='trial_exception' then
+    if a.state<>'pending' or a.mode<>'platform' then raise exception 'pending_trial_required'; end if;
+    insert into public.ai_trial_exceptions(organization_id,actor_user_id,reason,expires_at) values(p_org,p_actor,p_reason,now()+interval '7 days')
+      on conflict(organization_id) do update set actor_user_id=excluded.actor_user_id,reason=excluded.reason,expires_at=excluded.expires_at;
+  else raise exception 'invalid_admin_action'; end if;
+  insert into public.api_audit_log(organization_id,actor_user_id,action,resource_type,resource_id,metadata)
+    values(p_org,p_actor,'platform_admin.ai_account_changed','organization',p_org,jsonb_build_object('operation',p_action,'reason',p_reason,'units',p_units,'credit_meter',(select credit_meter from public.organization_ai_accounts where organization_id=p_org),'reference',p_reference));
+end $$;
+revoke all on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) from public,anon,authenticated;
+grant execute on function public.fn_admin_ai_account(uuid,uuid,text,text,integer,uuid) to service_role;
+notify pgrst,'reload schema';
+
+-- ---- Jornada comercial e credenciais (migration 0253) ----
+-- Somente novos vínculos recebem o menu simples; nenhuma personalização é sobrescrita.
+alter table public.user_organizations alter column interface_settings set default '{"preset":"simplificada"}'::jsonb;
+
+-- Chaves e bindings são operados pelas rotas de plataforma, com MFA e service_role.
+revoke insert, update, delete on public.ai_provider_credentials from public, anon, authenticated;
+revoke insert, update, delete on public.ai_purpose_bindings from public, anon, authenticated;
+drop policy if exists tenant_isolation_ai_provider_credentials_write on public.ai_provider_credentials;
+create policy tenant_isolation_ai_provider_credentials_write on public.ai_provider_credentials
+  for select using (organization_id in (select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'admin'));
+
+-- Acesso direto ao banco também não pode mudar a chave por meio de uma versão.
+create or replace function public.fn_guard_agent_credential() returns trigger
+language plpgsql security definer set search_path='' as $$
+declare previous_credential uuid;
+begin
+  if current_setting('role',true) not in ('anon','authenticated') then return new; end if;
+  if tg_op='UPDATE' then previous_credential:=old.credential_id;
+  else
+    select credential_id into previous_credential from public.ai_agent_versions
+      where organization_id=new.organization_id and agent_id=new.agent_id
+      order by version_number desc limit 1;
+  end if;
+  if new.credential_id is distinct from previous_credential then
+    raise exception 'ai_credentials_platform_only' using errcode='42501';
+  end if;
+  return new;
+end $$;
+revoke all on function public.fn_guard_agent_credential() from public,anon,authenticated,service_role;
+drop trigger if exists trg_guard_agent_credential on public.ai_agent_versions;
+create trigger trg_guard_agent_credential before insert or update of credential_id on public.ai_agent_versions
+  for each row execute function public.fn_guard_agent_credential();
+
+-- Caixa de saída durável: destinatário é resolvido na execução, sem duplicar e-mails pessoais.
+create table if not exists public.commercial_notices (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_key text not null,
+  kind text not null check(kind in ('trial_ending','subscription_ending','payment_failed')),
+  deadline timestamptz,
+  title text not null,
+  body text not null,
+  inbox_id uuid references public.agent_inbox_items(id) on delete set null,
+  created_at timestamptz not null default now(),
+  delivered_at timestamptz,
+  cancelled_at timestamptz,
+  first_attempt_at timestamptz,
+  provider_id text,
+  attempts integer not null default 0,
+  last_attempt_at timestamptz,
+  lease_until timestamptz,
+  error_code text,
+  unique(organization_id,user_id,event_key)
+);
+create index if not exists idx_commercial_notices_pending on public.commercial_notices(created_at) where delivered_at is null;
+alter table public.commercial_notices enable row level security;
+drop policy if exists commercial_notices_read on public.commercial_notices;
+create policy commercial_notices_read on public.commercial_notices for select to authenticated
+  using ((organization_id in(select public.fn_user_org_ids()) and public.fn_role_at_least(organization_id,'admin')) or public.fn_is_platform_admin());
+revoke all on public.commercial_notices from public,anon,authenticated;
+grant select on public.commercial_notices to authenticated;
+grant all on public.commercial_notices to service_role;
+
+-- Usa o vocabulário de avisos existentes; o assunto e a ação são o faturamento.
+-- Vocabulário final consolidado no único bloco acima.
+
+-- Enquanto extras não estão à venda, a mensagem não promete um checkout utilizável.
+create or replace function public.fn_ai_commercial_notice(p_org uuid,p_code text) returns void
+language plpgsql set search_path='' as $$ declare a public.organization_ai_accounts; msg text; begin
+  select * into a from public.organization_ai_accounts where organization_id=p_org for update;
+  if not found then return; end if;
+  msg:=case when a.state='active' and a.access_until>now() and a.monthly_remaining+a.extra_remaining<10
+    then 'Seus créditos acabaram. A franquia renova em '||to_char(a.period_end at time zone 'UTC','DD/MM/YYYY')||' (UTC). A compra de créditos extras está indisponível no momento. Seu time pode continuar atendendo manualmente.'
+    when a.state='trial' then 'Seu teste terminou ou os créditos acabaram. Escolha um plano no faturamento para continuar.'
+    else 'Seu atendimento com IA está pausado. Confira o período contratado e a situação no faturamento. Exportação, suporte e contratação continuam acessíveis.' end;
+  update public.agent_inbox_items set body=msg where organization_id=p_org and kind='commercial_ai_paused' and status='open' and body is distinct from msg;
+  insert into public.agent_inbox_items(organization_id,kind,severity,title,body)
+    select p_org,'commercial_ai_paused','warn','Seu agente precisa de atenção',msg
+    where not exists(select 1 from public.agent_inbox_items where organization_id=p_org and kind='commercial_ai_paused' and status='open');
+end $$;
+revoke all on function public.fn_ai_commercial_notice(uuid,text) from public,anon,authenticated;
+grant execute on function public.fn_ai_commercial_notice(uuid,text) to service_role;
+
+-- Uma proposta administrativa por solicitação, sem duplicar checkout em reenvios.
+alter table public.billing_checkouts add column if not exists change_request_id uuid;
+create unique index if not exists idx_billing_checkout_change_request on public.billing_checkouts(organization_id,change_request_id) where change_request_id is not null;
+do $$ begin
+ if not exists(select 1 from pg_constraint where conname='billing_checkout_change_request_org_fkey' and conrelid='public.billing_checkouts'::regclass) then
+  alter table public.billing_checkouts add constraint billing_checkout_change_request_org_fkey foreign key(organization_id,change_request_id) references public.platform_support_threads(organization_id,id);
+ end if;
+end $$;
+
+notify pgrst,'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

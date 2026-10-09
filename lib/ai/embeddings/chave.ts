@@ -50,6 +50,7 @@ import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
 
 /** Os dois pontos de IA que consomem embedding (`lib/ai/pontos/registro.ts`). */
 export type PontoDeEmbedding = "embedding_indexar" | "embedding_consultar";
@@ -96,6 +97,16 @@ export async function resolverChaveDeEmbedding(
   organizationId: string,
   ponto: PontoDeEmbedding = "embedding_indexar",
 ): Promise<ChaveDeEmbedding | null> {
+  const managed = await managedSettings(organizationId, ponto);
+  if (managed)
+    return {
+      apiKey: managed.api_key,
+      baseUrl: null,
+      viaGateway: false,
+      origem: "chave_da_instalacao",
+      rotulo: "IA incluída pela plataforma",
+      avisos: [],
+    };
   const avisos: string[] = [];
 
   // 1 · A escolha explícita do painel.
@@ -180,7 +191,13 @@ export async function resolverChaveDeEmbedding(
  * cadastrado a chave pela tela.
  */
 export async function temChaveDeEmbedding(organizationId: string): Promise<boolean> {
-  return (await resolverChaveDeEmbedding(organizationId)) !== null;
+  try {
+    return (await resolverChaveDeEmbedding(organizationId)) !== null;
+  } catch {
+    // Consulta de disponibilidade não executa IA. O indexador conserva sua
+    // barreira comercial e o aviso visível quando a configuração não permite uso.
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signUp } from "@/app/actions/auth/signUp";
+import { AvatarPicker } from "@/components/profile/AvatarPicker";
+import { Turnstile } from "./Turnstile";
+import { AVATAR_PRESETS, avatarPresetUrl, type AvatarId } from "@/lib/profile/avatars";
+import type { BusinessSegment } from "@/lib/onboarding/business-templates";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -29,13 +33,16 @@ export interface ConviteDoSignup {
   email: string;
 }
 
-export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
+export function SignupForm({ convite, suggestedSegment, selectedPlan }: { convite?: ConviteDoSignup; suggestedSegment?: BusinessSegment; selectedPlan?: string }) {
   const t = useT();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [contaExistente, setContaExistente] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [avatarId, setAvatarId] = useState<AvatarId>("violeta");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
 
   const {
     register,
@@ -55,6 +62,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
     defaultValues: {
       full_name: "",
       org_name: "",
+      business_segment: convite ? undefined : suggestedSegment,
       email: convite?.email ?? "",
       password: "",
       password_confirm: "",
@@ -72,9 +80,12 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
             email: convite.email,
             password: values.password,
             password_confirm: values.password_confirm,
+            avatar_id: avatarId,
           }
-        : values;
-      const res = await signUp(entrada, convite?.token);
+        : { ...values, avatar_id: avatarId };
+      const res = await signUp(entrada, convite?.token, captchaToken, selectedPlan);
+      setCaptchaToken("");
+      setCaptchaAttempt((n) => n + 1);
       if (res.ok) {
         /**
          * ⚠️ O PROVEDOR JÁ DEIXOU A PESSOA ENTRAR — não existe e-mail para ela
@@ -95,9 +106,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
          * de tentativas — e não uma segunda porta de provisionamento.
          */
         if (res.sessao_ativa) {
-          router.replace(
-            convite ? `/team/accept-invite/${convite.token}` : "/get-started",
-          );
+          router.replace(convite ? `/team/accept-invite/${convite.token}` : "/get-started");
           return;
         }
         setSentTo(values.email);
@@ -137,10 +146,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
 
   if (sentTo) {
     return (
-      <div
-        className="space-y-2 rounded-md border bg-muted/40 px-4 py-6 text-center"
-        role="status"
-      >
+      <div className="space-y-2 rounded-md border bg-muted/40 px-4 py-6 text-center" role="status">
         <p className="text-sm font-medium">{t("Confirme seu e-mail")}</p>
         <p className="text-sm text-muted-foreground">
           {t("Enviamos um link de confirmação para")} <strong>{sentTo}</strong>.{" "}
@@ -159,36 +165,36 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
         nomeia (medido no diálogo de transferir conversa, em produção).
       */}
       {convite && (
-      <div className="space-y-1.5">
-        <Label htmlFor="full_name">{t("Seu nome")}</Label>
-        <Input
-          id="full_name"
-          type="text"
-          autoComplete="name"
-          autoFocus
-          aria-invalid={errors.full_name ? true : undefined}
-          {...register("full_name")}
-        />
-        {errors.full_name && (
-          <p className="text-xs text-destructive">{t(errors.full_name.message ?? "")}</p>
-        )}
-      </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="full_name">{t("Seu nome")}</Label>
+          <Input
+            id="full_name"
+            type="text"
+            autoComplete="name"
+            autoFocus
+            aria-invalid={errors.full_name ? true : undefined}
+            {...register("full_name")}
+          />
+          {errors.full_name && (
+            <p className="text-xs text-destructive">{t(errors.full_name.message ?? "")}</p>
+          )}
+        </div>
       )}
       {!convite && (
-      <div className="space-y-1.5">
-        <Label htmlFor="org_name">{t("Nome da empresa")}</Label>
-        <Input
-          id="org_name"
-          type="text"
-          autoComplete="organization"
-          autoFocus
-          aria-invalid={errors.org_name ? true : undefined}
-          {...register("org_name")}
-        />
-        {errors.org_name && (
-          <p className="text-xs text-destructive">{t(errors.org_name.message ?? "")}</p>
-        )}
-      </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="org_name">{t("Nome da empresa")}</Label>
+          <Input
+            id="org_name"
+            type="text"
+            autoComplete="organization"
+            autoFocus
+            aria-invalid={errors.org_name ? true : undefined}
+            {...register("org_name")}
+          />
+          {errors.org_name && (
+            <p className="text-xs text-destructive">{t(errors.org_name.message ?? "")}</p>
+          )}
+        </div>
       )}
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
@@ -232,6 +238,11 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
           <p className="text-xs text-destructive">{t(errors.password_confirm.message ?? "")}</p>
         )}
       </div>
+      <AvatarPicker
+        value={avatarPresetUrl(avatarId)}
+        onChange={(url) => setAvatarId(AVATAR_PRESETS.find((avatar) => avatar.url === url)!.id)}
+        disabled={isPending}
+      />
       {serverError && (
         <div
           className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -240,7 +251,8 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
           {serverError}
         </div>
       )}
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Turnstile key={captchaAttempt} action="signup" onToken={setCaptchaToken} />
+      <Button type="submit" className="w-full" disabled={isPending || (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)}>
         {isPending ? t("Criando conta...") : t("Criar conta")}
       </Button>
     </form>

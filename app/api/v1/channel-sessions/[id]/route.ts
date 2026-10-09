@@ -28,6 +28,7 @@ import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
 import { numeroObservadoDaSessao } from "@/lib/channels/numero-observado";
+import { trialHash } from '@/lib/auth/trial-identity';
 import { isChannelStatus } from "@/lib/schemas/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -188,9 +189,11 @@ export async function GET(
 
   let liveStatus = session.status as string;
   let phoneNumber = session.phone_number as string | null;
+  let verifiedPhone: string|null=null;
   try {
     const remote = await waha.getVerifiedSession(nomeSessao);
     liveStatus = remote?.status ?? "STOPPED";
+    verifiedPhone=numeroObservadoDaSessao({jid:typeof remote?.me?.id==='string'?remote.me.id:null,statusAoVivo:liveStatus,gravado:null});
     // O número vem do JID (`<phone>@c.us`), e a regra de quando ele VALE mora
     // em `numeroObservadoDaSessao` — inclusive por que não basta gravar sempre.
     // O que havia aqui só preenchia a coluna VAZIA, então um re-pareamento com
@@ -207,6 +210,10 @@ export async function GET(
   // Sincroniza o DB: sempre carimba o health check; atualiza status/telefone só se válido.
   const checkedAt = new Date().toISOString();
   const patch: Record<string, unknown> = { last_health_check_at: checkedAt };
+  if(liveStatus==='WORKING'&&verifiedPhone&&/^\d{8,15}$/.test(verifiedPhone.replace(/\D/g,''))) {
+    patch.verified_at=checkedAt;
+    patch.verification_phone_hash=trialHash('phone',verifiedPhone.replace(/\D/g,''));
+  }
   if (isChannelStatus(liveStatus) && liveStatus !== session.status) {
     patch.status = liveStatus;
     patch.last_status_change_at = checkedAt;
@@ -214,7 +221,7 @@ export async function GET(
   if (phoneNumber && phoneNumber !== session.phone_number) patch.phone_number = phoneNumber;
 
   const gravar = (corpo: Record<string, unknown>) =>
-    supabase
+    createAdminClient()
       .from("channel_sessions")
       .update(corpo)
       .eq("organization_id", activeOrg.orgId)
@@ -234,6 +241,8 @@ export async function GET(
     phoneConflict = true;
     phoneNumber = session.phone_number as string | null;
     const { phone_number: _descartado, ...semTelefone } = patch;
+    semTelefone.verified_at=null;
+    semTelefone.verification_phone_hash=null;
     const { error: retryErr } = await gravar(semTelefone);
     if (retryErr) return fail("internal_error", retryErr.message, 500, { requestId });
   }

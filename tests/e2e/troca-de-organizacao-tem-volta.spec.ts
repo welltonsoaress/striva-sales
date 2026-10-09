@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { lerCreds as lerCredsDeAdmin, loginComoAdmin } from "./helpers/login-admin";
 
 /**
  * TROCAR DE ORGANIZAÇÃO TEM VOLTA — mesmo quando a organização de destino
@@ -59,16 +62,6 @@ function lerCreds(): Creds {
   return c;
 }
 
-async function entrar(page: Page, creds: Creds) {
-  const usuario = creds.users.manager;
-  if (!usuario) throw new Error(".e2e-creds.json sem o usuário `manager`");
-  await page.goto("/login");
-  await page.getByLabel(/e-?mail/i).fill(usuario.email);
-  await page.getByLabel(/senha/i).fill(creds.password);
-  await page.getByRole("button", { name: /entrar/i }).click();
-  await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
-}
-
 test.describe.configure({ timeout: 150_000 });
 
 test("trocar para uma organização não configurada leva ao wizard — e dá para voltar", async ({ page }) => {
@@ -76,7 +69,21 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
   const semOnboarding = creds.funis!.segunda_org_id;
   const orgA = creds.duas_orgs!.org_a_id;
 
-  await entrar(page, creds);
+  // Só o admin configura a empresa. Membros convidados não são mais presos
+  // no wizard; preservar a prova da saída usando o papel que o fluxo exige.
+  const adminCreds = lerCredsDeAdmin();
+  const adminUser = creds.users.admin as { id: string; email: string };
+  const database = credenciaisSupabaseDeTeste();
+  const db = createClient(database.url, database.serviceRole, { auth: { persistSession: false } });
+  const { data: before, error: readError } = await db.from("user_organizations")
+    .select("role,accepted_at,revoked_at").eq("user_id", adminUser.id).eq("organization_id", semOnboarding).maybeSingle();
+  if (readError) throw readError;
+  const { error: fixtureError } = await db.from("user_organizations").upsert({
+    user_id: adminUser.id, organization_id: semOnboarding, role: "admin", accepted_at: new Date().toISOString(), revoked_at: null,
+  }, { onConflict: "user_id,organization_id" });
+  if (fixtureError) throw fixtureError;
+  try {
+  await loginComoAdmin(page, adminCreds);
   await page.goto("/app/inbox");
 
   // Ancora na org A e guarda o nome dela — é para cá que a volta tem de trazer.
@@ -142,4 +149,8 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
   ).toContainText(nomeDaOrgA, { timeout: 20_000 });
 
   await page.screenshot({ path: "evidence/onboarding/troca-de-org-tem-volta.png" });
+  } finally {
+    if (before) await db.from("user_organizations").update(before).eq("user_id", adminUser.id).eq("organization_id", semOnboarding);
+    else await db.from("user_organizations").delete().eq("user_id", adminUser.id).eq("organization_id", semOnboarding);
+  }
 });

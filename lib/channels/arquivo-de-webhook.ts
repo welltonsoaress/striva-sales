@@ -34,7 +34,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 
 /** Cabeçalhos que NUNCA entram no arquivo, por menor que seja a chance. */
-const PROIBIDOS = ["authorization", "cookie", "x-api-key"];
+const PROIBIDOS = ["authorization", "cookie", "x-api-key", "x-platform-proxy-token"];
 
 /**
  * Cabeçalhos sanitizados.

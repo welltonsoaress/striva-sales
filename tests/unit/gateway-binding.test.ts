@@ -20,7 +20,12 @@ const credenciais = vi.hoisted(() => ({ linha: null as Record<string, unknown> |
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => {
-      const alvo = tabela === "ai_purpose_bindings" ? bindings : credenciais;
+      const alvo =
+        tabela === "organization_ai_accounts"
+          ? { linha: { mode: "legacy" } }
+          : tabela === "ai_purpose_bindings"
+            ? bindings
+            : credenciais;
       const chain = {
         select: () => chain,
         eq: () => chain,
@@ -159,7 +164,7 @@ describe("cada ponto lê o SEU binding", () => {
               return chain;
             },
             not: () => chain,
-            maybeSingle: async () => ({ data: null }),
+            maybeSingle: async () => ({ data: t==='organization_ai_accounts'?{mode:'legacy'}:null }),
           };
           return chain;
         },
@@ -210,7 +215,7 @@ describe("sem binding, a credencial da organização manda", () => {
           limit: () => chain,
           maybeSingle: async () => ({
             data:
-              tabela === "ai_purpose_bindings"
+              tabela==='organization_ai_accounts'?{mode:'legacy'}:tabela === "ai_purpose_bindings"
                 ? null
                 : tabela === "organizations"
                   ? { settings: orgSettings }
@@ -224,11 +229,14 @@ describe("sem binding, a credencial da organização manda", () => {
 
   it("usa a credencial ativa do provider da organização, não a chave da instalação", async () => {
     vi.doMock("@/lib/supabase/admin", () => ({
-      createAdminClient: montarAdmin({ llm: { provider: "openrouter" } }, {
-        api_key_encrypted: "x",
-        api_key_iv: "y",
-        api_key_tag: "z",
-      }),
+      createAdminClient: montarAdmin(
+        { llm: { provider: "openrouter" } },
+        {
+          api_key_encrypted: "x",
+          api_key_iv: "y",
+          api_key_tag: "z",
+        },
+      ),
     }));
     vi.resetModules();
     const mod = await import("@/lib/ai/gateway-binding");
@@ -302,7 +310,7 @@ describe("a credencial da organização só vale para modelo que o provider dela
           limit: () => chain,
           maybeSingle: async () => ({
             data:
-              tabela === "ai_purpose_bindings"
+              tabela==='organization_ai_accounts'?{mode:'legacy'}:tabela === "ai_purpose_bindings"
                 ? null
                 : tabela === "organizations"
                   ? { settings: { llm: { provider } } }

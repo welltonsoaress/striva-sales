@@ -1,3 +1,4 @@
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * POST /api/v1/ai/credentials/:id/revalidate (admin)
@@ -11,7 +12,6 @@ import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { requireRole } from "@/lib/auth/require-role";
 import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { validateProviderKey } from "@/lib/ai/provider-validators";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -32,7 +32,7 @@ export async function POST(
   const requestId = randomUUID();
   const { id } = await ctx.params;
 
-  const authz = await requireRole("admin", { requestId, resource: "ai_credentials" });
+  const authz = await requireAiPlatformAdmin();
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user: authUser, org: activeOrg } = authz;

@@ -29,6 +29,10 @@
  * `tests/unit/audit-lista-do-painel-e-derivada.test.tsx` reprova quem tentar.
  */
 export const AUDIT_ACTIONS = [
+  "platform_admin.managed_ai_configured",
+  "platform_admin.ai_account_changed",
+  "ai.response_counted",
+  "billing.subscription_updated",
   "auth.login_success",
   "auth.login_failed",
   /** Teto de tentativas barrou antes de chegar ao provedor (issue #64). */
@@ -75,6 +79,18 @@ export const AUDIT_ACTIONS = [
   "token.created",
   "token.revoked",
   "profile.updated",
+  "profile.avatar_updated",
+  "commercial_plan.updated",
+  "billing.checkout_created",
+  "billing.change_requested",
+  "billing.change_quote_created",
+  "billing.notices_processed",
+  "billing.payment_recorded",
+  "billing.event_reprocessed",
+  "support.message_sent",
+  "support.human_requested",
+  "support.replied",
+  "support.closed",
   "org.updated",
   "pipeline.config_updated",
   "mfa.recovery_codes_regenerated",
@@ -86,6 +102,7 @@ export const AUDIT_ACTIONS = [
   "onboarding.ai_configured",
   "onboarding.team_invited",
   "onboarding.completed",
+  "onboarding.deferred",
   "tenant.onboarded",
   "conversation.created",
   "conversation.claimed",
@@ -498,6 +515,7 @@ export const AUDIT_ACTIONS = [
   // um bloqueio não há como saber nem uma coisa nem outra.
   "voice.opt_in_changed",
   "voice.session_unpaired",
+  "platform_admin.credit_pack_published",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

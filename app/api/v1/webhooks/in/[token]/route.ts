@@ -154,6 +154,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   const headersJson: Record<string, string> = {};
   req.headers.forEach((value, key) => {
+    // O token que autentica o proxy é credencial, nunca evidência de captura.
+    if (key.toLowerCase() === "x-platform-proxy-token") return;
     const k = key.toLowerCase();
     if (k.startsWith("authorization") || k === "cookie") return;
     headersJson[key] = value;

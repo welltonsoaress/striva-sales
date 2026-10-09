@@ -1,5 +1,7 @@
 "use server";
+import { avatarPresetUrl } from "@/lib/profile/avatars";
 
+import { selectedPlanHint } from "@/lib/billing/journey";
 import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +15,8 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { trustedIp } from "@/lib/auth/trusted-ip";
+import { verifyTurnstile } from "@/lib/auth/turnstile";
 
 export type SignUpResult =
   | {
@@ -64,6 +68,8 @@ export async function signUp(
    * token com o e-mail que o provedor de auth confirmou.
    */
   inviteToken?: string,
+  captchaToken?: string,
+  selectedPlan?: string,
 ): Promise<SignUpResult> {
   const temConvite = typeof inviteToken === "string" && inviteToken.trim() !== "";
   const parsed = temConvite
@@ -78,16 +84,17 @@ export async function signUp(
   }
 
   const hdrs = await headers();
-  const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
+  const origin = env.NEXT_PUBLIC_APP_URL;
   const requestId = hdrs.get("x-request-id");
-  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ip = trustedIp(hdrs);
   const userAgent = hdrs.get("user-agent") ?? null;
 
   // Criar conta é fluxo raro por pessoa: teto baixo por IP evita fábrica de
   // organizações (cada signup provisiona tenant). Issue #64.
-  if (await authRateLimited("signup", null, AUTH_LIMITS.signup)) {
+  if (await authRateLimited("signup", parsed.data.email, AUTH_LIMITS.signup)) {
     return { ok: false, error: "rate_limited" };
   }
+  if (!(await verifyTurnstile(captchaToken, "signup", ip))) return { ok: false, error: "validation_error", details: { captcha: ["Verifique que você é uma pessoa e tente novamente."] } };
 
   // Só vira convite se o token verificar E for para este e-mail. Divergência
   // aqui não é erro do usuário — é tentativa de entrar em organização alheia
@@ -124,8 +131,14 @@ export async function signUp(
         ? {
             invite_token: convite,
             full_name: (parsed.data as SignupComConviteInput).full_name,
+            avatar_url: avatarPresetUrl(parsed.data.avatar_id),
           }
-        : { org_name: (parsed.data as SignupInput).org_name },
+        : {
+            commercial_plan_hint: selectedPlanHint(selectedPlan),
+            org_name: (parsed.data as SignupInput).org_name,
+            ...((parsed.data as SignupInput).business_segment ? {business_segment:(parsed.data as SignupInput).business_segment}:{}),
+            avatar_url: avatarPresetUrl(parsed.data.avatar_id),
+          },
     },
   });
 

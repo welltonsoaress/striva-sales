@@ -23,6 +23,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const embedSpy = vi.fn();
+const managed=vi.hoisted(()=>vi.fn().mockResolvedValue(null));
+vi.mock('@/lib/billing/managed-ai-server',()=>({managedSettings:managed}));
+vi.mock('@/lib/ai/operational-call',()=>({recordOperationalCall:vi.fn().mockResolvedValue(undefined)}));
 vi.mock("ai", () => ({
   embed: (args: unknown) => embedSpy(args),
 }));
@@ -43,6 +46,7 @@ vi.mock("@/lib/ai/embeddings/chave", async () => {
 import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
 
 beforeEach(() => {
+  managed.mockResolvedValue(null);
   embedSpy.mockReset();
   embedSpy.mockResolvedValue({
     // 1536 dimensões: `embedText` assere a dimensão a cada chamada, porque

@@ -52,6 +52,7 @@ export async function ensureTenantForUser(
     .select("organization_id")
     .eq("user_id", user.id)
     .is("revoked_at", null)
+    .not("accepted_at","is",null)
     .limit(1)
     .maybeSingle();
   if (existing) return { provisioned: false, organizationId: existing.organization_id };
@@ -62,40 +63,11 @@ export async function ensureTenantForUser(
     "Minha empresa";
   const base = slugify(orgName);
 
-  // ponytail: check-then-insert tem janela de corrida se o mesmo link for
-  // confirmado 2x em paralelo (pior caso: org duplicada órfã). Advisory lock
-  // por user_id se isso aparecer na prática.
-  let org: { id: string; slug: string } | null = null;
-  for (let attempt = 0; attempt < 3 && !org; attempt++) {
-    const slug = attempt === 0 ? base : `${base}-${Math.random().toString(36).slice(2, 6)}`;
-    const { data, error } = await admin
-      .from("organizations")
-      .insert({
-        slug,
-        display_name: orgName,
-        legal_name: orgName,
-        status: "active",
-        created_by: user.id,
-      })
-      .select("id, slug")
-      .single();
-    if (data) {
-      org = data;
-    } else if (error && error.code !== "23505") {
-      throw new Error(`signup provisioning: org insert failed: ${error.message}`);
-    }
-  }
-  if (!org) throw new Error("signup provisioning: slug exhausted after 3 attempts");
-
-  const { error: memberError } = await admin.from("user_organizations").insert({
-    user_id: user.id,
-    organization_id: org.id,
-    role: "admin",
-    accepted_at: new Date().toISOString(),
+  const { data: organizationId, error } = await admin.rpc("fn_provision_self_service", {
+    p_user: user.id, p_name: orgName, p_slug: base,
   });
-  if (memberError && memberError.code !== "23505") {
-    throw new Error(`signup provisioning: membership insert failed: ${memberError.message}`);
-  }
+  if (error || !organizationId) throw new Error("Não foi possível preparar a empresa. Tente entrar novamente.");
+  const org = { id: organizationId, slug: base };
 
   void audit({
     action:

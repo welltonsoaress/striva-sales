@@ -8,6 +8,7 @@ import { acceptWelcome } from "@/app/actions/onboarding/acceptWelcome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BUSINESS_SEGMENTS, BUSINESS_TEMPLATES, type BusinessSegment } from "@/lib/onboarding/business-templates";
 import {
   Select,
   SelectContent,
@@ -36,26 +37,41 @@ const FUSOS: { id: string; cidade: string }[] = [
   { id: "UTC", cidade: "Outro (horário universal)" },
 ];
 
-export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
+export function WelcomeForm({
+  defaultOrgName,
+  suggestedSegment,
+  initialDescription = "",
+  initialTimezone = "America/Sao_Paulo",
+}: {
+  defaultOrgName: string;
+  suggestedSegment?: BusinessSegment;
+  initialDescription?: string;
+  initialTimezone?: string;
+}) {
   const t = useT();
   const [displayName, setDisplayName] = useState(defaultOrgName);
-  const [oQueFaz, setOQueFaz] = useState("");
-  const [timezone, setTimezone] = useState("America/Sao_Paulo");
+  const [oQueFaz, setOQueFaz] = useState(initialDescription);
+  const [timezone, setTimezone] = useState(initialTimezone);
   const [accepted, setAccepted] = useState(false);
   const [pending, startTransition] = useTransition();
 
   return (
     <form
       className="space-y-5 rounded-lg border bg-background p-6"
-      action={(formData) => {
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (pending) return;
         if (!accepted) {
           toast.error(t("Aceite os termos para continuar."));
           return;
         }
+        const formData = new FormData(event.currentTarget);
         startTransition(async () => {
-          const res = await acceptWelcome(formData);
-          if (res && !res.ok) {
-            toast.error(`Falha: ${res.error}`);
+          try {
+            const res = await acceptWelcome(formData);
+            if (res && !res.ok) toast.error(`Falha: ${res.error}`);
+          } catch {
+            toast.error(t("Não foi possível salvar. Seus ajustes continuam aqui para tentar novamente."));
           }
         });
       }}
@@ -72,7 +88,9 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
           required
         />
         <p className="text-xs text-muted-foreground">
-          {t("É o nome que aparece para o seu time e nos relatórios. Pode ser clínica, loja, escritório — o que for seu.")}
+          {t(
+            "É o nome que aparece para o seu time e nos relatórios. Pode ser clínica, loja, escritório — o que for seu.",
+          )}
         </p>
       </div>
 
@@ -84,18 +102,35 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
         uma instalação que nunca pergunta em que ramo entrou.
       */}
       <div className="space-y-2">
-        <Label htmlFor="o_que_faz">{t("O que vocês fazem?")}</Label>
-        <Input
+        <Label htmlFor="business_segment">{t("Tipo de negócio")}</Label>
+        <select
+          id="business_segment"
+          name="business_segment"
+          defaultValue={suggestedSegment??"generico"}
+          className="h-11 w-full rounded-lg border bg-background px-3 text-sm"
+        >
+          {BUSINESS_SEGMENTS.map((id) => (
+            <option key={id} value={id}>
+              {t(BUSINESS_TEMPLATES[id].label)}
+            </option>
+          ))}
+        </select>
+        <Label htmlFor="o_que_faz">{t("Conte como sua empresa atende")}</Label>
+        <textarea
           id="o_que_faz"
-          name="o_que_faz"
+          name="business_description"
           value={oQueFaz}
           onChange={(e) => setOQueFaz(e.target.value)}
-          maxLength={280}
-          placeholder={t("Ex.: clínica odontológica, ou venda de roupa fitness pelo WhatsApp")}
+          maxLength={20000}
+          rows={5}
+          className="w-full resize-y rounded-lg border bg-background p-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"
+          placeholder={t(
+            "Conte seus serviços, horários e o que o agente precisa saber. Você pode completar depois.",
+          )}
         />
         <p className="text-xs text-muted-foreground">
           {t(
-            "Uma linha basta. É com isso que seu funcionário aprende com quem ele está falando — e que a gente monta o quadro de clientes do seu jeito.",
+            "Seu agente já vem preparado para o segmento. Estas informações complementam o atendimento.",
           )}
         </p>
       </div>
@@ -107,6 +142,9 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            {!FUSOS.some((fuso) => fuso.id === timezone) && (
+              <SelectItem value={timezone}>{t("Horário salvo da empresa")}</SelectItem>
+            )}
             {FUSOS.map((f) => (
               <SelectItem key={f.id} value={f.id}>
                 {t(f.cidade)}

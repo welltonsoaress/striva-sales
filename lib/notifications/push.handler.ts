@@ -6,6 +6,7 @@ import { enviarPushAoUsuario, enviarPushDaOrg } from "./web_push";
 import { vapidPronto } from "./vapid";
 import type { PushPayload } from "./push_payload";
 import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 export const WEB_PUSH_INBOUND_KEY = "web-push-inbound.v1";
 
@@ -13,7 +14,8 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
   const conversationId =
     (typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null) ?? null;
   const previewRaw = row.payload.body_preview;
-  const preview = typeof previewRaw === "string" && previewRaw.trim() ? previewRaw : "Nova mensagem";
+  const preview =
+    typeof previewRaw === "string" && previewRaw.trim() ? previewRaw : "Nova mensagem";
   const type = typeof row.payload.type === "string" ? row.payload.type : "text";
   const body = type === "text" ? preview : "Mídia";
 
@@ -49,7 +51,11 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
     // trocá-lo por "Sem nome" pioraria o título sem ninguém pedir.
     const rotulo = rotuloDoContato(c);
     contactName = rotulo === SEM_NOME ? null : rotulo;
-    if (c?.avatar_storage_path && !c.is_anonymized) {
+    if (
+      c?.avatar_storage_path &&
+      !c.is_anonymized &&
+      isStoragePathOwnedBy(c.avatar_storage_path, row.organization_id)
+    ) {
       const { data: signed } = await admin.storage
         .from("whatsapp-media")
         .createSignedUrl(c.avatar_storage_path, 300);
@@ -67,7 +73,10 @@ async function handleInbound(row: EventRow): Promise<HandlerResult> {
   return { consumer_key: WEB_PUSH_INBOUND_KEY, status: "ok", detail: `sent:${sent}` };
 }
 
-async function leadBits(organizationId: string, leadId: string): Promise<{
+async function leadBits(
+  organizationId: string,
+  leadId: string,
+): Promise<{
   title: string;
   ownerUserId: string | null;
   pipelineId: string | null;
@@ -121,7 +130,9 @@ export const webPushInboundHandler: EventHandler = {
       const conversationId =
         typeof row.payload.conversation_id === "string" ? row.payload.conversation_id : null;
       const preview =
-        typeof row.payload.body_preview === "string" ? row.payload.body_preview : "Você foi mencionado";
+        typeof row.payload.body_preview === "string"
+          ? row.payload.body_preview
+          : "Você foi mencionado";
       return enviarParaUsuario(row.organization_id, toUserId, {
         title: "Você foi mencionado",
         body: truncar(preview),
@@ -140,7 +151,8 @@ export const webPushInboundHandler: EventHandler = {
     const href = hrefDoLead(lead.pipelineId);
 
     if (row.event_type === "lead.assigned") {
-      const toUserId = typeof row.payload.to_user_id === "string" ? row.payload.to_user_id : lead.ownerUserId;
+      const toUserId =
+        typeof row.payload.to_user_id === "string" ? row.payload.to_user_id : lead.ownerUserId;
       return enviarParaUsuario(row.organization_id, toUserId, {
         title: "Lead atribuído a você",
         body: truncar(lead.title),

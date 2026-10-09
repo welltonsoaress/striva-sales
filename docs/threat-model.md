@@ -14,7 +14,7 @@ audited_against: origin/main @ 789dfa6 (v1.0.0, 2026-07-27)
 
 # Threat model — Striva Sales self-host
 
-Complementa [`SECURITY.md`](../SECURITY.md), que é política de *reporte*. Este documento é
+Complementa [`SECURITY.md`](../SECURITY.md), que é política de _reporte_. Este documento é
 o inventário da **superfície de ataque real**: o que fica exposto quando alguém sobe o
 Striva Sales numa VPS com IP público.
 
@@ -33,18 +33,18 @@ São conclusões de leitura de código.
 `lib/auth/public-paths.ts` define o que passa sem checagem de auth no `proxy.ts`
 (middleware do Next 16). CONFIRMADO:
 
-| Path | Guard próprio dentro da rota | Rate limit |
-|---|---|---|
-| `/`, `/login`, `/signup`, `/auth/confirm` | Supabase Auth | ❌ |
-| `/team/accept-invite/:token` | HMAC-SHA256 + `timingSafeEqual` (`lib/auth/invite-token.ts`) | ❌ |
-| `/api/v1/health` | nenhum (por design) | ❌ |
-| `/api/v1/webhooks/waha/*` | HMAC-SHA512 + `timingSafeEqual` (`lib/waha/ingest.ts`) | ❌ |
-| `/api/v1/webhooks/in/:token` | path token + assinatura opcional | ✅ 60/min por token |
-| `/api/v1/webhooks/nuvemshop/*` | HMAC | ❌ |
-| `/api/v1/cron/*` (9 rotas) | `Bearer INTERNAL_CRON_SECRET\|INTERNAL_SECRET`, **fail-closed** | ❌ |
-| `/api/internal/*` | `x-internal-secret` ou `Bearer INTERNAL_SECRET`, comparação em tempo constante | ❌ |
-| `/api/mcp` | `Bearer tok_...` validado contra `api_tokens` (hash SHA256) | ❌ |
-| `/account-suspended`, `/403`, `/404`, `/500`, `/503`, `/admin/forbidden` | — | ❌ |
+| Path                                                                     | Guard próprio dentro da rota                                                   | Rate limit          |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | ------------------- |
+| `/`, `/login`, `/signup`, `/auth/confirm`                                | Supabase Auth                                                                  | ❌                  |
+| `/team/accept-invite/:token`                                             | HMAC-SHA256 + `timingSafeEqual` (`lib/auth/invite-token.ts`)                   | ❌                  |
+| `/api/v1/health`                                                         | nenhum (por design)                                                            | ❌                  |
+| `/api/v1/webhooks/waha/*`                                                | HMAC-SHA512 + `timingSafeEqual` (`lib/waha/ingest.ts`)                         | ❌                  |
+| `/api/v1/webhooks/in/:token`                                             | path token + assinatura opcional                                               | ✅ 60/min por token |
+| `/api/v1/webhooks/nuvemshop/*`                                           | HMAC                                                                           | ❌                  |
+| `/api/v1/cron/*` (9 rotas)                                               | `Bearer INTERNAL_CRON_SECRET\|INTERNAL_SECRET`, **fail-closed**                | ❌                  |
+| `/api/internal/*`                                                        | `x-internal-secret` ou `Bearer INTERNAL_SECRET`, comparação em tempo constante | ❌                  |
+| `/api/mcp`                                                               | `Bearer tok_...` validado contra `api_tokens` (hash SHA256)                    | ❌                  |
+| `/account-suspended`, `/403`, `/404`, `/500`, `/503`, `/admin/forbidden` | —                                                                              | ❌                  |
 
 **Leitura:** a autenticação de cada superfície está bem construída — HMAC com
 `timingSafeEqual` em 6 módulos distintos, crons fail-closed, bearer só via header
@@ -114,22 +114,32 @@ O stack de produção do kit inclui `serverless-redis-http` + Redis local (visto
 `docker-compose.prod.yml`), o que resolve — **A CONFIRMAR** se o `install.sh` garante que
 essas duas vars ficam populadas em toda instalação.
 
-### T3 — 89 handlers com service role, sem gate de escrita 🟠 CONFIRMADO (contagem)
+### T3 — Service role exige autorização e escopo explícitos 🟠 CONFIRMADO
 
-`createAdminClient` (service role, **bypassa RLS**) é importado em **89 dos 169** route
-handlers de `app/api/**` (dos quais 166 estão sob `/api/v1/`). A regra da doutrina —
+`createAdminClient` (service role, **bypassa RLS**) é usado por handlers de
+`app/api/**`. Para medir os consumidores atuais, rode
+`rg -l 'createAdminClient' app/api -g '*.ts'`. A regra da doutrina —
 "filtre `organization_id` manualmente, resolvido de fonte
 confiável, nunca do body" — é aplicada por revisão humana. Não há lint rule nem teste que
-falhe quando um handler *novo* esquece o filtro.
+falhe quando um handler _novo_ esquece o filtro.
 
 Este é o **pior modo de falha do produto**: vazamento cross-tenant. Duas mitigações reais
 existem: as amostras que li (`admin/tenants`, `webhooks/in/:token`, `team/:user_id`) seguem o
-padrão corretamente, e os **56 arquivos de invariante em `tests/invariants/` rodam no CI**
+padrão corretamente, e os invariantes em `tests/invariants/` rodam no CI
 (job `invariants` → `pnpm test:db`), cobrindo isolamento cross-tenant de verdade. O
 guard-rail existe **e está ligado** — rebaixei de 🔴 para 🟠 por isso.
 
 **Lacuna residual:** os invariantes provam que os caminhos cobertos isolam; não impedem que
 um handler novo nasça sem filtro e sem invariante correspondente.
+
+**Revisão SaaS em 07/10/2026, CONFIRMADO localmente:** as gravações com acesso
+administrativo passam também pela guarda comercial nos caminhos revisados.
+Um ponteiro de Storage guardado numa linha própria pode ser adulterado;
+`isStoragePathOwnedBy` confere o namespace antes de assinar, baixar ou remover
+arquivos privados. A jornada real abriu o avatar próprio e recusou o caminho
+vizinho inserido pelo JWT do cliente. Isso cobre os consumidores revisados,
+não comprova todos os futuros usos de service role. Evidências e limites em
+[`reviews/2026-10-07-saas-seguranca-e-homologacao.md`](reviews/2026-10-07-saas-seguranca-e-homologacao.md).
 
 **Mitigação recomendada:** regra de ESLint custom (ou teste que varre o diff) que falhe
 quando um arquivo importa `lib/supabase/admin` sem referenciar `organization_id`. Barato,
@@ -200,15 +210,18 @@ de revisão de PII antes do commit — e `gitleaks` não pega isso, porque não 
 
 Não avaliado por falta de execução/instância:
 
-- Se as políticas RLS **realmente** isolam (os invariantes existem para provar; não foram rodados).
+- RLS: os invariantes foram executados contra o baseline local na revisão SaaS
+  de 07/10/2026. A prova inclui duas empresas, JWTs distintos, Storage e Realtime.
+  Não equivale a homologar as configurações e policies da instalação em produção.
 - Postura do container WAHA — `docker-compose.prod.yml` comenta "Core por default, dashboard
   off", mas exposição de porta e rede não foram verificadas contra instância viva.
 - Config do Caddy (`Caddyfile`) — TLS, headers de segurança, HSTS.
 - Se `next.config.ts` define CSP / security headers.
-- Storage: se o bucket `whatsapp-media` está privado de fato e se a expiração das signed
-  URLs é adequada.
-- Storage, e este é MEDIDO e DECLARADO em vez de "não avaliado": `brand-logos` (migration
-  0158) é o **único bucket público** do repositório — os outros quatro nascem
+- Storage: `whatsapp-media` privado foi comprovado no ambiente local; avatar
+  próprio recebeu URL curta pela rota autenticada e o ponteiro vizinho foi
+  recusado. A configuração efetiva da VPS e a circulação de URLs já assinadas
+  permanecem fora dessa prova local.
+- Storage, e este é MEDIDO e DECLARADO em vez de "não avaliado": `brand-logos` (migration 0158) é o **único bucket público** do repositório — os outros quatro nascem
   `public = false`. A exceção existe porque o logo é renderizado num `<img>` da tela de
   **login**, servida a quem não tem sessão, e URL assinada **vence**: a marca da instalação
   sumiria da fachada sozinha no dia do vencimento. O que a contém, e o que
@@ -231,17 +244,17 @@ Não avaliado por falta de execução/instância:
 
 ## 3. Sumário de prioridade
 
-| # | Risco | Sev | Custo do fix |
-|---|---|---|---|
-| T1 | Sem rate limit em login/signup/convite/crons/MCP | 🔴 | baixo — infra já existe |
-| T2 | Rate limit degrada silenciosamente para memória | 🟠 | baixo |
-| T3 | Service role sem gate de escrita para handler novo | 🟠 | médio (lint rule) — invariantes já cobrem em CI |
-| T4 | `"dev-fallback"` como secret de convite | 🟠 | trivial |
-| T5 | 3 secrets fora do `.env.example` | 🟠 | trivial |
-| T7 | Sem scan de secret no CI + 116 PNGs de evidência sem revisão de PII | 🟡 | baixo |
-| T6 | Guard de SSRF existe; o E2E que o prova não roda no CI | 🟢 | baixo |
+| #   | Risco                                                               | Sev | Custo do fix                                    |
+| --- | ------------------------------------------------------------------- | --- | ----------------------------------------------- |
+| T1  | Sem rate limit em login/signup/convite/crons/MCP                    | 🔴  | baixo — infra já existe                         |
+| T2  | Rate limit degrada silenciosamente para memória                     | 🟠  | baixo                                           |
+| T3  | Service role sem gate de escrita para handler novo                  | 🟠  | médio (lint rule) — invariantes já cobrem em CI |
+| T4  | `"dev-fallback"` como secret de convite                             | 🟠  | trivial                                         |
+| T5  | 3 secrets fora do `.env.example`                                    | 🟠  | trivial                                         |
+| T7  | Sem scan de secret no CI + 116 PNGs de evidência sem revisão de PII | 🟡  | baixo                                           |
+| T6  | Guard de SSRF existe; o E2E que o prova não roda no CI              | 🟢  | baixo                                           |
 
-**Conclusão honesta:** os *mecanismos* de segurança deste projeto são acima da média para
+**Conclusão honesta:** os _mecanismos_ de segurança deste projeto são acima da média para
 um CRM open-source — HMAC em tempo constante em toda borda, fail-closed nos crons, hash de
 bearer, RLS com helper central, guard de SSRF testado, LGPD implementada de verdade,
 `beforeSend` higienizando PII, e **56 arquivos de invariante de isolamento rodando em CI**.

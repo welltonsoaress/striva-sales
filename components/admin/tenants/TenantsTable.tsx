@@ -1,4 +1,5 @@
 "use client";
+import { commercialStateLabel } from "@/lib/billing/state-label";
 
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import Link from "next/link";
@@ -21,10 +22,7 @@ import { useT } from "@/hooks/i18n/useT";
 // Status badge
 // ---------------------------------------------------------------------------
 
-const STATUS_VARIANTS: Record<
-  string,
-  "success" | "info" | "warning" | "error" | "neutral"
-> = {
+const STATUS_VARIANTS: Record<string, "success" | "info" | "warning" | "error" | "neutral"> = {
   active: "success",
   onboarding: "info",
   suspended: "warning",
@@ -38,13 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   redacted: "Redigido",
 };
 
-function StatusBadge({
-  status,
-  onboardedAt,
-}: {
-  status: string;
-  onboardedAt: string | null;
-}) {
+function StatusBadge({ status, onboardedAt }: { status: string; onboardedAt: string | null }) {
   const t = useT();
   // 'onboarding' não existe no banco — é derivado: ativo sem onboarding concluído.
   const effective = status === "active" && !onboardedAt ? "onboarding" : status;
@@ -68,9 +60,7 @@ function formatDate(iso: string | null, idioma: string): string {
   }).format(new Date(iso));
 }
 
-function extractCount(
-  arr: Array<{ count: number }> | null | undefined,
-): number {
+function extractCount(arr: Array<{ count: number }> | null | undefined): number {
   if (!arr || arr.length === 0) return 0;
   return arr[0]?.count ?? 0;
 }
@@ -94,11 +84,18 @@ export function TenantsTableSkeleton() {
       <Table>
         <TableHeader>
           <TableRow>
-            {["Slug", t("Nome"), "CNPJ", t("Status"), t("Users"), t("Conversas"), t("Criado em"), ""].map(
-              (h) => (
-                <TableHead key={h}>{h}</TableHead>
-              ),
-            )}
+            {[
+              "Slug",
+              t("Nome"),
+              "CNPJ",
+              t("Status"),
+              t("Users"),
+              t("Conversas"),
+              t("Criado em"),
+              "",
+            ].map((h) => (
+              <TableHead key={h}>{h}</TableHead>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -168,7 +165,19 @@ export function TenantsTable({
             {data.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-mono text-xs">{row.slug}</TableCell>
-                <TableCell className="font-medium">{row.display_name}</TableCell>
+                <TableCell className="font-medium">
+                  {row.display_name}
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {row.signup_origin === "self_service"
+                      ? t("Cadastro pelo site")
+                      : row.signup_origin === "manual"
+                        ? t("Inclusão manual")
+                        : t("Origem não identificada")}
+                    {row.ai_account?.mode === "platform"
+                      ? ` · ${t('IA incluída')} · ${t(commercialStateLabel(row.ai_account.state, row.ai_account.access_until))}`
+                      : ` · ${t('IA legada')}`}
+                  </span>
+                </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {shortCnpj(row.cnpj)}
                 </TableCell>
@@ -200,12 +209,7 @@ export function TenantsTable({
 
       {hasNextPage && (
         <div className="flex justify-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onLoadMore}
-            disabled={isFetchingNextPage}
-          >
+          <Button variant="outline" size="sm" onClick={onLoadMore} disabled={isFetchingNextPage}>
             {isFetchingNextPage ? t("Carregando...") : t("Carregar mais")}
           </Button>
         </div>

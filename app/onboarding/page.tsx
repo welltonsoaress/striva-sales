@@ -3,6 +3,8 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { proximoPasso } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
+import { progressoInicial } from "@/lib/onboarding/progresso-inicial";
+import { commercialAccount } from "@/lib/billing/managed-ai-server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +23,14 @@ export default async function OnboardingIndex() {
   if (!activeOrg) redirect("/get-started");
 
   const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
-  if (onboardedAt) redirect("/app/inbox");
+  const account = await commercialAccount(activeOrg.orgId);
+  const managed = account?.mode === 'platform';
+  if (managed && state.ai?.activated_at) redirect('/app/inicio');
+  if (!managed && (onboardedAt || state.dismissed_at)) {
+    const progresso = progressoInicial(state);
+    redirect(progresso.proxima?.href ?? "/app/inicio");
+  }
 
-  const passo = proximoPasso(state, { lojaLigada: env.NUVEMSHOP_ENABLED });
+  const passo = proximoPasso(state, { lojaLigada: env.NUVEMSHOP_ENABLED, managed });
   redirect(passo ? `/onboarding/${passo.segmento}` : "/onboarding/done");
 }

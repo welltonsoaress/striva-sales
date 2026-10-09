@@ -16,7 +16,10 @@ const hrefs = (settings: unknown, role: "agent" | "admin" = "admin", platform = 
   destinosDaInterface(settings, platform, role).map((d) => d.href);
 describe("interface por vínculo é apresentação", () => {
   it("legado completa acompanha catálogo e não duplica IDs", () => {
-    expect(hrefs(null)).toEqual(NAV_CATALOG.map((d) => d.href));
+    expect(hrefs(null)).toEqual(
+      NAV_CATALOG.filter((d) => d.href !== "/app/ai/credentials").map((d) => d.href),
+    );
+    expect(hrefs(null, "admin", true)).toEqual(NAV_CATALOG.map((d) => d.href));
     expect(new Set(NAV_CATALOG.map((d) => d.href)).size).toBe(NAV_CATALOG.length);
   });
   it("simplificada tem operação e Conexões somente quando papel permite", () => {
@@ -40,6 +43,7 @@ describe("interface por vínculo é apresentação", () => {
   it("granular hub-only tem porta, home e busca úteis, sem grupos vazios", () => {
     const settings = interfaceSettingsSchema.parse(granular);
     expect(sidebarGroups(false, "admin", settings).map((g) => g.group.id)).toEqual([
+      "atendimento",
       "crm",
       "ia",
       "organizacao",
@@ -59,6 +63,13 @@ describe("interface por vínculo é apresentação", () => {
     expect(hrefs(settings)).toEqual(
       expect.arrayContaining(["/app/team", "/app/settings/profile", "/app/settings/security"]),
     );
+  });
+  it("Início é o padrão; seleção explícita respeita o papel e mantém portas essenciais", () => {
+    expect(homeDaInterface(simplified, false, "agent")).toBe("/app/inicio");
+    expect(homeDaInterface(complete, false, "admin")).toBe("/app/inicio");
+    expect(homeDaInterface({ preset: "simplificada", destinos: ["/app/tasks"] }, false, "agent")).toBe("/app/tasks");
+    expect(homeDaInterface({ preset: "completa", destinos: ["/app/settings/billing"] }, false, "agent")).toBe("/app/inicio");
+    expect(hrefs(granular)).toContain("/app/inicio");
   });
   it("escrita recusa arbitrário/vazio; leitura remove obsoleto e degrada sem lançar", () => {
     expect(

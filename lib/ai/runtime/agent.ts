@@ -37,6 +37,7 @@ import { CredentialUnavailableError, loadCredential } from "@/lib/ai/credentials
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { managedSettings } from "@/lib/billing/managed-ai-server";
 import { audit } from "@/lib/audit";
 import type { McpAuthResult } from "@/lib/mcp/auth";
 import type { McpContext } from "@/lib/mcp/types";
@@ -72,7 +73,7 @@ export interface RunAgentResult {
   tool_calls?: ReturnType<typeof serializeSteps>;
   tokens_in?: number;
   tokens_out?: number;
-  cost_cents?: number;
+  cost_cents?: number | null;
   latency_ms?: number;
   steps_count?: number;
   abort_reason?: string;
@@ -302,7 +303,14 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     // Ensaio mais rígido que a produção não é cautela: é dizer que está
     // quebrado o que está funcionando.
     let credentialApiKey: string;
-    if (version.credential_id) {
+    const managed = await managedSettings(run.organization_id, run.is_dry_run ? 'agent_test' : 'agent_turn');
+    if (managed) {
+      if (!run.is_dry_run) return await failRun(run, 'managed_runtime_required', 'Use o atendimento atual para esta empresa.', startedAt);
+      version.provider = managed.provider;
+      version.model = managed.model;
+      version.max_steps = Math.min(version.max_steps, managed.max_steps);
+      credentialApiKey = managed.api_key;
+    } else if (version.credential_id) {
       try {
         const credential = await loadCredential(version.credential_id, run.organization_id);
         credentialApiKey = credential.apiKey;
@@ -420,7 +428,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         latency_ms: Date.now() - startedAt,
         tokens_in: 0,
         tokens_out: 0,
-        cost_cents: 0,
+        cost_cents: null,
         steps_count: 0,
         would_send_to: { session: waSessionName, chat_id: chatId },
       };
@@ -513,7 +521,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
       });
-      if (cost > version.cost_budget_cents) {
+      if (cost !== null && cost > version.cost_budget_cents) {
         abortReason = "cost_budget_exceeded";
         return true;
       }

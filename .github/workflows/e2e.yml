@@ -291,7 +291,7 @@ jobs:
         risk-radar.spec.ts invite-lifecycle.spec.ts system-update.spec.ts
         agente-papeis-operador.spec.ts prova-painel-provedores.spec.ts
         followup-linguagem.spec.ts followup-ramos.spec.ts
-        wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
+        wizard-do-funcionario.spec.ts inicio-primeiros-passos.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
         agenda-tela-do-produto.spec.ts
         notificacoes-diz-o-que-falta.spec.ts
         relogio-http-cron-externo.spec.ts
@@ -573,6 +573,7 @@ jobs:
       # todas. Os 3 arquivos que o cancelamento impediu de medir vêm junto, porque
       # eles são justamente o fim da fila.
       SPECS_PARTE_3: >-
+        saas-ia-incluida.spec.ts
         autonomia-assistida.spec.ts
         roteamento-por-canal.spec.ts
         central-avisos-destino.spec.ts

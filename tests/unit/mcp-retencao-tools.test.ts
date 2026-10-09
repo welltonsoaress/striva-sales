@@ -70,6 +70,14 @@ function novasCapturas(): Capturas {
  */
 function fakeSupabase(resolve: Resolver, cap: Capturas) {
   const from = (table: string) => {
+    if (table === "organization_ai_accounts") {
+      const account = {
+        select: () => account,
+        eq: () => account,
+        maybeSingle: async () => ({ data: { mode: "legacy" }, error: null }),
+      };
+      return account;
+    }
     const c: Consulta = { table, op: "select", terminal: "list", cols: "", filtros: {} };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
@@ -108,7 +116,20 @@ function fakeSupabase(resolve: Resolver, cap: Capturas) {
     from,
     rpc: (fn: string, args: Record<string, unknown>) => {
       cap.rpcs.push({ fn, args });
-      if (fn === 'fn_service_begin') return Promise.resolve({ data: { organization_id: ORG, contact_id: CONTATO, conversation_id: 'conv-1', service_revision: 1, demanda_id: null, demanda_revision: null, status: 'open', demanda_fechada_em: null }, error: null });
+      if (fn === "fn_service_begin")
+        return Promise.resolve({
+          data: {
+            organization_id: ORG,
+            contact_id: CONTATO,
+            conversation_id: "conv-1",
+            service_revision: 1,
+            demanda_id: null,
+            demanda_revision: null,
+            status: "open",
+            demanda_fechada_em: null,
+          },
+          error: null,
+        });
       return Promise.resolve({ data: null, error: null });
     },
   };
@@ -129,7 +150,10 @@ function ctxDe(resolve: Resolver, cap: Capturas): McpContext {
 /** Quando o agendamento chega ao fim: negócio existe, contato existe, sem retorno vivo. */
 const caminhoLivre: Resolver = (c) => {
   if (c.table === "crm_leads" && c.terminal === "maybeSingle") {
-    return { data: { id: LEAD, contact_id: CONTATO, stage_id: STAGE, status: "open" }, error: null };
+    return {
+      data: { id: LEAD, contact_id: CONTATO, stage_id: STAGE, status: "open" },
+      error: null,
+    };
   }
   if (c.table === "cron_jobs" && c.op === "insert") {
     return {
@@ -138,7 +162,11 @@ const caminhoLivre: Resolver = (c) => {
         contact_id: CONTATO,
         next_run_at: "2026-08-06T13:00:00.000Z",
         enabled: true,
-        payload: { reason: "reconfirmar", promise: "volto quarta", promised_at: "2026-08-06T13:00:00Z" },
+        payload: {
+          reason: "reconfirmar",
+          promise: "volto quarta",
+          promised_at: "2026-08-06T13:00:00Z",
+        },
         cancelled_at: null,
         cancel_reason: null,
       },
@@ -244,8 +272,10 @@ describe("crm_schedule_followup", () => {
     const leadFantasma: Resolver = (c) => {
       // O `crm_leads` do maybeSingle é a resolução do alvo: devolve NADA para o
       // id-placeholder. O `contacts` confirma que o cliente existe.
-      if (c.table === "crm_leads" && c.terminal === "maybeSingle") return { data: null, error: null };
-      if (c.table === "contacts" && c.terminal === "maybeSingle") return { data: { id: CONTATO }, error: null };
+      if (c.table === "crm_leads" && c.terminal === "maybeSingle")
+        return { data: null, error: null };
+      if (c.table === "contacts" && c.terminal === "maybeSingle")
+        return { data: { id: CONTATO }, error: null };
       return caminhoLivre(c);
     };
 
@@ -494,7 +524,8 @@ describe("crm_cancel_followup", () => {
       if (c.table === "cron_jobs" && c.op === "select" && c.terminal === "maybeSingle") {
         return { data: retornoAgendado, error: null };
       }
-      if (c.table === "cron_jobs" && c.op === "update") return { data: [{ id: RETORNO }], error: null };
+      if (c.table === "cron_jobs" && c.op === "update")
+        return { data: [{ id: RETORNO }], error: null };
       if (c.table === "crm_leads" && c.terminal === "list") {
         return {
           data: [
@@ -604,7 +635,8 @@ describe("crm_close_demand", () => {
   it("encerra como perdido, exige o motivo e EMITE atividade", async () => {
     const cap = novasCapturas();
     const resolver: Resolver = (c) => {
-      if (c.table === "crm_leads" && c.terminal === "maybeSingle") return { data: leadAberto, error: null };
+      if (c.table === "crm_leads" && c.terminal === "maybeSingle")
+        return { data: leadAberto, error: null };
       if (c.table === "crm_stages" && c.terminal === "maybeSingle") {
         return { data: { id: STAGE_PERDA, name: "Perdido" }, error: null };
       }
@@ -644,7 +676,8 @@ describe("crm_close_demand", () => {
   it("funil sem estágio terminal vira ensino, não exceção", async () => {
     const cap = novasCapturas();
     const semEstagio: Resolver = (c) => {
-      if (c.table === "crm_leads" && c.terminal === "maybeSingle") return { data: leadAberto, error: null };
+      if (c.table === "crm_leads" && c.terminal === "maybeSingle")
+        return { data: leadAberto, error: null };
       return { data: null, error: null };
     };
 
@@ -666,7 +699,10 @@ describe("crm_propose_reactivation", () => {
         ? { data: { id: LEAD, contact_id: CONTATO, stage_id: STAGE, status: "won" }, error: null }
         : { data: null, error: null };
 
-    const res = (await crmProposeReactivation.handler({ lead_id: LEAD }, ctxDe(encerrado, cap))) as {
+    const res = (await crmProposeReactivation.handler(
+      { lead_id: LEAD },
+      ctxDe(encerrado, cap),
+    )) as {
       proposta_criada: boolean;
       motivo: string;
     };
@@ -680,7 +716,10 @@ describe("crm_propose_reactivation", () => {
     const cap = novasCapturas();
     const resolver: Resolver = (c) => {
       if (c.table === "crm_leads" && c.terminal === "maybeSingle") {
-        return { data: { id: LEAD, contact_id: CONTATO, stage_id: STAGE, status: "open" }, error: null };
+        return {
+          data: { id: LEAD, contact_id: CONTATO, stage_id: STAGE, status: "open" },
+          error: null,
+        };
       }
       if (c.table === "crm_stages" && c.terminal === "maybeSingle") {
         return { data: { expected_duration_hours: 48 }, error: null };
@@ -760,7 +799,8 @@ describe("o texto que aparece na linha do tempo", () => {
           error: null,
         };
       }
-      if (c.table === "cron_jobs" && c.op === "update") return { data: [{ id: RETORNO }], error: null };
+      if (c.table === "cron_jobs" && c.op === "update")
+        return { data: [{ id: RETORNO }], error: null };
       if (c.table === "crm_leads" && c.terminal === "list") {
         return {
           data: [
@@ -776,7 +816,8 @@ describe("o texto que aparece na linha do tempo", () => {
           error: null,
         };
       }
-      if (c.table === "contacts" && c.terminal === "maybeSingle") return { data: { id: CONTATO }, error: null };
+      if (c.table === "contacts" && c.terminal === "maybeSingle")
+        return { data: { id: CONTATO }, error: null };
       return { data: c.terminal === "list" ? [] : null, error: null };
     };
     await crmCancelFollowup.handler(
@@ -795,7 +836,14 @@ describe("o texto que aparece na linha do tempo", () => {
     const resolver: Resolver = (c) => {
       if (c.table === "crm_leads" && c.terminal === "maybeSingle") {
         return {
-          data: { id: LEAD, organization_id: ORG, pipeline_id: "p1", stage_id: STAGE, status: "open", contact_id: CONTATO },
+          data: {
+            id: LEAD,
+            organization_id: ORG,
+            pipeline_id: "p1",
+            stage_id: STAGE,
+            status: "open",
+            contact_id: CONTATO,
+          },
           error: null,
         };
       }
@@ -827,7 +875,7 @@ describe("crm_list_at_risk_leads", () => {
     // às irmãs: a garantia é POR CONSULTA, não por função.
     const espiao: Resolver = (c) => {
       filtros.push({ table: c.table, ...c.filtros });
-      if(c.table==="organizations") return {data:{settings:{}},error:null};
+      if (c.table === "organizations") return { data: { settings: {} }, error: null };
       if (c.table !== "crm_leads") return { data: [], error: null };
       return {
         data: [
@@ -868,7 +916,10 @@ describe("crm_list_at_risk_leads", () => {
       expect(tabelas, `o radar não leu "${esperada}"`).toContain(esperada);
     }
     for (const leitura of filtros) {
-      expect(leitura.table === "organizations" ? leitura.id : leitura.organization_id, `leitura de "${leitura.table}" sem filtro de org`).toBe(ORG);
+      expect(
+        leitura.table === "organizations" ? leitura.id : leitura.organization_id,
+        `leitura de "${leitura.table}" sem filtro de org`,
+      ).toBe(ORG);
     }
   });
 

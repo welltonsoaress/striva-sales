@@ -1,3 +1,4 @@
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 /**
  * GET/PUT /api/v1/ai/providers — a configuração de IA de cada ponto do sistema.
@@ -19,7 +20,6 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { roleAtLeast } from "@/lib/auth/types";
 import {
   decidirBinding,
   EXPLICACAO_DA_ORIGEM,
@@ -196,7 +196,7 @@ export async function GET(): Promise<Response> {
     provedores: PROVEDORES,
     credenciais: credsRes.data ?? [],
     modelos,
-    podeEditar: roleAtLeast(org.role, "admin"),
+    podeEditar: (await requireAiPlatformAdmin()).ok,
   });
 }
 
@@ -225,7 +225,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  const authz = await requireRole("admin", { resource: "ai_providers" });
+  const authz = await requireAiPlatformAdmin();
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
@@ -239,7 +239,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const ponto = PONTO_POR_ID.get(corpo.purpose);
   if (!ponto) return fail("ponto_desconhecido", `"${corpo.purpose}" não é um ponto do sistema`, 404);
 
-  const db = await createClient();
+  const db = createAdminClient();
 
   // A capacidade vem do catálogo (o que o FABRICANTE declara), nunca de
   // heurística sobre o nome do modelo.
@@ -367,7 +367,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
 
-  const authz = await requireRole("admin", { resource: "ai_providers" });
+  const authz = await requireAiPlatformAdmin();
   if (!authz.ok) return authz.response;
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { user, org } = authz;
@@ -378,7 +378,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   }
   const corpo = parsed.data;
 
-  const db = await createClient();
+  const db = createAdminClient();
 
   // O modelo tem de existir no catálogo DAQUELE provedor. Sem esta conferência,
   // um erro de digitação vira padrão da organização e derruba todo ponto

@@ -9,6 +9,7 @@ import { LogotipoDoProduto } from "@/components/branding/MarcaDoProduto";
 import { branding, marcaEhADoProduto } from "@/lib/branding";
 import { passosVisiveis } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
+import { commercialAccount } from "@/lib/billing/managed-ai-server";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
@@ -20,19 +21,22 @@ export default async function OnboardingLayout({ children }: { children: React.R
   // `/login` fechava o círculo: quem entrasse de novo voltaria para cá. A saída
   // é a tela que CRIA a organização que falta.
   if (!activeOrg) redirect("/get-started");
+  if (activeOrg.role !== "admin") redirect("/app/inicio");
 
-  const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
-  if (onboardedAt) redirect("/app/inbox");
+  const { state } = await loadOnboardingState(activeOrg.orgId);
 
   // Os passos que ESTA instalação oferece, com o que já foi resolvido. O
   // indicador não decide mais nada sozinho — ele desenha o que recebe.
-  const passos = passosVisiveis({ lojaLigada: env.NUVEMSHOP_ENABLED }).map((p) => ({
+  const account = await commercialAccount(activeOrg.orgId);
+  const passos = passosVisiveis({
+    lojaLigada: env.NUVEMSHOP_ENABLED,
+    managed: account?.mode === "platform",
+  }).map((p) => ({
     segmento: p.segmento,
     rotulo: p.rotulo,
     cumprido: p.cumprido(state),
   }));
 
-  const isDev = process.env.NODE_ENV !== "production";
   const marca = branding();
   const marcaDoProduto = marcaEhADoProduto(marca);
 
@@ -40,21 +44,30 @@ export default async function OnboardingLayout({ children }: { children: React.R
     <IdiomaProvider locale={user.locale}>
       <div className="flex min-h-screen flex-col bg-muted/40">
         <header className="border-b bg-background">
-          <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-3">
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               {marcaDoProduto && (
-                <LogotipoDoProduto nome={marca.name} decorativo className="h-9 w-auto" />
+                <LogotipoDoProduto
+                  nome={marca.name}
+                  decorativo
+                  className="h-8 w-auto shrink-0 sm:h-9"
+                />
               )}
-              <div>
+              <div className="min-w-0">
                 {!marcaDoProduto && (
                   <p className="text-xs tracking-wider text-muted-foreground uppercase">
                     {marca.name}
                   </p>
                 )}
-                <h1 className="text-lg font-semibold tracking-tight">{activeOrg.name}</h1>
+                <h1
+                  className="truncate text-sm font-semibold tracking-tight sm:text-lg"
+                  title={activeOrg.name}
+                >
+                  {activeOrg.name}
+                </h1>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               {/*
                 A SAÍDA, para quem tem outra organização. Ver o cabeçalho de
                 `OutrasOrganizacoes`: sem ela, trocar de organização pelo seletor
@@ -66,7 +79,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
                   .filter((o) => o.organization_id !== activeOrg.orgId)
                   .map((o) => ({ id: o.organization_id, nome: o.organization_name }))}
               />
-              {isDev ? <SkipToEnd /> : null}
+              <SkipToEnd />
             </div>
           </div>
           <div className="mx-auto w-full max-w-3xl px-4 pb-2">

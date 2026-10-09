@@ -23,7 +23,7 @@ export interface LoadedOrgMemory {
 export async function loadOrgMemory(db: pg.Pool, tenantId: string): Promise<LoadedOrgMemory> {
   const { rows: docRows } = await db.query<{ content: string }>(
     `select v.content
-     from org_memory_pointers p join org_memory_versions v on v.id = p.version_id
+     from org_memory_pointers p join org_memory_versions v on v.id = p.version_id and v.organization_id=p.organization_id
      where p.organization_id = $1`,
     [tenantId],
   );

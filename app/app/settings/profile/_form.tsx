@@ -15,11 +15,9 @@ import {
 } from "@/components/ui/select";
 import { updateProfile } from "@/app/actions/settings/updateProfile";
 import { useT } from "@/hooks/i18n/useT";
-import {
-  profileSchema,
-  SEM_PREFERENCIA_DE_IDIOMA,
-  type Locale,
-} from "@/lib/schemas/settings";
+import { AvatarPicker } from "@/components/profile/AvatarPicker";
+import { avatarPresetUrl } from "@/lib/profile/avatars";
+import { profileSchema, SEM_PREFERENCIA_DE_IDIOMA, type Locale } from "@/lib/schemas/settings";
 
 const TIMEZONES = [
   "America/Sao_Paulo",
@@ -49,7 +47,7 @@ export function ProfileForm({
   const [fullName, setFullName] = useState(initialFullName ?? "");
   const [locale, setLocale] = useState<Locale | typeof SEM_PREFERENCIA_DE_IDIOMA>(initialLocale);
   const [timezone, setTimezone] = useState(initialTimezone);
-  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? "");
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl ?? avatarPresetUrl());
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
@@ -77,9 +75,7 @@ export function ProfileForm({
         <div className="space-y-2">
           <Label htmlFor="email">{t("Email")}</Label>
           <Input id="email" value={email} disabled />
-          <p className="text-xs text-muted-foreground">
-            {t("Trocar email — em breve.")}
-          </p>
+          <p className="text-xs text-muted-foreground">{t("Trocar email — em breve.")}</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="full_name">{t("Nome completo")}</Label>
@@ -127,19 +123,7 @@ export function ProfileForm({
             </Select>
           </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="avatar_url">{t("Avatar URL")}</Label>
-          <Input
-            id="avatar_url"
-            type="url"
-            placeholder="https://…"
-            value={avatarUrl}
-            onChange={(e) => setAvatarUrl(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("Upload de arquivo — em breve. Cole uma URL pública.")}
-          </p>
-        </div>
+        <AvatarPicker value={avatarUrl} onChange={setAvatarUrl} upload disabled={isPending} />
         <div className="flex sm:justify-end">
           <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
             {isPending ? t("Salvando…") : t("Salvar")}

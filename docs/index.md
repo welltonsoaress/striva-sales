@@ -30,6 +30,10 @@ de menor precedência e registre.
 
 | Doc | Para quê |
 |---|---|
+| [`specs/saas-ia-incluida.md`](specs/saas-ia-incluida.md) | Contrato aprovado de IA incluída, teste, saldo, templates e admin |
+| [`specs/creditos-e-clinicas.md`](specs/creditos-e-clinicas.md) | Régua de dez créditos, compatibilidade, pacote extra, preços por período e campanha clínica |
+| [`runbooks/saas-ia-incluida.md`](runbooks/saas-ia-incluida.md) | Configuração e homologação da operação SaaS |
+| [`reviews/2026-10-07-saas-seguranca-e-homologacao.md`](reviews/2026-10-07-saas-seguranca-e-homologacao.md) | Achados, correções e limites da prova de segurança e integração |
 | [`README.md`](../README.md) | O que é, quickstart de 5 min, stack, roadmap. Também em [EN](../README.en.md) / [ES](../README.es.md) |
 | [`VISION.md`](../VISION.md) | Posicionamento, por que self-host, para quem |
 | [`ARCHITECTURE.md`](../ARCHITECTURE.md) | Arquitetura em 1 página |

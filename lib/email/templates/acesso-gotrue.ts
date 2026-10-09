@@ -39,14 +39,28 @@ export type ModeloDeAcesso = "confirmation" | "recovery";
 export const MODELOS_DE_ACESSO: readonly ModeloDeAcesso[] = ["confirmation", "recovery"];
 
 /** O texto de cada modelo. Assunto entra no `GOTRUE_MAILER_SUBJECTS_*`. */
-const COPIA: Record<ModeloDeAcesso, { assunto: (marca: string) => string; titulo: string; corpo: (marca: string) => string; botao: string; rodape: string }> = {
+const COPIA: Record<
+  ModeloDeAcesso,
+  {
+    assunto: (marca: string) => string;
+    titulo: string;
+    corpo: (marca: string) => string;
+    botao: string;
+    rodape: string;
+    preheader: string;
+    orientacao: string;
+  }
+> = {
   confirmation: {
     assunto: (marca) => `Confirme seu e-mail · ${marca}`,
-    titulo: "Confirme seu e-mail",
+    titulo: "Seu próximo passo começa aqui",
     corpo: (marca) =>
-      `Sua conta no ${marca} está quase pronta. Clique no botão abaixo para confirmar seu e-mail e ativar sua conta.`,
+      `Sua conta no ${marca} está quase pronta. Confirme seu endereço de e-mail para acessar sua área de trabalho e continuar a configuração.`,
     botao: "Confirmar e-mail",
     rodape: "Se você não criou esta conta, ignore este e-mail.",
+    preheader: "Confirme seu e-mail e dê o primeiro passo para organizar seu atendimento.",
+    orientacao:
+      "Depois da confirmação, siga as orientações na tela para preparar sua conta. Você poderá concluir a configuração no seu ritmo.",
   },
   recovery: {
     assunto: (marca) => `Redefinir sua senha · ${marca}`,
@@ -54,8 +68,10 @@ const COPIA: Record<ModeloDeAcesso, { assunto: (marca: string) => string; titulo
     corpo: (marca) =>
       `Recebemos um pedido para redefinir a senha da sua conta no ${marca}. Clique no botão abaixo para escolher uma nova.`,
     botao: "Definir nova senha",
-    rodape:
-      "Se não foi você quem pediu, ignore este e-mail — sua senha continua a mesma.",
+    rodape: "Se não foi você quem pediu, ignore este e-mail — sua senha continua a mesma.",
+    preheader: "Crie uma nova senha e recupere o acesso à sua área de trabalho.",
+    orientacao:
+      "Escolha uma senha exclusiva para esta conta. A alteração só acontece depois que você definir e salvar a nova senha.",
   },
 };
 
@@ -83,28 +99,35 @@ export function montarTemplateDeAcesso(modelo: ModeloDeAcesso, marca: MarcaDeSai
 
   return `<!doctype html>
 <html lang="pt-BR">
-<body style="margin:0;padding:0;background:${NEUTROS_DE_SAIDA.fundo};font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:${NEUTROS_DE_SAIDA.texto}">
-  <div style="max-width:560px;margin:0 auto;padding:32px 24px">
-    ${logo}
-    <h1 style="font-size:22px;line-height:1.3;margin:0 0 16px;color:${NEUTROS_DE_SAIDA.texto}">
-      ${escapeHtml(t.titulo)}
-    </h1>
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.5">
-      ${escapeHtml(t.corpo(marca.nome))}
-    </p>
-    <p style="margin:24px 0">
-      <a href="${destino}" style="display:inline-block;padding:12px 24px;background:${marca.accent};color:${marca.accentFg};border-radius:6px;text-decoration:none;font-weight:600">
-        ${escapeHtml(t.botao)}
-      </a>
-    </p>
-    <p style="margin:0 0 8px;font-size:13px;color:${NEUTROS_DE_SAIDA.suave}">
-      Ou copie e cole este link no navegador:<br>
-      <span style="word-break:break-all;color:${marca.accent}">${destino}</span>
-    </p>
-    <p style="margin:24px 0 0;font-size:13px;color:${NEUTROS_DE_SAIDA.suave}">
-      ${escapeHtml(t.rodape)}
-    </p>
-  </div>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(t.titulo)}</title></head>
+<body style="margin:0;padding:0;background:${NEUTROS_DE_SAIDA.fundo};font-family:Arial,Helvetica,sans-serif;color:${NEUTROS_DE_SAIDA.texto}">
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all">${escapeHtml(t.preheader)}</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tr><td align="center" style="padding:32px 16px">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid ${NEUTROS_DE_SAIDA.linha};border-radius:12px">
+        <tr><td style="padding:32px 28px 20px;border-bottom:1px solid ${NEUTROS_DE_SAIDA.linha}">
+          ${logo}
+          <p style="margin:0;font-size:20px;line-height:1.4;font-weight:700;color:${NEUTROS_DE_SAIDA.texto}">${nome}</p>
+          <p style="margin:6px 0 0;font-size:12px;line-height:1.5;letter-spacing:1px;color:${NEUTROS_DE_SAIDA.suave}">SUA ÁREA DE TRABALHO</p>
+        </td></tr>
+        <tr><td style="padding:28px">
+          <h1 style="font-size:26px;line-height:1.25;margin:0 0 16px;color:${NEUTROS_DE_SAIDA.texto}">${escapeHtml(t.titulo)}</h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.7">${escapeHtml(t.corpo(marca.nome))}</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="border-radius:6px;background:${marca.accent}">
+            <a href="${destino}" style="display:inline-block;padding:14px 24px;background:${marca.accent};color:${marca.accentFg};border-radius:6px;text-decoration:none;font-size:15px;line-height:1.4;font-weight:700">${escapeHtml(t.botao)}</a>
+          </td></tr></table>
+          <p style="margin:24px 0 0;font-size:14px;line-height:1.7;color:${NEUTROS_DE_SAIDA.suave}">${escapeHtml(t.orientacao)}</p>
+          <p style="margin:24px 0 8px;padding-top:20px;border-top:1px solid ${NEUTROS_DE_SAIDA.linha};font-size:12px;line-height:1.6;color:${NEUTROS_DE_SAIDA.suave}">Se o botão não abrir, copie e cole este link no navegador:</p>
+          <p style="margin:0;font-size:12px;line-height:1.6;word-break:break-all;overflow-wrap:anywhere;color:${NEUTROS_DE_SAIDA.suave}">${destino}</p>
+        </td></tr>
+      </table>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px"><tr><td style="padding:20px 12px;font-size:12px;line-height:1.7;color:${NEUTROS_DE_SAIDA.suave}">
+        <p style="margin:0 0 8px">O link é pessoal e de uso único. Não o compartilhe.</p>
+        <p style="margin:0 0 8px">${escapeHtml(t.rodape)}</p>
+        <p style="margin:0">Mensagem automática de ${nome}.</p>
+      </td></tr></table>
+    </td></tr>
+  </table>
 </body>
 </html>`;
 }

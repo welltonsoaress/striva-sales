@@ -200,6 +200,9 @@ test.describe("degradação silenciosa do tempo real", () => {
     // (refetch, polling) e a premissa da cerca mudou — o que também é notícia.
     expect(texto, "a mudança apareceu mesmo com a entrega morta — há outro caminho vivo").not.toContain(marca);
 
-    expect(texto, "a tela não diz nada sobre estar possivelmente desatualizada").toMatch(AVISO);
+    // Texto estático de navegação ou de um agente pausado não comprova um
+    // aviso de perda da entrega. O sinal precisa chegar como alerta/status.
+    const avisos = await page.getByRole("alert").or(page.getByRole("status")).allTextContents();
+    expect(avisos.join(" "), "a tela não diz nada sobre estar possivelmente desatualizada").toMatch(AVISO);
   });
 });

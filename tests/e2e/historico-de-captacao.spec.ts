@@ -146,7 +146,9 @@ test.describe("histórico de leads captados", () => {
       await expect(painel.getByText("11955554444")).toBeVisible();
 
       // 3. De onde — IP, página e UTM.
-      await expect(painel.getByText(IP_DE_TESTE)).toBeVisible();
+      // Sem um proxy autenticado, o header forjado não vira prova de origem.
+      await expect(painel.getByText(IP_DE_TESTE)).toHaveCount(0);
+      await expect(painel.getByText(/não identificado — sua instalação/)).toBeVisible();
       await expect(painel.getByText("https://minha-landing.example")).toBeVisible();
       await expect(painel.getByText("instagram")).toBeVisible();
 

@@ -132,7 +132,9 @@ export default defineConfig({
   webServer: {
     // Produção (`next build` antes!): dev-server compila por rota (40-80s) e
     // Turbopack dev quebra cookies() fora do request scope — inviável p/ e2e.
-    command: `pnpm exec next start --port ${PORT}`,
+    // Chama o runtime instalado no projeto também no Windows, sem depender de
+    // um pnpm global com versão diferente do packageManager.
+    command: `node node_modules/next/dist/bin/next start --port ${PORT}`,
     // O ambiente do servidor sob teste vem do `.env.e2e`, INJETADO aqui — e não
     // do `.env.local`, que num checkout de trabalho aponta para PRODUÇÃO.
     // Variável de ambiente real tem precedência sobre os arquivos `.env*` que o
@@ -145,7 +147,11 @@ export default defineConfig({
     // `publicarNoProcesso` acima que garante que o `process.env` do runner tenha
     // o que aquele conserto precisa: sem ele, num worktree sem `.env.local`, o
     // seed não tinha NENHUMA das duas fontes.
-    env: publicarNoProcesso(envDoE2E()),
+    env: publicarNoProcesso({
+      ...envDoE2E(),
+      HOTMART_HOTTOK: "hotmart-e2e-fixture-only",
+      HOTMART_CHECKOUT_ENABLED: "true",
+    }),
     url: BASE_URL,
     // false: reusar um server que já ocupa a porta pode ser OUTRO processo
     // (ex.: bundle do Remotion na 3000) — o teste precisa do NOSSO next start.

@@ -21,6 +21,8 @@ import { getAction } from "@/lib/automation/actions";
 import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { ApiError } from "@/lib/api/types";
+import { assertTenantOperation } from "@/lib/billing/operation-access-server";
 
 export const AUTOMATION_CONSUMER_KEY = "automation-rules";
 
@@ -40,7 +42,10 @@ interface RuleRow {
 }
 
 /** Hidrata o contexto avaliado pelas condições/ações a partir do entity do evento. */
-export async function buildContext(admin: SupabaseClient, row: EventRow): Promise<Record<string, unknown>> {
+export async function buildContext(
+  admin: SupabaseClient,
+  row: EventRow,
+): Promise<Record<string, unknown>> {
   const context: Record<string, unknown> = { event: row.payload };
   // Admin client bypassa RLS — todo lookup filtra organization_id do evento
   // (doutrina multi-tenant; um FK cross-org corrompido nunca vaza pro contexto).
@@ -140,15 +145,19 @@ export async function runAutomationForEvent(
   const serviceBoundaries = new Map<string, Promise<ServiceBoundary>>();
   const requestId = row.metadata?.request_id;
   const causedByRule =
-    Boolean(row.metadata?.caused_by_rule) || (typeof requestId === "string" && requestId.startsWith("rule:"));
+    Boolean(row.metadata?.caused_by_rule) ||
+    (typeof requestId === "string" && requestId.startsWith("rule:"));
   if (causedByRule) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "caused_by_rule" };
   }
 
   const expectedKind = EXPECTED_ENTITY_KIND[row.event_type];
   if (expectedKind && row.entity_kind !== expectedKind) {
-  
-    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "entity_kind_mismatch" };
+    return {
+      consumer_key: AUTOMATION_CONSUMER_KEY,
+      status: "skipped",
+      detail: "entity_kind_mismatch",
+    };
   }
 
   const { data: rules, error } = await admin
@@ -172,14 +181,45 @@ export async function runAutomationForEvent(
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok", detail: "no_match" };
   }
 
+  // O worker usa service role: as ações de CRM não passam pelo RLS nem pelo
+  // guard HTTP. Conferir o contrato antes do preflight evita esse caminho
+  // continuar operando depois do período pago. Saldo zerado não bloqueia CRM.
+  let operationBlocked: string | null = null;
+  try {
+    await assertTenantOperation(admin, row.organization_id);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 403) {
+      operationBlocked = err.message;
+    } else {
+      // Falha de consulta é transitória, não recusa definitiva. O drain mantém
+      // o consumidor pendente e aplica seu retry, sem executar ações na dúvida.
+      return {
+        consumer_key: AUTOMATION_CONSUMER_KEY,
+        status: "error",
+        detail: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
   // Pré-checagem de postpone (throttle etc.): all-or-nothing ANTES de executar
   // qualquer ação — reexecução parcial no retry seria pior que atraso.
   for (const rule of applicable) {
-    for (const action of rule.actions ?? []) {
+    if (operationBlocked) break;
+    for (const [actionIndex, action] of (rule.actions ?? []).entries()) {
       const executor = getAction(action.type);
       if (!executor?.postponeUntil) continue;
       const until = await executor.postponeUntil(
-        { admin, serviceBoundaries, organizationId: row.organization_id, ruleId: rule.id, ruleName: rule.name, event: row, context, requestId: row.id },
+        {
+          admin,
+          serviceBoundaries,
+          organizationId: row.organization_id,
+          ruleId: rule.id,
+          actionIndex,
+          ruleName: rule.name,
+          event: row,
+          context,
+          requestId: row.id,
+        },
         action.config ?? {},
       );
       if (until) {
@@ -195,7 +235,15 @@ export async function runAutomationForEvent(
 
   for (const rule of applicable) {
     const results: ActionResultDetail[] = [];
-    for (const action of rule.actions ?? []) {
+    for (const [actionIndex, action] of (rule.actions ?? []).entries()) {
+      if (operationBlocked) {
+        results.push({
+          type: action.type,
+          status: "skipped",
+          detail: { reason: "commercial_read_only", explicacao: operationBlocked },
+        });
+        continue;
+      }
       const executor = getAction(action.type);
       if (!executor) {
         results.push({ type: action.type, status: "failed", error: "unknown_action" });
@@ -204,7 +252,17 @@ export async function runAutomationForEvent(
       try {
         results.push(
           await executor.execute(
-            { admin, serviceBoundaries, organizationId: row.organization_id, ruleId: rule.id, ruleName: rule.name, event: row, context, requestId: row.id },
+            {
+              admin,
+              serviceBoundaries,
+              organizationId: row.organization_id,
+              ruleId: rule.id,
+              actionIndex,
+              ruleName: rule.name,
+              event: row,
+              context,
+              requestId: row.id,
+            },
             action.config ?? {},
           ),
         );
@@ -250,10 +308,13 @@ export async function runAutomationForEvent(
     // A ordem importa: falha (+ skip) vence adiamento. Uma regra em que uma
     // ação falhou/pulou e outra ficou esperando é `partial` — quem lê precisa
     // saber que algo quebrou, não que está tudo a caminho.
-    const naoEnviadas = results.filter((r) => r.status === "failed" || r.status === "skipped").length;
+    const naoEnviadas = results.filter(
+      (r) => r.status === "failed" || r.status === "skipped",
+    ).length;
     const adiados = results.filter((r) => r.status === "postponed").length;
-    const status =
-      naoEnviadas > 0
+    const status = operationBlocked
+      ? "failed"
+      : naoEnviadas > 0
         ? naoEnviadas === results.length
           ? "failed"
           : "partial"
@@ -286,12 +347,20 @@ export async function runAutomationForEvent(
 
     // run_count sem RPC de increment: read-modify-write é aceitável aqui
     // (contador informativo de UI, não invariante).
-    const { data: cur } = await admin.from("automation_rules").select("run_count").eq("id", rule.id).maybeSingle();
+    const { data: cur } = await admin
+      .from("automation_rules")
+      .select("run_count")
+      .eq("id", rule.id)
+      .eq("organization_id", row.organization_id)
+      .maybeSingle();
     await admin
       .from("automation_rules")
       .update({ last_run_at: new Date().toISOString(), run_count: (cur?.run_count ?? 0) + 1 })
-      .eq("id", rule.id);
+      .eq("id", rule.id)
+      .eq("organization_id", row.organization_id);
   }
 
-  return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok" };
+  return operationBlocked
+    ? { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "commercial_read_only" }
+    : { consumer_key: AUTOMATION_CONSUMER_KEY, status: "ok" };
 }

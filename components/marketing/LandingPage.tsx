@@ -26,6 +26,8 @@ import {
   X,
 } from "@/lib/ui/icons";
 import styles from "./landing.module.css";
+import { PricingSection } from "./PricingSection";
+import type { CommercialPlan } from "@/lib/billing/plans";
 
 const DEMO_URL = `https://wa.me/5583998391039?text=${encodeURIComponent("Olá! Quero conhecer o sistema e agendar uma demonstração para minha empresa.")}`;
 const steps = ["Atendimento", "Follow-up", "Próximo passo"];
@@ -146,7 +148,7 @@ function DemoLink({
   );
 }
 
-function Logo({ name }: { name: string }) {
+export function Logo({ name }: { name: string }) {
   return (
     <Image
       src="/brand/nova-logo-claro.png"
@@ -383,7 +385,7 @@ function ChatMessage({
   );
 }
 
-function Journey() {
+export function Journey({ clinicOnly = false }: { clinicOnly?: boolean }) {
   const ready = useInteractiveReady();
   const [step, setStep] = useState(0);
   const [sector, setSector] = useState(0);
@@ -397,7 +399,7 @@ function Journey() {
         </span>
         <Sparkle size={18} aria-hidden />
       </div>
-      <div className={styles.sectorSwitch} role="group" aria-label="Escolha um exemplo de negócio">
+      {!clinicOnly && <div className={styles.sectorSwitch} role="group" aria-label="Escolha um exemplo de negócio">
         {sectors.map((item, index) => (
           <button
             disabled={!ready}
@@ -408,7 +410,7 @@ function Journey() {
             {item.name}
           </button>
         ))}
-      </div>
+      </div>}
       <div className={styles.stepSwitch} role="group" aria-label="Etapas da jornada de venda">
         {steps.map((label, index) => (
           <button
@@ -1066,11 +1068,19 @@ const faqs = [
   ],
   [
     "Qual é o investimento?",
-    "Converse com nossa equipe para conhecer a proposta comercial e as condições disponíveis para sua operação. A demonstração é o momento de entender os recursos, a configuração e o investimento antes de contratar.",
+    "Confira os planos Básico, Pro e Empresarial nesta página. Você pode escolher entre contratação semestral e anual. O valor mensal mostrado é o equivalente do período; o total e as condições de pagamento aparecem antes de contratar.",
   ],
 ];
 
-export function LandingPage({ name, loginHref = "/login" }: { name: string; loginHref?: "/login" | "/app" }) {
+export function LandingPage({
+  name,
+  loginHref = "/login",
+  pricing,
+}: {
+  name: string;
+  loginHref?: "/login" | "/app";
+  pricing: { available: boolean; plans: CommercialPlan[] };
+}) {
   const ready = useInteractiveReady();
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -1087,13 +1097,15 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
           <a href="#recursos">Recursos</a>
           <a href="#inteligencia">Gestão</a>
           <a href="#para-quem">Para quem</a>
+          <a href="#planos">Planos</a>
+          <Link href="/clinicas">Clínicas</Link>
         </nav>
         <div className={styles.headerActions}>
           <Link href={loginHref} className={styles.loginLink}>
             Entrar
           </Link>
           <span className={styles.desktopCta}>
-            <DemoLink small />
+            <Link href="/signup" className={`${styles.button} ${styles.buttonSmall}`}>Testar 7 dias grátis</Link>
           </span>
           <button
             disabled={!ready}
@@ -1113,13 +1125,15 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
               ["Recursos", "#recursos"],
               ["Gestão e relatórios", "#inteligencia"],
               ["Para quem", "#para-quem"],
+              ["Planos", "#planos"],
+              ["Para clínicas", "/clinicas"],
             ].map(([label, href]) => (
               <a href={href} key={href} onClick={() => setMenuOpen(false)}>
                 {label}
                 <ArrowRight size={18} aria-hidden />
               </a>
             ))}
-            <DemoLink small />
+            <Link href="/signup" className={`${styles.button} ${styles.buttonSmall}`}>Testar 7 dias grátis</Link>
           </nav>
         )}
       </header>
@@ -1127,23 +1141,21 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.heroCopy}>
             <h1 id="hero-title">
-              Mais vendas.
+              Seu comercial.
               <br />
-              Menos oportunidades
-              <br />
-              <span>perdidas.</span>
+              <span>Com próximo passo.</span>
             </h1>
             <p>
-              <strong>Um funcionário comercial digital que atende, vende e agenda. 24/7.</strong>
+              <strong>O sistema comercial que executa o próximo passo, com IA incluída.</strong>
               <br />
               Aproveite o interesse de quem chama, retome quem parou de responder e organize cada
               negociação. Atendimento, follow-up, CRM e Google Agenda conectados — com sua equipe no
               controle.
             </p>
             <div className={styles.heroActions}>
-              <DemoLink>Quero ver no meu negócio</DemoLink>
+              <Link href="/signup" className={styles.button}>Testar 7 dias grátis<ArrowRight size={19} aria-hidden/></Link>
               <a href="#demonstracao" className={styles.textLink}>
-                Veja uma venda avançar
+                Ver o {name} no meu processo
                 <CaretDown size={17} aria-hidden />
               </a>
             </div>
@@ -1156,7 +1168,11 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
                 <Check size={16} aria-hidden />
                 Sua equipe no controle
               </span>
+              <span>Sem configurar chave de IA</span>
             </div>
+            <p className={styles.trialTerms}>
+              7 dias ou 1.000 créditos após a ativação. Um usuário e um WhatsApp.
+            </p>
           </div>
           <Journey />
         </section>
@@ -1385,6 +1401,7 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
             </article>
           </div>
         </section>
+        <PricingSection {...pricing} />
         <section className={`${styles.section} ${styles.faqSection}`} id="duvidas">
           <h2>
             Antes de dar
@@ -1411,12 +1428,13 @@ export function LandingPage({ name, loginHref = "/login" }: { name: string; logi
               pode começar na próxima mensagem.
             </h2>
             <p>
-              Veja o {name} aplicado ao seu processo comercial. Na demonstração, conheça o
-              atendimento, o acompanhamento dos contatos e o controle da operação para a sua
-              empresa.
+              Conte como sua empresa atende, conecte o WhatsApp e revise seu agente preparado.
+              Atendimento, acompanhamento e organização, com sua equipe no controle.
             </p>
-            <DemoLink>Quero ver funcionando</DemoLink>
-            <span className={styles.finalNote}>Demonstração com nossa equipe pelo WhatsApp.</span>
+            <Link href="/signup" className={styles.button}>Testar 7 dias grátis<ArrowRight size={19} aria-hidden/></Link>
+            <span className={styles.finalNote}>
+              7 dias ou 1.000 créditos após a ativação. Um usuário e um WhatsApp.
+            </span>
           </div>
         </section>
       </main>

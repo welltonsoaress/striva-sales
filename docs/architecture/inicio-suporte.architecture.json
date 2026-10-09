@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Início e suporte",
+    "subtitle": "Configuração retomável e continuidade entre manual, IA e equipe",
+    "output": "inicio-suporte.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "pessoa",
+      "label": "Pessoa"
+    },
+    {
+      "id": "app",
+      "label": "Aplicativo"
+    },
+    {
+      "id": "db",
+      "label": "Banco"
+    }
+  ],
+  "mainPath": [
+    "inicio",
+    "progress",
+    "state",
+    "chat",
+    "support",
+    "queue",
+    "reply"
+  ],
+  "nodes": [
+    {
+      "id": "inicio",
+      "lane": "pessoa",
+      "col": 0,
+      "type": "ui",
+      "label": "Início → etapas / Ajuda / Faturamento"
+    },
+    {
+      "id": "progress",
+      "lane": "app",
+      "col": 1,
+      "type": "service",
+      "label": "Estado + recursos → progresso sem etapas puladas"
+    },
+    {
+      "id": "state",
+      "lane": "db",
+      "col": 2,
+      "type": "database",
+      "label": "organizations.onboarding_state → dismissed_at"
+    },
+    {
+      "id": "chat",
+      "lane": "pessoa",
+      "col": 3,
+      "type": "ui",
+      "label": "SupportChat → pergunta / atendimento humano"
+    },
+    {
+      "id": "support",
+      "lane": "app",
+      "col": 4,
+      "type": "service",
+      "label": "Sessão + org confiável → manual / IA / suporte transacional"
+    },
+    {
+      "id": "history",
+      "lane": "db",
+      "col": 5,
+      "type": "database",
+      "label": "Chamados + mensagens pessoais, RLS e FK composta"
+    },
+    {
+      "id": "queue",
+      "lane": "pessoa",
+      "col": 6,
+      "type": "ui",
+      "label": "Admin / suporte → assumir e responder"
+    },
+    {
+      "id": "reply",
+      "lane": "app",
+      "col": 7,
+      "type": "service",
+      "label": "Guard plataforma + MFA → trava do chamado / resposta / audit"
+    },
+    {
+      "id": "plans",
+      "lane": "pessoa",
+      "col": 8,
+      "type": "ui",
+      "label": "Admin / planos → catálogo provisório / faturamento"
+    },
+    {
+      "id": "catalog",
+      "lane": "db",
+      "col": 9,
+      "type": "database",
+      "label": "commercial_plans, preços BRL em rascunho"
+    },
+    {
+      "id": "avatar",
+      "lane": "app",
+      "col": 10,
+      "type": "service",
+      "label": "Perfil → validação → Storage privado / API de leitura"
+    },
+    {
+      "id": "checkout",
+      "lane": "app",
+      "col": 11,
+      "type": "service",
+      "label": "Admin da empresa → referência SCK / checkout bloqueado até homologação"
+    },
+    {
+      "id": "webhook",
+      "lane": "app",
+      "col": 12,
+      "type": "service",
+      "label": "Hotmart → Hottok / deduplicação / contrato e extrato"
+    },
+    {
+      "id": "finance",
+      "lane": "pessoa",
+      "col": 13,
+      "type": "ui",
+      "label": "Faturamento e fila de eventos → conferência / reprocessamento"
+    },
+    {
+      "id": "manager",
+      "lane": "pessoa",
+      "col": 14,
+      "type": "ui",
+      "label": "Gestor WhatsApp → casos pendentes / proposta confirmada"
+    },
+    {
+      "id": "casequeue",
+      "lane": "app",
+      "col": 15,
+      "type": "service",
+      "label": "Resposta do caso + case_reply_turn → worker / IA"
+    },
+    {
+      "id": "aiacceptance",
+      "lane": "app",
+      "col": 16,
+      "type": "service",
+      "label": "Origem interna de IA + aceite do canal → mensagem enviada"
+    },
+    {
+      "id": "usage",
+      "lane": "db",
+      "col": 17,
+      "type": "database",
+      "label": "ai_response_usage + audit no mesmo commit → recibo único sem conteúdo"
+    },
+    {
+      "id": "pricing",
+      "lane": "pessoa",
+      "col": 18,
+      "type": "ui",
+      "label": "Landing + /planos → período, totais e Pro recomendado"
+    },
+    {
+      "id": "edgehotmart",
+      "lane": "app",
+      "col": 19,
+      "type": "service",
+      "label": "Edge Hotmart → segredo + receptor canônico empacotado"
+    }
+  ],
+  "edges": [
+    {
+      "from": "inicio",
+      "to": "progress",
+      "label": "consulta"
+    },
+    {
+      "from": "progress",
+      "to": "state",
+      "label": "retoma"
+    },
+    {
+      "from": "state",
+      "to": "inicio",
+      "label": "atualiza percentual"
+    },
+    {
+      "from": "inicio",
+      "to": "chat",
+      "label": "pedir ajuda"
+    },
+    {
+      "from": "chat",
+      "to": "support",
+      "label": "pergunta autenticada"
+    },
+    {
+      "from": "support",
+      "to": "history",
+      "label": "grava e encaminha"
+    },
+    {
+      "from": "history",
+      "to": "queue",
+      "label": "realtime + leitura protegida"
+    },
+    {
+      "from": "queue",
+      "to": "reply",
+      "label": "orientação da equipe"
+    },
+    {
+      "from": "reply",
+      "to": "history",
+      "label": "resposta / encerramento"
+    },
+    {
+      "from": "history",
+      "to": "chat",
+      "label": "continua conversa"
+    },
+    {
+      "from": "plans",
+      "to": "catalog",
+      "label": "editar como rascunho"
+    },
+    {
+      "from": "catalog",
+      "to": "inicio",
+      "label": "porta de faturamento"
+    },
+    {
+      "from": "inicio",
+      "to": "avatar",
+      "label": "perfil"
+    },
+    {
+      "from": "avatar",
+      "to": "inicio",
+      "label": "foto da pessoa"
+    },
+    {
+      "from": "catalog",
+      "to": "checkout",
+      "label": "oferta revisada"
+    },
+    {
+      "from": "checkout",
+      "to": "webhook",
+      "label": "correlação SCK"
+    },
+    {
+      "from": "webhook",
+      "to": "finance",
+      "label": "histórico e falha visível"
+    },
+    {
+      "from": "finance",
+      "to": "webhook",
+      "label": "conferir novamente"
+    },
+    {
+      "from": "manager",
+      "to": "casequeue",
+      "label": "confirmação e versão"
+    },
+    {
+      "from": "casequeue",
+      "to": "manager",
+      "label": "resultado e histórico do caso"
+    },
+    {
+      "from": "casequeue",
+      "to": "aiacceptance",
+      "label": "próxima resposta gerada"
+    },
+    {
+      "from": "aiacceptance",
+      "to": "usage",
+      "label": "apenas envio confirmado"
+    },
+    {
+      "from": "usage",
+      "to": "finance",
+      "label": "total UTC e últimos registros"
+    },
+    {
+      "from": "finance",
+      "to": "usage",
+      "label": "atualizar consumo protegido por RLS"
+    },
+    {
+      "from": "catalog",
+      "to": "pricing",
+      "label": "ofertas publicadas, sem credencial"
+    },
+    {
+      "from": "pricing",
+      "to": "checkout",
+      "label": "escolha preservada → administrador autenticado"
+    },
+    {
+      "from": "checkout",
+      "to": "edgehotmart",
+      "label": "Hotmart devolve correlação SCK"
+    },
+    {
+      "from": "edgehotmart",
+      "to": "finance",
+      "label": "mesmos processadores, auditoria e histórico"
+    },
+    {
+      "from": "finance",
+      "to": "edgehotmart",
+      "label": "conferência e reprocessamento pelo Next"
+    }
+  ]
+}

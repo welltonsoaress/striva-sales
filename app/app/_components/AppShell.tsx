@@ -1,4 +1,5 @@
 "use client";
+import { SupportChat } from "@/components/help/SupportChat";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -247,6 +248,7 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
           </div>
         </aside>
       )}
+      <SupportChat key={organizationId} />
     </div>
   );
 }

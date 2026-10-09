@@ -1,3 +1,4 @@
+import { NavigationPreference } from "@/components/profile/NavigationPreference";
 import { requireAuth } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
@@ -34,6 +35,7 @@ export default async function ProfilePage() {
           {traduzir("Informações pessoais. Email só pode ser trocado em breve.", idioma)}
         </p>
       </header>
+      <NavigationPreference />
       <ProfileForm
         email={user.email}
         initialFullName={meta.full_name}

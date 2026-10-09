@@ -18,7 +18,10 @@ interface LedgerStore {
   create(input: Intent, hash: string): Promise<string>;
   find(input: Intent): Promise<Row | null>;
   rotate(input: Intent, hash: string): Promise<string>;
-  message(org: string, key: string): Promise<{ id: string; status: string } | null>;
+  message(
+    org: string,
+    key: string,
+  ): Promise<{ id: string; status: string; error_code?: string | null } | null>;
   update(
     org: string,
     key: string,
@@ -48,7 +51,12 @@ export async function sendWithLedger(
     if (prior.status === "accepted")
       return { kind: "already_sent", idempotencyKey: key, crmMessageId: prior.crm_message_id };
     if (prior.status === "vetoed") return { kind: "blocked", idempotencyKey: key };
-    if (prior.status === "failed") key = await store.rotate(input, hash);
+    if (prior.status === "failed") {
+      const message = await store.message(input.tenantId, key);
+      // Um timeout não comprova rejeição: não rotacionar a identidade e reenviar.
+      if (!message || !["send_timeout", "delivery_unknown"].includes(message.error_code ?? ""))
+        key = await store.rotate(input, hash);
+    }
   }
   const existing = await store.message(input.tenantId, key);
   let message = existing;
@@ -65,7 +73,8 @@ export async function sendWithLedger(
   }
   const status: SendLedgerStatus = ["sent", "delivered", "read"].includes(message.status)
     ? "accepted"
-    : message.status === "failed"
+    : message.status === "failed" &&
+        !["send_timeout", "delivery_unknown"].includes(message.error_code ?? "")
       ? "failed"
       : "queued";
   await store.update(
@@ -82,7 +91,8 @@ export async function sendWithLedger(
 /** Reconcilia um recibo já existente sem criar intenção nem chamar o canal.
  * Consumidores determinísticos consultam isto antes dos gates de um NOVO envio. */
 export async function reconcileAcceptedSend(
-  db: Queryable, input: { tenantId: string; jobId: string; seq: number },
+  db: Queryable,
+  input: { tenantId: string; jobId: string; seq: number },
 ): Promise<boolean> {
   const store = pgSendLedger(db);
   const prior = await store.find({ ...input, leadId: null, body: "" });
@@ -119,8 +129,8 @@ export function pgSendLedger(db: Queryable): LedgerStore {
       return rows[0].id;
     },
     async message(org, key) {
-      const { rows } = await db.query<{ id: string; status: string }>(
-        "select id,status from messages where organization_id=$1 and metadata->>'idempotency_key'=$2 limit 1",
+      const { rows } = await db.query<{ id: string; status: string; error_code: string | null }>(
+        "select id,status,error_code from messages where organization_id=$1 and metadata->>'idempotency_key'=$2 limit 1",
         [org, key],
       );
       return rows[0] ?? null;
@@ -183,7 +193,7 @@ export function supabaseSendLedger(db: SupabaseClient): LedgerStore {
     async message(org, key) {
       const { data, error } = await db
         .from("messages")
-        .select("id,status")
+        .select("id,status,error_code")
         .eq("organization_id", org)
         .eq("metadata->>idempotency_key", key)
         .limit(1)

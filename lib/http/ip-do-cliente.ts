@@ -23,13 +23,11 @@
  */
 
 import { isIP } from "node:net";
+import { trustedIp } from '@/lib/auth/trusted-ip';
 
-/** O primeiro salto do `x-forwarded-for`, ou o `x-real-ip`. `null` = sem proxy à frente. */
+/** Endereço verificado pela borda configurada. Headers sem autenticação não provam origem. */
 export function ipDoCliente(headers: Headers): string | null {
-  const encaminhado = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (encaminhado) return encaminhado;
-  const real = headers.get("x-real-ip")?.trim();
-  return real || null;
+  return trustedIp(headers);
 }
 
 /**

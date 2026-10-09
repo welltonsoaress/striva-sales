@@ -71,6 +71,8 @@ let ThemeProvider: typeof ThemeProviderType;
 let ThemeToggle: typeof ThemeToggleType;
 let ARVORE: React.ReactElement;
 
+// A importação fria do seletor e dos ícones levou 12s na homologação local.
+// O limite vale só para preparar os módulos; as asserções mantêm o prazo padrão.
 beforeEach(async () => {
   window.localStorage.clear();
   stubMatchMedia(false);
@@ -87,7 +89,7 @@ beforeEach(async () => {
       <ThemeToggle />
     </ThemeProvider>
   );
-});
+}, 30_000);
 
 afterEach(() => {
   document.body.innerHTML = "";

@@ -13,7 +13,7 @@ import { requireOnboardingCtx, OnboardingError } from "./_shared";
 
 export type FinishOnboardingResult =
   | { ok: true; alreadyOnboarded: boolean }
-  | { ok: false; error: "auth_required" | "no_active_org" | "db_error"; details?: unknown };
+  | { ok: false; error: "auth_required" | "no_active_org" | "db_error" | "activation_required"; details?: unknown };
 
 export async function finishOnboarding(): Promise<FinishOnboardingResult> {
   let ctx;
@@ -25,6 +25,9 @@ export async function finishOnboarding(): Promise<FinishOnboardingResult> {
   }
 
   const admin = createAdminClient();
+  const { data: account, error: accountError } = await admin.from("organization_ai_accounts").select("mode,state").eq("organization_id",ctx.orgId).maybeSingle();
+  if(accountError)return {ok:false,error:"db_error"};
+  if(account?.mode==='platform'&&account.state==='pending')return {ok:false,error:'activation_required'};
 
   const { data: existing } = await admin
     .from("organizations")
@@ -60,5 +63,5 @@ export async function finishOnboarding(): Promise<FinishOnboardingResult> {
     });
   }
 
-  redirect("/app/inbox");
+  redirect("/app/inicio");
 }

@@ -21,6 +21,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractMarkdownText } from "@/lib/ai/rag/extractors/markdown";
 import { extractPdfText, PdfExtractError } from "@/lib/ai/rag/extractors/pdf";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 
 /** Bucket privado onde os arquivos de conhecimento vivem (nome histórico). */
 export const BUCKET_DE_CONHECIMENTO = "ai-policy";
@@ -41,10 +42,7 @@ export class ErroDeExtracao extends Error {
   }
 }
 
-export function resolverExtensao(
-  nomeOuCaminho: string,
-  mimeType?: string,
-): ExtensaoAceita | null {
+export function resolverExtensao(nomeOuCaminho: string, mimeType?: string): ExtensaoAceita | null {
   const ext = nomeOuCaminho.split(".").pop()?.toLowerCase() ?? "";
   if ((EXTENSOES_ACEITAS as readonly string[]).includes(ext)) return ext as ExtensaoAceita;
   if (mimeType === "application/pdf") return "pdf";
@@ -61,9 +59,12 @@ export function resolverExtensao(
  * perfeitamente no leitor da pessoa e não tem uma letra selecionável.
  */
 export async function extrairTextoDoArquivo(
+  organizationId: string,
   blobPath: string,
   extensaoDeclarada?: string,
 ): Promise<{ texto: string; extensao: ExtensaoAceita }> {
+  if (!isStoragePathOwnedBy(blobPath, organizationId))
+    throw new ErroDeExtracao("o arquivo não pertence a esta empresa — envie o documento novamente");
   const extensao = resolverExtensao(extensaoDeclarada ?? blobPath);
   if (!extensao) {
     throw new ErroDeExtracao(

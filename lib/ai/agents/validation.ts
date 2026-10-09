@@ -124,6 +124,7 @@ const versionShapeSchema = z
     // `.nullable()` e não opcional: null é o valor que SIGNIFICA "herda o modelo
     // do Conversador". Omitir seria indistinguível de "ainda não decidi".
     operator_model: z.string().trim().min(1).max(120).nullable().default(null),
+    operator_prompt: z.string().trim().max(20000).nullable().default(null),
     // Teto PRÓPRIO, não compartilhado com `tool_ids`: o Operador tem as 25 vagas
     // dele, o Conversador as dele, e nenhum come a lista do outro.
     //

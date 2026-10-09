@@ -196,10 +196,34 @@ describe("cascadeRedactContact — foto de perfil", () => {
 });
 
 describe("drainStorageRedactionQueue — o arquivo sai do bucket", () => {
+  it("rejeita o arquivo de outra empresa sem apagar ou repetir a operação", async () => {
+    filaPendente = [
+      {
+        id: "fila-foreign",
+        organization_id: ORG,
+        bucket: "whatsapp-media",
+        object_path: `outra-empresa/avatars/${CONTATO}.jpg`,
+        attempts: 0,
+      },
+    ];
+    const stats = await drainStorageRedactionQueue();
+    expect(removes).toHaveLength(0);
+    expect(stats).toMatchObject({ attempted: 1, failed: 1, deleted: 0 });
+    expect(updates.find((u) => u.tabela === "storage_redaction_queue")?.patch).toMatchObject({
+      status: "failed",
+      error_message: "storage_path_outside_organization",
+    });
+  });
   it("remove o objeto do bucket e marca a linha como deleted", async () => {
     // "Enfileirou" não é "removeu". Este é o teste que cobra a diferença.
     filaPendente = [
-      { id: "fila-1", organization_id: ORG, bucket: "whatsapp-media", object_path: CAMINHO, attempts: 0 },
+      {
+        id: "fila-1",
+        organization_id: ORG,
+        bucket: "whatsapp-media",
+        object_path: CAMINHO,
+        attempts: 0,
+      },
     ];
 
     const stats = await drainStorageRedactionQueue({ limit: 10 });
@@ -213,7 +237,13 @@ describe("drainStorageRedactionQueue — o arquivo sai do bucket", () => {
 
   it("objeto já ausente vira skipped, não fica em retry eterno", async () => {
     filaPendente = [
-      { id: "fila-2", organization_id: ORG, bucket: "whatsapp-media", object_path: CAMINHO, attempts: 0 },
+      {
+        id: "fila-2",
+        organization_id: ORG,
+        bucket: "whatsapp-media",
+        object_path: CAMINHO,
+        attempts: 0,
+      },
     ];
     erroDoRemove = { message: "Object not found" };
 
@@ -224,4 +254,14 @@ describe("drainStorageRedactionQueue — o arquivo sai do bucket", () => {
       status: "skipped",
     });
   });
+});
+
+it("a cascata desvincula um avatar alheio sem reabrir a fila da outra empresa", async () => {
+  contatoRow = { avatar_storage_path: `outra-empresa/avatars/${CONTATO}.jpg` };
+  await cascadeRedactContact({ organizationId: ORG, contactId: CONTATO, requestId: PEDIDO });
+  expect(inserts).toHaveLength(0);
+  expect(updates.find((u) => u.tabela === "contacts")?.patch).toMatchObject({
+    avatar_storage_path: null,
+  });
+  expect(ops).toContain("rpc");
 });

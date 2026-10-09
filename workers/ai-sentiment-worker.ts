@@ -17,10 +17,10 @@ import { generateObject } from "ai";
 import { z } from "zod";
 
 import { resolverAgenteDaConversa } from "@/lib/ai/agents/agente-da-conversa";
-import { computeCost } from "@/lib/ai/cost";
+import { computeCostDetails } from "@/lib/ai/cost";
 import { decidirElegibilidadeDaConversaViaSupabase } from "@/lib/ai/elegibilidade/consulta-supabase";
 import { ttlDaAutorizacaoMs } from "@/lib/ai/elegibilidade/gate";
-import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gateway";
+import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
@@ -64,11 +64,6 @@ export interface SentimentResult {
 
 export async function processSentiment(event: EventRow): Promise<SentimentResult> {
   try {
-    // ── Guard: AI Gateway configured ────────────────────────────────────────
-    if (!isAiGatewayConfigured()) {
-      return { skipped: true, reason: "ai_gateway_key_missing" };
-    }
-
     // Passar SENTIMENT_MODEL como string cai no gateway da Vercel mesmo sem
     // chave (plano anônimo) e devolve "Unauthenticated ... Configure
     // AI_GATEWAY_API_KEY" — o que quebrava este worker em toda instalação que
@@ -78,6 +73,9 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     // oferecia "Medir o clima da conversa", aceitava a escolha e dizia
     // "salvo" — e este worker seguia usando o modelo padrão. Botão que não
     // controla nada é pior que botão ausente: gasta a confiança de quem clicou.
+    // O resolvedor verifica também a IA incluída e a autorização comercial.
+    // Uma guarda global do gateway antigo recusaria OpenAI gerenciada antes
+    // de consultar a configuração da plataforma.
     const resolvido = await resolverModeloDoPonto(
       "sentiment_classify",
       event.organization_id,
@@ -211,6 +209,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     let result: z.infer<typeof sentimentSchema>;
     let promptTokens = 0;
     let completionTokens = 0;
+    let usageKnown = false;
 
     try {
       const generated = await generateObject({
@@ -219,6 +218,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         system: SENTIMENT_SYSTEM_PROMPT,
         prompt: body,
         temperature: 0,
+        maxRetries: 0,
         // 80 era pequeno demais e nunca tinha sido exercitado (o worker morria
         // antes, na autenticação). `generateObject` com Anthropic usa modo
         // FERRAMENTA: o JSON vai dentro de um tool_use, que custa bem mais que
@@ -243,6 +243,9 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
         | undefined;
       promptTokens = usage?.inputTokens ?? usage?.promptTokens ?? 0;
       completionTokens = usage?.outputTokens ?? usage?.completionTokens ?? 0;
+      usageKnown =
+        (usage?.inputTokens ?? usage?.promptTokens) !== undefined &&
+        (usage?.outputTokens ?? usage?.completionTokens) !== undefined;
     } catch (err) {
       // A FALHA também vira linha em `llm_calls`. A 0128 fez isso para o seam do
       // agent-engine, e este worker não passa por lá — então, até aqui, escolher
@@ -253,17 +256,19 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       //
       // O `throw` mantém o desfecho de antes — quem decide o retorno continua
       // sendo o catch global, que nunca deixa este worker derrubar o bot.
-      logInvocation({
+      await logInvocation({
         organization_id: event.organization_id,
         agent_id: agent?.id ?? null,
         conversation_id: conversationId ?? message.conversation_id ?? null,
         message_id: messageId,
         invocation_kind: "sentiment_classify",
+        provider: resolvido.provider,
         model: resolvido.modelId,
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
         latency_ms: Date.now() - start,
-        cost_cents: 0,
+        cost_cents: null,
+        pricing_snapshot: { mode: resolvido.origem === "plataforma" ? "platform" : "legacy" },
         finish_reason: "error",
         error_payload: { message: err instanceof Error ? err.message : String(err) },
       });
@@ -295,8 +300,16 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       });
     }
 
-    // ── Log invocation (fire-and-forget) ──────────────────────────────────
-    logInvocation({
+    // ── Persistir a chamada antes de concluir o worker ────────────────────
+    const cost = usageKnown
+      ? await computeCostDetails({
+          provider: resolvido.provider,
+          model: resolvido.modelId,
+          promptTokens,
+          completionTokens,
+        })
+      : { cost_cents: null, pricing_snapshot: null };
+    await logInvocation({
       organization_id: event.organization_id,
       // `null`, não `""` (issue #160): o worker roda mesmo sem agente ativo — lê
       // o agente só para o threshold e cai no default —, e string vazia numa
@@ -306,15 +319,20 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       conversation_id: conversationId ?? message.conversation_id ?? null,
       message_id: messageId,
       invocation_kind: "sentiment_classify",
+      provider: resolvido.provider,
       model: resolvido.modelId,
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       latency_ms: latencyMs,
-      cost_cents: await computeCost({
-        model: resolvido.modelId,
-        promptTokens,
-        completionTokens,
-      }),
+      ...cost,
+      pricing_snapshot: {
+        ...(cost.pricing_snapshot !== null &&
+        typeof cost.pricing_snapshot === "object" &&
+        !Array.isArray(cost.pricing_snapshot)
+          ? cost.pricing_snapshot
+          : {}),
+        mode: resolvido.origem === "plataforma" ? "platform" : "legacy",
+      },
       finish_reason: null,
     });
 

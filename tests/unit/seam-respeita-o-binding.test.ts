@@ -39,6 +39,7 @@ function poolFalso(opts: {
 }) {
   const inserts: Array<{ sql: string; params: unknown[] }> = [];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes("from organization_ai_accounts")) return { rows: [{ mode: "legacy" }] };
     if (sql.includes("settings->'llm'")) {
       return {
         rows: [

@@ -103,10 +103,26 @@ export const GRUPO_NO_RODAPE: NavGroupId = "organizacao";
  * fechada e por isso não vira `minRole`.
  */
 export const NAV_CATALOG = [
+  {
+    href: "/app/inicio",
+    label: "Início",
+    description: "Sua área de trabalho, primeiros passos e atalhos para o dia.",
+    icon: "House",
+    group: "atendimento",
+    sidebar: true,
+  },
+  {
+    href: "/app/ajuda",
+    label: "Ajuda e manual",
+    description: "Aprenda a usar o sistema e encontre o próximo passo.",
+    icon: "BookOpen",
+    group: "organizacao",
+    section: "Sua conta",
+  },
   // ---- Atendimento — onde o operador passa o dia ----
   {
     href: "/app/inbox",
-    label: "Inbox",
+    label: "Conversas",
     description: "As conversas de WhatsApp, com você e a IA atendendo lado a lado.",
     icon: "Inbox",
     group: "atendimento",
@@ -657,7 +673,7 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/settings/billing",
-    label: "Billing",
+    label: "Faturamento",
     description: "Plano e cobrança.",
     icon: "Receipt",
     group: "organizacao",

@@ -38,6 +38,7 @@ interface Props {
   channelSessions: ChannelSessionLite[];
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
+  credentialEditingAllowed?: boolean;
 }
 
 export function AgentTabs(props: Props) {
@@ -66,6 +67,7 @@ export function AgentTabs(props: Props) {
 
       <TabsContent value="configuration" className="m-0">
         <AgentForm
+          credentialEditingAllowed={props.credentialEditingAllowed}
           mode="edit"
           agent={props.agent}
           draft={props.draft}

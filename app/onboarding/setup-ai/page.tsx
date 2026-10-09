@@ -1,3 +1,4 @@
+import { GoogleCalendarOptional } from "@/components/onboarding/GoogleCalendarOptional";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -9,6 +10,11 @@ import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padra
 import { TOOL_CATALOG } from "@/lib/mcp/tools/catalog";
 import { CONFERENCIAS_DE_SAIDA } from "@/lib/ai/guardrails/lista-de-conferencia";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { commercialAccount } from "@/lib/billing/managed-ai-server";
+import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
+import { BUSINESS_TEMPLATES } from "@/lib/onboarding/business-templates";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ManagedAgent } from "./_managed";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +32,44 @@ export const dynamic = "force-dynamic";
  * mensagem sair. Escrever essas frases à mão aqui seria a tela prometendo um
  * comportamento que o código não garante.
  */
-export default async function SetupAiPage() {
+export default async function SetupAiPage({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
+  const query = await searchParams;
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/login");
   const idioma = user.idioma;
+  const account = await commercialAccount(activeOrg.orgId);
+  if (account?.mode === "platform") {
+    const { state } = await loadOnboardingState(activeOrg.orgId);
+    const segment = BUSINESS_TEMPLATES[state.welcome?.business_segment ?? "generico"];
+    const agentId =
+      state.ai?.prompt_template === (state.welcome?.business_segment ?? "generico")
+        ? state.ai?.agent_id
+        : undefined;
+    const { data: version } = agentId
+      ? await createAdminClient()
+          .from("ai_agent_versions")
+          .select("id,agent_id")
+          .eq("organization_id", activeOrg.orgId)
+          .eq("agent_id", agentId)
+          .eq("status", "draft")
+          .order("version_number", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+    return (
+      <>
+      <GoogleCalendarOptional organizationId={activeOrg.orgId} userId={user.id} idioma={idioma} result={query.erro} />
+      <ManagedAgent
+        segment={segment.label}
+        scenarios={segment.scenarios}
+        agendaEligible={segment.agenda}
+        savedAgenda={state.ai?.agenda ?? null}
+        prepared={version ? { agent_id: version.agent_id, version_id: version.id } : null}
+      />
+      </>
+    );
+  }
 
   const supabase = await createClient();
   const retrato = await lerRetratoDaInstalacao({ supabase, orgId: activeOrg.orgId });
@@ -46,9 +85,14 @@ export default async function SetupAiPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h2 className="text-2xl font-semibold tracking-tight">{traduzir("Treine seu funcionário", idioma)}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          {traduzir("Treine seu funcionário", idioma)}
+        </h2>
         <p className="text-sm text-muted-foreground">
-          {traduzir("Quem ele é, como fala e o que pode prometer. Dá para mudar tudo depois.", idioma)}
+          {traduzir(
+            "Quem ele é, como fala e o que pode prometer. Dá para mudar tudo depois.",
+            idioma,
+          )}
         </p>
       </header>
       {/*
@@ -56,16 +100,29 @@ export default async function SetupAiPage() {
         pessoa preencher abaixo produz um funcionário que responde. E é aqui que
         a chave passa a importar — um clique antes de ele ser criado com ela.
       */}
-      <InteligenciaDele
-        inicial={{
-          origem: retrato.inteligencia.origemDaChave,
-          provedor: retrato.inteligencia.provedor,
-          rotulo: retrato.inteligencia.rotulo,
-          final: retrato.inteligencia.chaveDaOrg?.final ?? null,
-        }}
-      />
+      {user.is_platform_admin && !user.support ? (
+        <InteligenciaDele
+          inicial={{
+            origem: retrato.inteligencia.origemDaChave,
+            provedor: retrato.inteligencia.provedor,
+            rotulo: retrato.inteligencia.rotulo,
+            final: retrato.inteligencia.chaveDaOrg?.final ?? null,
+          }}
+        />
+      ) : (
+        <p className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {traduzir(
+            "A equipe cuida das configurações técnicas da IA. Aqui você escolhe o nome, o jeito de conversar e as orientações do seu negócio.",
+            idioma,
+          )}
+        </p>
+      )}
 
-      <SetupAiForm capacidades={capacidades} conferencias={conferencias} />
+      <SetupAiForm
+        capacidades={capacidades}
+        conferencias={conferencias}
+        platformOperator={user.is_platform_admin && !user.support}
+      />
     </div>
   );
 }

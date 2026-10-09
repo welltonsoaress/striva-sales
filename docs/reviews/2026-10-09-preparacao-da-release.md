@@ -1,0 +1,47 @@
+# Preparação da release — 09/10/2026
+
+O proprietário autorizou preparar o banco vinculado e publicar a release no GitHub com CI e imagens. Isso não habilita cobrança pública nem executa atualização da aplicação na VPS. O número vem do corte automático dos fragmentos; a conferência calculou uma major sobre 1.2.0.
+
+## Banco preparado
+
+Projeto Supabase `fpvvjjkazwrbrxujcftp`: estrutura e dados de `public`, `auth` e `storage` exportados antes da alteração, fora do Git, com acesso local restrito e hashes SHA256. O cliente de dump usa Postgres 17, compatível com o servidor. A exportação de dados tem relações circulares: restauração exige o procedimento próprio com suspensão dos triggers durante a importação. Não foi executada restauração sobre o projeto de produção. Arquivos exportados não incluem os objetos binários do Storage; não representam um backup integral da VPS.
+
+Migrations 0248–0253 aplicadas em ordem, usando os arquivos versionados. O Supabase registrou os timestamps de execução; os nomes preservam a correspondência com os arquivos. Baseline, MANIFEST e tipos gerados acompanham os mesmos contratos.
+
+Comparação anterior/posterior: uma organização, uma credencial, nenhum contrato e nenhum pagamento. A versão publicada, o hash do prompt e o vínculo de credencial do agente existente permaneceram iguais. A organização existente conserva `legacy`; IA gerenciada permanece desabilitada até configuração explícita. Nenhuma versão de agente foi publicada ou substituída.
+
+Nenhuma tabela comum de `public` ficou sem RLS. As três funções apontadas com `search_path` mutável passaram a ter caminho fixo. Usuários autenticados não possuem atualização direta de credenciais ou bindings de IA. Os testes locais de isolamento e invariantes acompanham o CI da release; esses fatos não equivalem a declarar todo o sistema livre de vulnerabilidades.
+
+Permanecem avisos do Supabase sobre extensões em `public`, funções privilegiadas intencionalmente expostas com autorização própria e proteção de senhas vazadas desligada. Tabelas internas com RLS e nenhuma policy continuam restritas, sem criar policies públicas apenas para silenciar o verificador. A classificação está na [revisão SaaS](2026-10-07-saas-seguranca-e-homologacao.md).
+
+As seis ofertas têm valores e limites corretos no catálogo, com `checkout_available=false`. A venda de extras continua indisponível.
+
+## Correções encontradas na publicação
+
+O primeiro CI identificou uma configuração que tentava carregar a Edge antes de preparar seu pacote, um uso de relógio impuro na renderização do faturamento e uma asserção antiga esperando menu completo como default. A configuração local mantém a Edge desativada; seu pacote financeiro é preparado à parte. O faturamento usa o horário da própria fotografia de saldo. A asserção agora exige o default simples aprovado; fixtures de organizações legadas declaram explicitamente interface completa, preservando a cobertura das áreas avançadas.
+
+A revisão das dependências atualizou Next.js para 16.3.8, SDK de MCP para 1.31.0 e os pisos transitivos afetados, sem mudar suas versões principais. A auditoria de dependências de produção retornou zero avisos nesta preparação. A auditoria completa ainda aponta `braces` 3.0.3, sem correção publicada, alcançado por ferramentas de lint/testes; seus padrões são internos ao repositório, não entradas de clientes. Esse resultado não cobre o sistema operacional ou dependências dos serviços externos.
+
+Fontes das correções: [Next.js 16.3.8](https://github.com/vercel/next.js/releases/tag/v16.3.8), [SDK MCP e OAuth](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h), [aviso de braces](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+
+## Publicação e liberação comercial
+
+O [PR #18](https://github.com/welltonsoaress/striva-sales/pull/18) reúne os dois planos e as correções. A integração e o corte dependem dos checks do commit final; build, banco, interface e imagens não serão ignorados para publicar. A `main` foi medida sem proteção de branch nesta data: o processo acompanha os checks explicitamente, sem usar essa ausência para contorná-los.
+
+O receptor financeiro precisa usar os processadores da mesma release após a preparação do banco. A implantação desse pacote conserva o endpoint e a autenticação privada existentes; não requer expor ou alterar o segredo no código.
+
+A Edge financeira foi atualizada para a versão 3 e está ativa no mesmo endpoint. O pacote canônico passou por `deno check`; requisição GET foi recusada com 405 e notificação com segredo inválido com 401, sem alterar pagamentos. Isso comprova publicação e recusa de requisições indevidas, não uma compra real.
+
+O CI também encontrou consulta do Google Agenda usando o nome errado do provedor, reconstrução duplicada de constraint no baseline e testes ainda esperando que tenants escolhessem credenciais. A consulta usa a constante compartilhada; o baseline mantém um único bloco com o vocabulário final, sem editar migrations já aplicadas. Agentes novos herdam a conexão já configurada do agente padrão, com conferência no servidor e escopo por organização; escolher outra chave continua exigindo administração completa da plataforma. A varredura de relógios foi tornada portátil sem depender de `rg` instalado no runner. Registros visuais locais ignorados passaram a ser identificados como locais, sem links quebrados para quem clona.
+
+A consulta periódica do paywall agora lê `data.paywall_required`, conforme o envelope canônico. Uma resposta incompleta conserva o bloqueio; apenas confirmação explícita libera a operação. Os casos de regressão do componente passaram localmente. O token de autenticação do proxy também foi excluído dos arquivos e logs de webhooks. A suíte local focada corrigiu as falhas unitárias encontradas, sem repetir toda a bateria; o typecheck local posterior esgotou memória e não foi considerado aprovado. A validação completa permanece a cargo do CI no commit final.
+
+A revisão do empacotamento acrescentou `.superpowers`, `.e2e-creds.json` e `.supabase` às exclusões do contexto Docker. Backups privados e estado local não devem entrar em uma construção feita na máquina do operador. As imagens do GitHub usam checkout fresco e não continham esses arquivos ignorados; o ajuste protege construções locais futuras.
+
+O CI do commit `fe4d42b7` aprovou typecheck, lint, 853 arquivos de testes unitários, 198 arquivos de invariantes, build e as três imagens com teste de inicialização. A jornada ainda encontrou expectativas antigas de convite/faturamento, uma origem fixa incorreta no pedido de checkout e uma regressão da home personalizada. As expectativas acompanham Início e Faturamento; pedidos legítimos usam a origem do navegador. A home personalizada volta a abrir a primeira área permitida escolhida, mantendo Início como padrão sem personalização. O trace comprova que a edição de interface entregou evento real e preservou o formulário: a falha ocorreu depois, na entrada pela home. O teste não foi alterado para aceitar polling como prova de Realtime. Uma das partes E2E não iniciou seus testes por erro do compilador de fontes; a próxima execução deve conferir essa parte antes do corte.
+
+O CI de `918e1892` aprovou novamente código, banco, build e imagens; a parte E2E antes interrompida pela compilação de fontes passou. Os quatro casos restantes identificaram a troca de empresa forçando Conversas, expectativas de busca sem termo e de suporte sem abrir o chamado, e um intervalo de digitação antes de iniciar o carregamento do suporte. A troca passa pela home resolvida no servidor; a busca e o histórico são exercitados pelos seus controles reais. A abertura do suporte inicia o carregamento imediatamente, com regressão de campo bloqueado até receber o histórico e pergunta preservada no envio. Nenhum gate foi removido. Os oito grupos de testes do instalador passaram localmente com o Python real configurado; a simulação de renomeação com arquivo aberto permanece excluída no Windows pelo bloqueio de handles, conforme o próprio teste.
+
+O commit `2a844cf4` aprovou 854 arquivos unitários e 198 de invariantes, instalador, build e imagens. A jornada SaaS corrigida passou. Dois casos antigos ainda falharam: o Radar recebeu as seis demandas corretas, mas a API com 501 leads levou 4,3s, quase todo o prazo de 5s da asserção visual; a limpeza tentou navegar para contatos antes de terminar o novo documento da troca de empresa. As precondições agora aguardam a home final e a navegação completa; a lista pesada recebe 15s, preservando todas as asserções de dados e RLS, sem retry automático ou remoção de cenários.
+
+A homologação real da compra segue [este procedimento](../runbooks/homologar-compra.md). Ainda requer eventos emitidos pela Hotmart para correlação, aprovação, retorno, recorrência e reversão. O simulador do Resend não comprova e-mails reais; falta domínio controlado para o remetente e SMTP de autenticação. Essas pendências impedem anunciar cadastro público e cobrança como homologados, mesmo após a release dos artefatos.

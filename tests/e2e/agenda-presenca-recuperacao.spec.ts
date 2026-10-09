@@ -143,7 +143,7 @@ async function login(page: Page, email: string) {
   await page.getByLabel(/e-?mail/i).fill(email);
   await page.getByLabel(/senha/i).fill(password);
   await page.getByRole("button", { name: /entrar/i }).click();
-  await page.waitForURL(/\/app(?:\/|$)/, { timeout: 60000 });
+  await page.waitForURL("**/app/inicio", { timeout: 60000 });
 }
 async function detail(page: Page, id: string, title: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
@@ -1034,7 +1034,9 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   expect(unassigned.total_sem_proximo_passo).toBe(3);
   await login(page, members.manager!.email);
   await page.goto("/app/radar");
-  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
+  // Com 501 leads, o trace mediu 4,3s só na API. Aguarda a lista real,
+  // sem encurtar o conjunto ou substituir a prova em tela por uma consulta.
+  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão", { timeout: 15000 });
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await login(page, members.viewer!.email);
   expect((await page.request.get("/api/v1/leads/at-risk")).status()).toBe(403);
@@ -1054,7 +1056,7 @@ test("Radar recorta demandas pela RLS real, além do pool frio, e preserva gest�
   await page.getByRole("button", { name: "Confirmar e entrar" }).click();
   await page.waitForURL("**/app/inbox");
   await page.goto("/app/radar");
-  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão");
+  await expect(page.getByTestId("radar-sem-proximo-passo")).toContainText("Órfã de gestão", { timeout: 15000 });
   expect((await read()).total_sem_proximo_passo).toBe(6);
   await page.getByRole("button", { name: "Sair do acompanhamento" }).click();
   await page.waitForURL("**/app/inbox");

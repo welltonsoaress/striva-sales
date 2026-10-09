@@ -40,9 +40,11 @@ describe("ImageMedia", () => {
 
 describe("StickerMedia", () => {
   it("renderiza skeleton enquanto carregando", () => {
-    render(<StickerMedia messageId="m2" />);
-    const skeleton = document.querySelector(".animate-pulse");
+    const { container } = render(<StickerMedia messageId="m2" />);
+    const skeleton = container.querySelector(".absolute.inset-0");
     expect(skeleton).toBeInTheDocument();
+    expect(skeleton).toHaveClass("motion-safe:animate-pulse");
+    expect(skeleton).not.toHaveClass("animate-pulse");
   });
 
   it("renderiza a figurinha sem moldura de bolha", () => {
@@ -52,10 +54,10 @@ describe("StickerMedia", () => {
   });
 
   it("remove skeleton após carregar", () => {
-    render(<StickerMedia messageId="m2" />);
+    const { container } = render(<StickerMedia messageId="m2" />);
     const img = screen.getByAltText("Figurinha");
     fireEvent.load(img);
-    const skeleton = document.querySelector(".animate-pulse");
+    const skeleton = container.querySelector(".absolute.inset-0");
     expect(skeleton).not.toBeInTheDocument();
   });
 

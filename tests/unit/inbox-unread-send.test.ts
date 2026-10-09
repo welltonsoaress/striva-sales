@@ -37,12 +37,9 @@ function makeSupabase(conversation: Record<string, unknown>) {
   const client = {
     from(table: string) {
       if (table === "conversations") {
+        const query = {eq: () => query, maybeSingle: async () => ({ data: conversation, error: null })};
         return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: conversation, error: null }),
-            }),
-          }),
+          select: () => query,
           update: (patch: Record<string, unknown>) => {
             conversationPatch = patch;
             return { eq: async () => ({ error: null }) };

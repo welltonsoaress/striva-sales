@@ -2,7 +2,7 @@
 
 Em Equipe, quem administra pode escolher **Completa**, **Simplificada** ou personalizar as áreas visíveis de cada membro. A mesma configuração aparece no convite e na criação de organização, para o responsável. A preferência pertence ao vínculo: uma pessoa pode trabalhar com interfaces diferentes em empresas diferentes.
 
-Completa é o padrão de vínculos e convites antigos e acompanha destinos novos. Simplificada oferece Inbox, Agenda, Funis, Contatos, Tarefas e Conexões quando o papel permite. A seleção granular substitui o preset. Trocar o preset restaura sua seleção padrão. Ao menos uma área permitida precisa permanecer selecionada.
+Completa preserva vínculos e convites antigos e acompanha destinos novos. Novos vínculos usam Simplificada, com Início, Conversas, Agenda, Funis, Contatos, Tarefas, Seu agente, Faturamento e Conexões quando o papel permite. A seleção granular substitui o preset. Trocar o preset restaura sua seleção padrão. Ao menos uma área permitida precisa permanecer selecionada. Sem seleção granular, a entrada por `/app` abre Início; com seleção explícita, abre a primeira área de trabalho permitida escolhida. Início e Ajuda permanecem acessíveis.
 
 Isso muda apresentação, sem alterar autorização. Barra lateral desktop/mobile, hubs, busca, sino e página inicial usam a mesma projeção do catálogo. URL direta e links contextuais de conversas/avisos continuam regidos pelo RBAC. Perfil e segurança pessoal permanecem disponíveis; quem administra mantém Equipe para recuperar a seleção. Sair, trocar empresa e encerrar acompanhamento mantêm seus controles. A porta da administração da instalação e a atualização do produto são controles essenciais externos ao catálogo, com os gates existentes.
 

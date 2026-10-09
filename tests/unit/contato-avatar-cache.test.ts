@@ -145,4 +145,11 @@ describe("GET /api/v1/contacts/{id}/avatar — cache do redirect", () => {
     expect(res.status).toBe(404);
     expect(res.headers.get("Cache-Control") ?? "").not.toMatch(/max-age=[1-9]/);
   });
+  it("um contato próprio não pode assinar a foto de outra empresa", async () => {
+    contatoRow = { avatar_storage_path: "org-2/avatars/contato-2.jpg", is_anonimizado: false };
+    const response = await chamar();
+    expect(response.status).toBe(404);
+    expect(response.headers.has("Location")).toBe(false);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+  });
 });

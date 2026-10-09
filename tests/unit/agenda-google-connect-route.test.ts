@@ -15,6 +15,13 @@ import { fail } from "@/lib/api/wrappers";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/agenda/google/config", () => ({
+  CAMINHO_DO_CALLBACK: "/api/v1/agenda/google/callback",
+  configuracaoDoGoogle: async () => process.env.GOOGLE_CALENDAR_CLIENT_ID && process.env.GOOGLE_CALENDAR_CLIENT_SECRET
+    ? { clientId: process.env.GOOGLE_CALENDAR_CLIENT_ID, clientSecret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+        redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/v1/agenda/google/callback` }
+    : null,
+}));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined), isServiceRoleConfigured: vi.fn(() => true) }));
 
 const ORG = "22222222-2222-4222-8222-222222222222";

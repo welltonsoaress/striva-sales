@@ -32,6 +32,7 @@ vi.mock("@/components/shell/Sidebar", () => ({
   ),
 }));
 vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header /> }));
+vi.mock("@/components/help/SupportChat", () => ({ SupportChat: () => null }));
 vi.mock("@/lib/ui/icons", () => ({ X: () => <svg aria-hidden="true" /> }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (

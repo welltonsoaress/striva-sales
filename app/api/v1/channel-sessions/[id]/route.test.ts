@@ -83,6 +83,7 @@ function canal(over: Linha = {}): Linha {
 function makeDb(opts: DbOpts = {}): Registro {
   const registro: Registro = { escritas: [], eventos: [] };
   const tabelas: Record<string, Linha[]> = {
+    organization_ai_accounts: [{organization_id:ORG,mode:"legacy",state:"pending",access_until:null}],
     channel_sessions: opts.sessions ?? [canal()],
     ...(opts.rows ?? {}),
   };

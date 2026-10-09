@@ -23,10 +23,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  capacidadeEhConhecida,
-  modelCapabilities,
-} from "@/lib/agent-engine/edge/llm/capabilities";
+import { capacidadeEhConhecida, modelCapabilities } from "@/lib/agent-engine/edge/llm/capabilities";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 
 describe("a chave da OpenRouter chega ao seam", () => {
@@ -88,12 +85,19 @@ describe("capacidade num roteador é do MODELO, não do provedor", () => {
 describe("o aviso de boot lê a mesma régua que a execução", () => {
   it("OPENROUTER_API_KEY conta como chave de IA configurada", () => {
     const fonte = readFileSync("lib/env.ts", "utf8");
-    const condicao = /if \(!env\.AI_GATEWAY_API_KEY && !env\.ANTHROPIC_API_KEY([^)]*)\)/.exec(fonte);
-    expect(condicao, "não achei o aviso de chave de IA no lib/env.ts — instrumento cego").not.toBeNull();
+    const condicao =
+      /if\s*\(\s*!env\.AI_GATEWAY_API_KEY\s*&&\s*!env\.ANTHROPIC_API_KEY([^)]*)\)/.exec(fonte);
+    expect(
+      condicao,
+      "não achei o aviso de chave de IA no lib/env.ts — instrumento cego",
+    ).not.toBeNull();
     expect(
       condicao?.[1],
       "o boot avisa que a IA está muda numa instalação só-OpenRouter, em que ela não está",
     ).toContain("OPENROUTER_API_KEY");
+    expect(condicao?.[1], "OpenAI gerenciada também é uma chave válida da plataforma").toContain(
+      "OPENAI_API_KEY",
+    );
   });
 });
 
@@ -105,7 +109,9 @@ describe("o worker de mídia obedece ao painel", () => {
     // imagem seguia no modelo padrão. É a classe de defeito que o próprio
     // `gateway-binding.ts` declara ter vindo matar.
     const fonte = readFileSync("workers/media-derive-worker.ts", "utf8");
-    expect(fonte).toMatch(/lerBindingDoPonto\(\s*admin,\s*row\.organization_id,\s*"visao_de_imagem"\s*\)/);
+    expect(fonte).toMatch(
+      /lerBindingDoPonto\(\s*admin,\s*row\.organization_id,\s*"visao_de_imagem"\s*\)/,
+    );
     expect(fonte).toContain("ai_purpose_bindings");
   });
 
@@ -120,7 +126,9 @@ describe("o instalador grava o provedor escolhido no banco", () => {
     // `fn_seed_org_llm_defaults` semeia 'anthropic' fixo. Sem esta atualização,
     // a pergunta "qual IA vai atender" não muda nada para o agent-engine.
     const fonte = readFileSync("hostgator-setup-kit/install.sh", "utf8");
-    expect(fonte).toMatch(/jsonb_set\(\s*\n?\s*coalesce\(settings, '\{\}'::jsonb\), '\{llm,provider\}'/);
+    expect(fonte).toMatch(
+      /jsonb_set\(\s*\n?\s*coalesce\(settings, '\{\}'::jsonb\), '\{llm,provider\}'/,
+    );
     expect(fonte).toContain("${AI_PROVIDER}");
   });
 

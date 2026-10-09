@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { requireRole } from "@/lib/auth/require-role";
+import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
+import { fail } from "@/lib/api/wrappers";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -35,7 +36,7 @@ import type { AuthUser } from "@/lib/auth/types";
  * `tests/unit/escrita-em-organizations-usa-cliente-admin.test.ts`.
  */
 
-vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/auth/require-ai-platform-admin", () => ({ requireAiPlatformAdmin: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
@@ -108,14 +109,14 @@ function autorizadoComoAdmin() {
     email: "dono@example.com",
     full_name: null,
     avatar_url: null,
-    is_platform_admin: false,
+    is_platform_admin: true,
     idioma: "pt-BR" as const,
   } as AuthUser;
-  vi.mocked(requireRole).mockResolvedValue({
+  vi.mocked(requireAiPlatformAdmin).mockResolvedValue({
     ok: true,
     user,
     org: { orgId: ORG_ID, role: "admin" },
-  } as unknown as Awaited<ReturnType<typeof requireRole>>);
+  } as unknown as Awaited<ReturnType<typeof requireAiPlatformAdmin>>);
 }
 
 function requisicao(corpo: unknown) {
@@ -183,10 +184,8 @@ describe("PATCH /api/v1/ai/providers — padrão da organização", () => {
   });
 
   it("recusa modelo que não está no catálogo do provedor", async () => {
-    // `ai_models` é catálogo global e é lido pelo cliente de SESSÃO — só a
-    // escrita em `organizations` precisa do admin. Por isso a bandeira vai no
-    // dublê de sessão, e não no do admin.
-    estadoDeSessao.modeloExiste = false;
+    // A plataforma lê o catálogo pelo mesmo cliente administrativo da rota.
+    estado.modeloExiste = false;
     const { PATCH } = await import("./route");
     const res = await PATCH(requisicao({ provider: "openai", default_model: "modelo-que-nao-existe" }));
 
@@ -194,13 +193,15 @@ describe("PATCH /api/v1/ai/providers — padrão da organização", () => {
     expect(estado.atualizacao).toBeNull();
   });
 
-  it("exige papel admin — a troca do padrão muda todo ponto herdado", async () => {
+  it("exige administração da plataforma — admin do tenant não altera o padrão", async () => {
+    vi.mocked(requireAiPlatformAdmin).mockResolvedValue({
+      ok: false,
+      response: fail("forbidden", "A conexão de IA é administrada pela plataforma.", 403),
+    });
     const { PATCH } = await import("./route");
-    await PATCH(requisicao({ provider: "openai", default_model: "gpt-5.4-mini" }));
-
-    expect(vi.mocked(requireRole)).toHaveBeenCalledWith(
-      "admin",
-      expect.objectContaining({ resource: "ai_providers" }),
-    );
+    const resposta = await PATCH(requisicao({ provider: "openai", default_model: "gpt-5.4-mini" }));
+    expect(requireAiPlatformAdmin).toHaveBeenCalledOnce();
+    expect(resposta.status).toBe(403);
+    expect(estado.atualizacao).toBeNull();
   });
 });

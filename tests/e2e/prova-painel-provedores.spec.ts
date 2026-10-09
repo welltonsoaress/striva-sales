@@ -54,7 +54,8 @@ test.beforeAll(() => {
 });
 
 test.beforeEach(async ({ page }) => {
-  creds = await loginComoAdmin(page, creds);
+  // Conexão de IA pertence à plataforma, inclusive nos tenants legados.
+  creds = await loginComoAdmin(page, creds, "dono");
 });
 
 test("F0/F1 — o painel abre agrupado, explica os pontos e diz a origem", async ({ page }) => {

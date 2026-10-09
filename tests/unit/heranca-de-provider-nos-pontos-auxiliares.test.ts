@@ -143,6 +143,7 @@ describe("o ponto auxiliar não cruza provider de um com modelo de outro", () =>
  */
 function poolFalso() {
   const query = vi.fn(async (sql: string) => {
+    if (sql.includes("from organization_ai_accounts")) return { rows: [{ mode: "legacy" }] };
     if (sql.includes("settings->'llm'")) {
       return { rows: [{ llm: { provider: "anthropic", default_model: "claude-sonnet-4-5" } }] };
     }

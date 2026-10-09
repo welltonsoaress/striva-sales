@@ -24,7 +24,7 @@ function stripQuotes(value: string): string {
 }
 
 // Load .env and .env.local before importing any app code that validates env vars
-for (const envFile of [".env", ".env.local"]) {
+for (const envFile of process.env.STRIVA_TEST_ISOLATED === "1" ? [] : [".env", ".env.local"]) {
   try {
     const path = resolve(process.cwd(), envFile);
     const content = readFileSync(path, "utf-8");
@@ -64,6 +64,7 @@ const PLACEHOLDERS: Record<string, string> = {
   NEXT_PUBLIC_SUPABASE_URL: "https://test-placeholder.invalid",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-placeholder-anon-key",
   SUPABASE_SERVICE_ROLE_KEY: "test-placeholder-service-role-key",
+  INTERNAL_SECRET: "unit-fixture-internal-secret-32-characters",
 };
 for (const [chave, valor] of Object.entries(PLACEHOLDERS)) {
   process.env[chave] ??= valor;

@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { loadAuthUser } from "@/lib/auth/server";
+import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
-import { DISTRIBUTION_ID, DISTRIBUTION_REPOSITORY, distributionTag } from "@/lib/system/distribution";
+import {
+  DISTRIBUTION_ID,
+  DISTRIBUTION_REPOSITORY,
+  distributionTag,
+} from "@/lib/system/distribution";
 
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(),
@@ -13,7 +17,11 @@ vi.mock("@/lib/auth/server", () => ({
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 
-const OWNER = { id: "11111111-1111-4111-8111-111111111111", email: "dono@x.com", is_platform_admin: true };
+const OWNER = {
+  id: "11111111-1111-4111-8111-111111111111",
+  email: "dono@x.com",
+  is_platform_admin: true,
+};
 const MEMBRO = { ...OWNER, id: "22222222-2222-4222-8222-222222222222", is_platform_admin: false };
 
 let versionRow: Record<string, unknown>;
@@ -40,9 +48,12 @@ let insertError: { code: string; message: string } | null;
 let versionSelectError: { message: string } | null;
 /** Erro que a leitura (`maybeSingle`) de `system_update_runs` deve devolver neste caso. */
 let runSelectError: { message: string } | null;
+let platformScope: "full" | "support_readonly";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(mfaEmDivida).mockResolvedValue(false);
+  platformScope = "full";
   inserted = null;
   runRow = null;
   runUpdatePatch = null;
@@ -83,13 +94,19 @@ beforeEach(() => {
       // quebraria com TypeError, e o teste "melhoraria" o mock em vez do
       // double refletir a query de verdade.
       const maybeSingle = async () => ({
-        data: table === "system_version" ? versionRow : runRow,
+        data:
+          table === "platform_admins"
+            ? { scope: platformScope }
+            : table === "system_version"
+              ? versionRow
+              : runRow,
         error: table === "system_version" ? versionSelectError : runSelectError,
       });
       return {
         select: () => ({
           eq: () => ({
             maybeSingle,
+            is: () => ({ maybeSingle }),
             order: () => ({ limit: () => ({ maybeSingle }) }),
           }),
           order: () => ({ limit: () => ({ maybeSingle }) }),
@@ -170,7 +187,10 @@ describe("GET /api/v1/system/version", () => {
   });
 
   it("não expõe nem oferece atualização durante impersonação de cliente", async () => {
-    vi.mocked(loadAuthUser).mockResolvedValue({ ...OWNER, support: { access_mode: "full" } } as never);
+    vi.mocked(loadAuthUser).mockResolvedValue({
+      ...OWNER,
+      support: { access_mode: "full" },
+    } as never);
     const { GET } = await import("../version/route");
     const body = await (await GET(get())).json();
     expect(body.data).toEqual({ current_version: "1.0.0", is_owner: false });
@@ -468,6 +488,34 @@ describe("GET /api/v1/system/version", () => {
 });
 
 describe("POST /api/v1/system/update", () => {
+  it.each(["full", "support_readonly"])(
+    "sessão acompanhando um cliente não altera a instalação: %s",
+    async (access_mode) => {
+      vi.mocked(loadAuthUser).mockResolvedValue({ ...OWNER, support: { access_mode } } as never);
+      const { POST } = await import("../update/route");
+      expect((await POST(post())).status).toBe(403);
+      expect(inserted).toBeNull();
+    },
+  );
+
+  it("administrador de suporte não pode iniciar atualização global", async () => {
+    vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
+    platformScope = "support_readonly";
+    const { POST } = await import("../update/route");
+    expect((await POST(post())).status).toBe(403);
+    expect(inserted).toBeNull();
+  });
+
+  it("fator cadastrado exige prova antes de atualizar a plataforma", async () => {
+    vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
+    vi.mocked(mfaEmDivida).mockResolvedValue(true);
+    const { POST } = await import("../update/route");
+    const result = await POST(post());
+    expect(result.status).toBe(403);
+    expect((await result.json()).error.code).toBe("mfa_required");
+    expect(inserted).toBeNull();
+  });
+
   it("exige sessão", async () => {
     vi.mocked(loadAuthUser).mockResolvedValue(null as never);
     const { POST } = await import("../update/route");
@@ -527,7 +575,9 @@ describe("POST /api/v1/system/update", () => {
       requested_by: OWNER.id,
     });
     expect(versionUpdatePatch).toBeNull();
-    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update_requested" }));
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "system.update_requested" }),
+    );
   });
 
   it("recusa um segundo pedido enquanto há run em andamento", async () => {
@@ -558,7 +608,11 @@ describe("POST /api/v1/system/update", () => {
     const res = await POST(post());
     expect(res.status).toBe(200);
     expect(runUpdatePatch).toMatchObject({ status: "failed" });
-    expect(inserted).toMatchObject({ from_version: "1.0.0", to_version: "1.1.0", status: "dispatched" });
+    expect(inserted).toMatchObject({
+      from_version: "1.0.0",
+      to_version: "1.1.0",
+      status: "dispatched",
+    });
   });
 
   it("recusa quando já está na última versão", async () => {
@@ -576,7 +630,11 @@ describe("POST /api/v1/system/update", () => {
     // precisa tratar isso como o MESMO estado de negócio do check acima, não
     // deixar vazar como 500.
     vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
-    insertError = { code: "23505", message: 'duplicate key value violates unique constraint "uniq_system_update_runs_dispatched"' };
+    insertError = {
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "uniq_system_update_runs_dispatched"',
+    };
     const { POST } = await import("../update/route");
     const res = await POST(post());
     expect(res.status).toBe(409);

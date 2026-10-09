@@ -8,6 +8,7 @@
  * organization_id resolved from session — never from body or path.
  */
 import { randomUUID } from "node:crypto";
+import { isStoragePathOwnedBy } from "@/lib/storage/path-ownership";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
@@ -58,9 +59,7 @@ export async function GET(
     .from("api_audit_log")
     .select("id, action, actor_user_id, resource_type, resource_id, metadata, created_at")
     .eq("organization_id", orgId)
-    .or(
-      `resource_id.eq.${id},metadata->>request_id.eq.${id}`,
-    )
+    .or(`resource_id.eq.${id},metadata->>request_id.eq.${id}`)
     .order("created_at", { ascending: true })
     .limit(50);
 
@@ -78,7 +77,7 @@ export async function GET(
     const result = request.result as Record<string, unknown>;
     const pdfPath = typeof result.pdf_path === "string" ? result.pdf_path : null;
 
-    if (pdfPath) {
+    if (pdfPath && isStoragePathOwnedBy(pdfPath, orgId)) {
       const { data: signedData, error: signErr } = await admin.storage
         .from("lgpd-exports")
         .createSignedUrl(pdfPath, 72 * 60 * 60); // 72h in seconds
@@ -91,8 +90,5 @@ export async function GET(
     }
   }
 
-  return ok(
-    { request, audit_trail, signed_pdf_url },
-    { requestId },
-  );
+  return ok({ request, audit_trail, signed_pdf_url }, { requestId });
 }

@@ -68,6 +68,7 @@ import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow, Provider } from "@/hooks/ai/useCredentials";
 import { credentialStatus } from "@/hooks/ai/useCredentials";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
+import type { InheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 
 /**
  * O canal oferecido no seletor é exatamente o que `listSelectableChannels`
@@ -88,6 +89,8 @@ interface BaseProps {
   channelSessions: ChannelSessionLite[];
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
+  credentialEditingAllowed?: boolean;
+  inheritedConnection?: InheritedAgentConnection | null;
 }
 
 interface EditProps extends BaseProps {
@@ -158,6 +161,7 @@ interface FormState {
   operator_enabled: boolean;
   /** "" = herda o modelo do Conversador (vira null no payload). */
   operator_model: string;
+  operator_prompt: string | null;
   operator_tool_ids: string[];
   pipeline_ids: string[];
   knowledge_source_ids: string[];
@@ -184,17 +188,18 @@ const DEFAULT_TRIGGER: TriggerValue = {
 function buildState(args: {
   agent?: AgentRow;
   version: AgentVersionRow | null;
+  inheritedConnection?: InheritedAgentConnection | null;
 }): FormState {
-  const { agent, version } = args;
+  const { agent, version, inheritedConnection } = args;
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
     priority: agent?.priority ?? 0,
-    provider: (version?.provider as Provider) ?? "anthropic",
-    model: version?.model ?? "",
+    provider: (version?.provider as Provider) ?? (inheritedConnection?.provider as Provider) ?? "anthropic",
+    model: version?.model ?? inheritedConnection?.model ?? "",
     // `null` gravado = a versão usa a chave da instalação. Sem esta tradução,
     // reabrir o agente mostraria o campo em branco e pediria para escolher de novo.
-    credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : "",
+    credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : (inheritedConnection?.credential_id ?? CHAVE_DA_INSTALACAO),
     channel_session_id: version?.channel_session_id ?? "",
     system_prompt:
       version?.system_prompt ??
@@ -220,6 +225,7 @@ function buildState(args: {
     // O form usa "" onde o banco usa null — Select controlado não aceita null.
     // A conversão de volta acontece em `toVersionPayload`, num ponto só.
     operator_model: version?.operator_model ?? "",
+    operator_prompt: version?.operator_prompt ?? null,
     operator_tool_ids: version?.operator_tool_ids ?? [],
     // `?? []` = nenhum funil. Agente novo nasce fechado, como o banco.
     pipeline_ids: version?.pipeline_ids ?? [],
@@ -270,6 +276,7 @@ function toVersionPayload(s: FormState) {
     split_max_chars: s.split_max_chars,
     followup: s.followup,
     operator_enabled: s.operator_enabled,
+    operator_prompt: s.operator_prompt,
     // "" (não escolheu) → null (herda o do Conversador). São o mesmo conceito em
     // camadas diferentes, e o mapeamento vive AQUI para não se espalhar.
     operator_model: s.operator_model.trim() === "" ? null : s.operator_model.trim(),
@@ -295,7 +302,7 @@ export function AgentForm(props: Props) {
       const ref = props.base ?? props.draft ?? props.published;
       return buildState({ agent: props.agent, version: ref });
     }
-    return buildState({ version: null });
+    return buildState({ version: null, inheritedConnection: props.inheritedConnection });
   }, [isEdit, props]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
@@ -361,7 +368,7 @@ export function AgentForm(props: Props) {
     // tem seria publicar um agente que morre em toda mensagem. A mesma recusa
     // existe no servidor (rota de versões); aqui ela chega antes do clique.
     if (
-      form.credential_id === CHAVE_DA_INSTALACAO &&
+      props.credentialEditingAllowed && form.credential_id === CHAVE_DA_INSTALACAO &&
       !(props.provedoresDaInstalacao ?? []).includes(form.provider)
     )
       errors.credential_id = `${t("Esta instalação não tem chave de")} ${form.provider}. ${t("Escolha outra empresa de IA ou cadastre uma chave.")}`;
@@ -380,7 +387,7 @@ export function AgentForm(props: Props) {
       }
     }
     return errors;
-  }, [form, props.provedoresDaInstalacao, t]);
+  }, [form, props.provedoresDaInstalacao, props.credentialEditingAllowed, t]);
 
   const isValid = Object.keys(validation).length === 0;
 
@@ -709,6 +716,8 @@ export function AgentForm(props: Props) {
             </div>
           </Card>
 
+          {/* Conexão técnica operada pela plataforma. */}
+          {!props.credentialEditingAllowed && <p className="rounded-lg border p-4 text-sm text-muted-foreground">{t("A conexão de IA é administrada pela equipe da plataforma. Você pode editar o atendimento e as capacidades do seu agente.")}</p>}
           {/* Provider + credential + model */}
           <Card className="space-y-3 p-4">
             <h3 className="text-sm font-medium">{t("A inteligência que ele usa")}</h3>
@@ -717,7 +726,7 @@ export function AgentForm(props: Props) {
               <Select
                 value={form.provider}
                 onValueChange={(v) => changeProvider(v as Provider)}
-                disabled={disabled}
+                disabled={disabled || !props.credentialEditingAllowed}
               >
                 <SelectTrigger id="provider">
                   <SelectValue />
@@ -744,7 +753,7 @@ export function AgentForm(props: Props) {
               provider={form.provider}
               value={form.model}
               onChange={(modelId) => patch({ model: modelId })}
-              disabled={disabled}
+              disabled={disabled || !props.credentialEditingAllowed}
               id="model"
             />
             {validation.model ? (
@@ -756,7 +765,7 @@ export function AgentForm(props: Props) {
               credentials={props.credentials}
               value={form.credential_id}
               onChange={(id) => patch({ credential_id: id })}
-              disabled={disabled}
+              disabled={disabled || !props.credentialEditingAllowed}
               id="credential_id"
               instalacaoTemChave={(props.provedoresDaInstalacao ?? []).includes(form.provider)}
             />

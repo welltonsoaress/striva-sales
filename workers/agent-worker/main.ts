@@ -351,7 +351,8 @@ export async function startWorker(
           log,
           loopsAbort.signal,
         )
-      : (log.info('ponte WaCalls OFF — WACALLS_API_BASE_URL ausente no env', {}), Promise.resolve());
+      : (log.info("ponte WaCalls OFF — WACALLS_API_BASE_URL ausente no env", {}),
+        Promise.resolve());
 
   // Circuito de saúde do número (block/response rate → hold).
   const healthLoop = runHealthLoop(
@@ -415,6 +416,26 @@ export async function startWorker(
         log.error("métricas do run não registradas", { job_id: job.id, error: errMsg(metricsErr) });
       }
     } catch (err) {
+      if (err instanceof Error && err.name === "commercial_ai_blocked") {
+        try {
+          await pool.query("select fn_ai_commercial_notice($1,$2)", [
+            job.organization_id,
+            err.message,
+          ]);
+          if (job.contact_id && typeof job.payload.conversation_id === "string") {
+            await pool.query(
+              "update conversations set status='pending',last_handoff_at=now(),last_handoff_reason='ai_commercial_pause' where organization_id=$1 and contact_id=$2 and id=$3 and status='ai_handling'",
+              [job.organization_id, job.contact_id, job.payload.conversation_id],
+            );
+          }
+        } catch (noticeError) {
+          log.error("aviso comercial aguarda recuperação", {
+            job_id: job.id,
+            error: errMsg(noticeError),
+          });
+          // O veto continua terminal. Uma falha do aviso não deixa o job executável.
+        }
+      }
       if (job.kind === "transactional_delivery" || job.kind === "approved_reply") {
         // O consumer é dono do settle atômico; falha de armazenamento ou claim
         // ausente deixa a aquisição ao reaper, sem fallback por locked_by.

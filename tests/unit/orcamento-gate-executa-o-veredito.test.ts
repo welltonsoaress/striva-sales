@@ -66,6 +66,7 @@ function poolFalso(estado: Estado) {
   const llmCallInserts: unknown[][] = [];
 
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes("from organization_ai_accounts")) return { rows: [{ mode: "legacy" }] };
     sqls.push(sql);
     // ⚠️ A ORDEM DESTES RAMOS É LOAD-BEARING: o statement do gate TAMBÉM contém
     // `insert into agent_inbox_items` (a CTE `avisa`), e a query joinada também
