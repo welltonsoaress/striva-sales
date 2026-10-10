@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  LabelList,
   ResponsiveContainer,
 } from "recharts";
 import type { AttendantMetrics } from "@/hooks/metrics/useAttendantMetrics";
@@ -53,7 +54,7 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
           [
             t("Taxa de ganho"),
             rate === null ? "—" : `${rate}%`,
-            `${won} ${t("ganhos de")} ${won + lost} ${t("encerrados")}`,
+            `${won} ${t(won === 1 ? "ganho de" : "ganhos de")} ${won + lost} ${t(won + lost === 1 ? "encerrado" : "encerrados")}`,
           ],
           [t("Conversas atendidas"), conversations, t("Soma das participações dos atendentes")],
         ].map(([label, value, hint]) => (
@@ -80,7 +81,7 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
                   accessibilityLayer
                 >
                   <CartesianGrid stroke="var(--border)" horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} />
+                  <XAxis type="number" domain={[0, "dataMax"]} allowDecimals={false} />
                   <YAxis type="category" dataKey="stage_name" width={120} tick={{ fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{
@@ -96,7 +97,10 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
                     fill="var(--primary)"
                     radius={[0, 4, 4, 0]}
                     maxBarSize={28}
-                  />
+                    isAnimationActive={false}
+                  >
+                    <LabelList dataKey="count" position="right" fill="var(--foreground)" />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -107,7 +111,8 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
           )}
           {stage?.count ? (
             <p className="mt-4 border-t pt-4 text-sm">
-              <strong>{stage.stage_name}</strong> {t("concentra")} {stage.count} {t("negócios")} (
+              <strong>{stage.stage_name}</strong> {t("concentra")} {stage.count}{" "}
+              {t(stage.count === 1 ? "negócio" : "negócios")} (
               {Math.round((100 * stage.count) / open)}%).{" "}
               {t("Revise os próximos passos dessa etapa no CRM.")}
             </p>
@@ -124,7 +129,7 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
                 <BarChart data={byPerson} margin={{ left: -24, right: 12 }} accessibilityLayer>
                   <CartesianGrid stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis allowDecimals={false} />
+                  <YAxis domain={[0, "dataMax"]} allowDecimals={false} />
                   <Tooltip
                     contentStyle={{
                       background: "var(--card)",
@@ -139,6 +144,7 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
                     fill="var(--primary)"
                     stackId="results"
                     maxBarSize={44}
+                    isAnimationActive={false}
                   />
                   <Bar
                     dataKey="lost"
@@ -147,6 +153,7 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
                     stackId="results"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={44}
+                    isAnimationActive={false}
                   />
                 </BarChart>
               </ResponsiveContainer>

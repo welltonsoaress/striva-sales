@@ -312,12 +312,19 @@ test("desempenho mostra dados reais e gráficos em desktop e celular", async ({ 
   await capture(page, "desempenho");
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, "desempenho-mobile");
-  expect(await page.evaluate(() => document.body.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.body.scrollWidth <= document.documentElement.clientWidth + 1,
+    ),
+  ).toBe(true);
 });
 test("admin oferece convite, edição e exclusão; configuração de IA simples", async ({ page }) => {
   await login(page, 1);
   await page.goto("/admin/users");
+  await page.getByPlaceholder("Buscar por email ou nome...").fill(users[0]!.email);
+  await expect(page.getByText(users[0]!.email, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Adicionar usuário" }).click();
+  await expect(page.getByRole("option", { name: "Empresa fictícia", exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Enviar convite" })).toBeVisible();
   await capture(page, "admin-usuarios");
   await page.goto(`/admin/users/${users[0]!.id}`);
