@@ -89,23 +89,23 @@ export function CurrentPlan({
               <span className="text-sm font-normal text-muted-foreground">
                 / {item.limit === null ? t("A definir") : count(item.limit)}
               </span>
-            </dd>
-            {item.limit !== null && item.limit > 0 && item.used !== null && (
-              <div
-                role="progressbar"
-                aria-label={t(item.name)}
-                aria-valuemin={0}
-                aria-valuemax={item.limit}
-                aria-valuenow={Math.min(item.limit, item.used)}
-                aria-valuetext={`${count(item.used)} / ${count(item.limit)}`}
-                className="h-2 overflow-hidden rounded-full bg-muted"
-              >
+              {item.limit !== null && item.limit > 0 && item.used !== null && (
                 <div
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${Math.min(100, (item.used / item.limit) * 100)}%` }}
-                />
-              </div>
-            )}
+                  role="progressbar"
+                  aria-label={t(item.name)}
+                  aria-valuemin={0}
+                  aria-valuemax={item.limit}
+                  aria-valuenow={Math.min(item.limit, item.used)}
+                  aria-valuetext={`${count(item.used)} / ${count(item.limit)}`}
+                  className="mt-3 h-2 overflow-hidden rounded-full bg-muted"
+                >
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.min(100, (item.used / item.limit) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </dd>
           </div>
         ))}
       </dl>

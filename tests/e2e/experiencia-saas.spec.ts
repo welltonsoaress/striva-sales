@@ -309,6 +309,9 @@ test("desempenho mostra dados reais e gráficos em desktop e celular", async ({ 
   ).toBeVisible();
   await expect(page.getByLabel("Gráfico de negócios por etapa")).toBeVisible();
   await expect(page.getByLabel("Gráfico de resultados por atendente")).toBeVisible();
+  // Atrito carrega em paralelo: esperar a seção evita cortar a página durante
+  // a expansão do conteúdo, especialmente na captura de celular.
+  await expect(page.getByRole("heading", { name: "Atrito", exact: true })).toBeVisible();
   await capture(page, "desempenho");
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, "desempenho-mobile");
