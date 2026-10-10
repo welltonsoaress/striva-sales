@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
@@ -312,6 +313,11 @@ test("desempenho mostra dados reais e gráficos em desktop e celular", async ({ 
   // Atrito carrega em paralelo: esperar a seção evita cortar a página durante
   // a expansão do conteúdo, especialmente na captura de celular.
   await expect(page.getByRole("heading", { name: "Atrito", exact: true })).toBeVisible();
+  const a11y = await new AxeBuilder({ page })
+    .include('[aria-label="Inteligência comercial"]')
+    .withRules(["definition-list"])
+    .analyze();
+  expect(a11y.violations).toEqual([]);
   await capture(page, "desempenho");
   await page.setViewportSize({ width: 390, height: 844 });
   await capture(page, "desempenho-mobile");

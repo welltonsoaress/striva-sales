@@ -60,8 +60,10 @@ export function CommercialCharts({ metrics }: { metrics: AttendantMetrics }) {
         ].map(([label, value, hint]) => (
           <div key={String(label)}>
             <dt className="text-sm text-muted-foreground">{label}</dt>
-            <dd className="mt-2 text-3xl font-semibold tabular-nums">{value}</dd>
-            <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+            <dd className="mt-2">
+              <p className="text-3xl font-semibold tabular-nums">{value}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+            </dd>
           </div>
         ))}
       </dl>
