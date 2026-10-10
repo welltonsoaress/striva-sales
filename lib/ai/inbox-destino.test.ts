@@ -72,11 +72,15 @@ describe("destinos da Central", () => {
     const l = leitor(); const [item] = await resolverDestinosDosAvisos(l.client, ORG, role, [aviso("qr_rescan", "channel_session")]);
     expect(item?.destination.estado).toBe("sem_permissao"); expect(l.queries).toHaveLength(0);
   });
-  it("manager recebe uso/acervo e agent apenas orientação", async () => {
+  it("manager recebe acervo, e apenas admin recebe Meu plano", async () => {
     for (const role of ["agent", "manager"] as const) {
       const items = await resolverDestinosDosAvisos(leitor().client, ORG, role, [aviso("budget_warning", "ai_budget", ORG), aviso("conhecimento_nao_indexado", "ai_knowledge_source")]);
-      expect(items.map(i => i.destination.estado)).toEqual(Array(2).fill(role === "agent" ? "sem_permissao" : "disponivel"));
+      expect(items.map(i => i.destination.estado)).toEqual(["sem_permissao", role === "agent" ? "sem_permissao" : "disponivel"]);
     }
+    const [admin] = await resolverDestinosDosAvisos(leitor().client, ORG, "admin", [aviso("budget_warning", "ai_budget", ORG)]);
+    expect(admin?.destination).toMatchObject({ href: "/app/settings/billing", rotulo: "Meu plano" });
+    const [platform] = await resolverDestinosDosAvisos(leitor().client, ORG, "admin", [aviso("budget_warning", "ai_budget", ORG)], true);
+    expect(platform?.destination).toMatchObject({ href: "/app/ai/usage", rotulo: "Abrir uso de IA" });
   });
   it.each([null, "not-a-uuid", missing])("ref %s não vira URL", async id => {
     const [item] = await resolverDestinosDosAvisos(leitor().client, ORG, "agent", [aviso("handoff", "conversation", id)]);
@@ -97,10 +101,12 @@ describe("destinos da Central", () => {
     const l = leitor(); const items = await resolverDestinosDosAvisos(l.client, ORG, "admin", [aviso("novo"), aviso("handoff", "https://evil.test"), aviso("handoff", "channel_session"), aviso("__proto__"), aviso("other", "__proto__")]);
     expect(items.every(i => !("href" in i.destination))).toBe(true); expect(l.queries).toHaveLength(0);
   });
-  it("referências técnicas não inventam tela; modelos sem ID abrem canal Parceiro", async () => {
+  it("referências técnicas não inventam tela; modelos sem ID só abrem Parceiro na plataforma", async () => {
     const items = await resolverDestinosDosAvisos(leitor().client, ORG, "admin", [aviso("job_dead", "job_queue"), aviso("channel_template_review", null, null), aviso("contact_proposal_expired", "organization", ORG)]);
     expect(items[0]?.destination.estado).toBe("sem_destino");
-    expect(items[1]?.destination).toMatchObject({ href: "/app/connections?aba=parceiro&sub=templates", orientacao: expect.stringContaining("não identifica") });
+    expect(items[1]?.destination).not.toHaveProperty("href");
+    const [platform] = await resolverDestinosDosAvisos(leitor().client, ORG, "admin", [aviso("channel_template_review", null, null)], true);
+    expect(platform?.destination).toMatchObject({ href: "/app/connections?aba=parceiro&sub=templates", orientacao: expect.stringContaining("não identifica") });
     expect(items[2]?.destination.estado).toBe("sem_destino");
   });
   it("envio preso representa uma conversa, não todas", async () => {

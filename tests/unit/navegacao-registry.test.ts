@@ -57,7 +57,8 @@ describe("integridade do registro", () => {
 
 describe("canSee", () => {
   it("nega quem está abaixo do minRole", () => {
-    expect(canSee(dest("/app/audit"), MANAGER.platform, MANAGER.role)).toBe(true);
+    expect(canSee(dest("/app/audit"), MANAGER.platform, MANAGER.role)).toBe(false);
+    expect(canSee(dest("/app/audit"), true, MANAGER.role)).toBe(true);
     expect(canSee(dest("/app/audit"), AGENT.platform, AGENT.role)).toBe(false);
   });
 
@@ -112,11 +113,7 @@ describe("sidebarGroups", () => {
     // A lista é EXATA de propósito. `toContain` deixaria um sexto item entrar
     // calado no sidebar e reabrir a mesma corrida por pixel.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
-    expect(crm?.items.map((i) => i.href)).toEqual([
-      "/app/kanban",
-      "/app/contacts",
-      "/app/tasks",
-    ]);
+    expect(crm?.items.map((i) => i.href)).toEqual(["/app/kanban", "/app/contacts", "/app/tasks"]);
     expect(NAV_GROUPS.find((g) => g.id === "crm")?.hub?.href).toBe("/app/crm");
   });
 
@@ -138,7 +135,9 @@ describe("sidebarGroups", () => {
       "/app/ai/followups",
       "/app/ai/cases",
     ]);
-    expect(hubSections("ia", true, null).flatMap((s) => s.items.map((i) => i.href))).toContain("/app/ai/routers");
+    expect(hubSections("ia", true, null).flatMap((s) => s.items.map((i) => i.href))).toContain(
+      "/app/ai/routers",
+    );
   });
 });
 

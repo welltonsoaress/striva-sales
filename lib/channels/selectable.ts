@@ -34,6 +34,16 @@ export interface SelectableChannel {
 
 const COLUNAS = "id, display_name, status, phone_number, waha_session_name";
 
+/** Conta os números que ocupam a franquia; falha preservada para a tela indicar indisponibilidade. */
+export async function countActiveMessagingChannels(db: SupabaseClient, organizationId: string) {
+  return db
+    .from("channel_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .in("provider", [...PROVIDERS_DE_MENSAGEM])
+    .is(ARCHIVED_AT, null);
+}
+
 interface LinhaCanal {
   id: string;
   display_name: string | null;

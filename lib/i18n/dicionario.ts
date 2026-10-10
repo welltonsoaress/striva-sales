@@ -34,6 +34,7 @@
 import type { Idioma } from "./idiomas";
 import { TEXTOS_INICIO_SUPORTE } from "./inicio-suporte";
 import { TEXTOS_SAAS } from "./saas";
+import { TEXTOS_EXPERIENCIA_SAAS } from "./experiencia-saas";
 
 /** `pt-BR` não aparece: é a chave. Só o que DIFERE precisa de linha. */
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
@@ -41,6 +42,7 @@ type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>
 export const DICIONARIO: Traducoes = {
   ...TEXTOS_INICIO_SUPORTE,
   ...TEXTOS_SAAS,
+  ...TEXTOS_EXPERIENCIA_SAAS,
   "Agente responsável pelo funil": { es: "Agente responsable del embudo" },
   "Carregando agentes…": { es: "Cargando agentes…" },
   "Tentar carregar agentes novamente": { es: "Volver a cargar agentes" },

@@ -21,6 +21,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
 
@@ -35,12 +37,14 @@ test.use({ locale: "pt-BR" });
 // compartilhado. Medido: o primeiro caso da bateria estourava 120s só nisso.
 test.describe.configure({ timeout: 240_000 });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async () => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
-  creds = await loginComoAdmin(page, creds);
 });
 
 test.describe("Criar um agente pela tela", () => {
+  test.beforeEach(async ({ page }) => {
+    creds = await loginComoAdmin(page, creds);
+  });
   test("o formulário abre e diz o que falta antes de deixar criar", async ({ page }) => {
     await page.goto("/app/ai/agents/new");
     await expect(page.getByRole("heading", { name: /novo agent/i })).toBeVisible();
@@ -49,13 +53,12 @@ test.describe("Criar um agente pela tela", () => {
     const criar = page.getByRole("button", { name: /criar agent/i });
     await expect(criar).toBeDisabled();
 
-    // O tenant herda a conexão autorizada. Nome e canal seguem necessários,
-    // mas o cliente não tem de escolher nem pode trocar a chave/modelo.
-    await expect(page.getByText(/escolha por qual número de whatsapp/i).first()).toBeVisible();
+    // A conexão é herdada e o preparo pode começar antes do QR code.
     await expect(page.getByText(/a conexão de IA é administrada pela equipe/i)).toBeVisible();
     for (const id of ["provider", "model", "credential_id"])
-      await expect(page.locator(`#${id}`)).toBeDisabled();
-    await expect(page.locator("#model")).not.toContainText(/^Selecione/);
+      await expect(page.locator(`#${id}`)).toHaveCount(0);
+    await page.locator("#name").fill("Rascunho fictício");
+    await expect(criar).toBeEnabled();
 
     await page.screenshot({
       path: path.join(EVIDENCIA, "w1-nova-01-tela-de-criar.png"),
@@ -158,6 +161,43 @@ test.describe("Criar um agente pela tela", () => {
 });
 
 test.describe("Olhar o consumo de IA", () => {
+  // Consumo técnico é operado pelo dono dedicado; o admin comum segue sem acesso.
+  let donoId: string | undefined;
+  let anterior: Database["public"]["Tables"]["platform_admins"]["Row"] | null = null;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  if (!["localhost", "127.0.0.1"].includes(new URL(url).hostname))
+    throw new Error("Esta prova exige Supabase local.");
+  const db = createClient<Database>(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false },
+  });
+  test.beforeAll(async () => {
+    const { data, error } = await db.auth.admin.listUsers({ perPage: 200 });
+    if (error) throw error;
+    donoId = data.users.find((u) => u.email === creds.users.dono?.email)?.id;
+    if (!donoId) throw new Error("Dono fictício não encontrado.");
+    const old = await db.from("platform_admins").select("*").eq("user_id", donoId).maybeSingle();
+    if (old.error) throw old.error;
+    anterior = old.data;
+    const write = await db.from("platform_admins").upsert({
+      user_id: donoId,
+      granted_by: donoId,
+      scope: "full",
+      mfa_required: true,
+      revoked_at: null,
+      reason: "Prova fictícia de uso técnico",
+    });
+    if (write.error) throw write.error;
+  });
+  test.afterAll(async () => {
+    if (!donoId) return;
+    const result = anterior
+      ? await db.from("platform_admins").upsert(anterior)
+      : await db.from("platform_admins").delete().eq("user_id", donoId);
+    if (result.error) throw result.error;
+  });
+  test.beforeEach(async ({ page }) => {
+    creds = await loginComoAdmin(page, creds, "dono");
+  });
   test("a tela mostra os números do período e nomeia o que eles são", async ({ page }) => {
     await page.goto("/app/ai/usage");
     await expect(page.getByRole("heading", { name: /uso de ia/i })).toBeVisible();
@@ -195,10 +235,7 @@ test.describe("Olhar o consumo de IA", () => {
     await page.waitForTimeout(2500);
 
     const corpo = await page.locator("main").innerText();
-    expect(
-      /sem dados|nenhum|0/i.test(corpo),
-      "período vazio não disse nada ao usuário",
-    ).toBe(true);
+    expect(/sem dados|nenhum|0/i.test(corpo), "período vazio não disse nada ao usuário").toBe(true);
 
     await page.screenshot({
       path: path.join(EVIDENCIA, "w1-uso-02-periodo-vazio.png"),

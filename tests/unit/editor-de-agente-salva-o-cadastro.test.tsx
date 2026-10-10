@@ -67,6 +67,17 @@ vi.mock("@/app/app/ai/agents/[id]/_actions", () => ({
 // Dependências da server action (bloco 2). Ficam no topo porque `vi.mock` é
 // içado; o bloco 1 não as toca.
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/ai/agents/platform-connection", () => ({
+  applyAgentConnection: vi.fn(async (_org: string, input: unknown) => input),
+}));
+vi.mock("@/lib/auth/require-role", () => ({
+  requireRole: vi.fn(async () => ({
+    ok: true,
+    user: { id: "user-1", email: "u@example.com" },
+    org: { orgId: ORG, name: "Org", role: "admin" },
+  })),
+}));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 // A conexão é preservada nestes cenários; os guards possuem regressão separada.
 vi.mock("@/lib/ai/agents/credential-access", () => ({
   guardAgentCredential: vi.fn(async () => null),
@@ -194,7 +205,10 @@ describe("editor de agente — a tela", () => {
     const { campo } = abrirEditor();
     fireEvent.change(campo("description"), { target: { value: "Descrição atualizada" } });
     await salvarRascunho();
-    expect(acoes.salvar.mock.calls[0]?.[1]).toHaveProperty("operator_prompt", VERSAO.operator_prompt);
+    expect(acoes.salvar.mock.calls[0]?.[1]).toHaveProperty(
+      "operator_prompt",
+      VERSAO.operator_prompt,
+    );
   });
 
   it("leva o nome novo ao servidor quando a pessoa salva o rascunho", async () => {
@@ -341,7 +355,15 @@ const VERSION_PAYLOAD = {
 // `published_version_id` está aqui porque a action o PEDE no mesmo SELECT e o
 // usa para decidir em qual rascunho escrever. Fixture sem a coluna faz a régua
 // receber `undefined` e mediria um caminho que a produção não tem.
-const CADASTRO_ATUAL = { id: AGENTE, kind: "mcp_agent", archived_at: null, name: "Recepção", description: "atende quem chega", priority: 3, published_version_id: null };
+const CADASTRO_ATUAL = {
+  id: AGENTE,
+  kind: "mcp_agent",
+  archived_at: null,
+  name: "Recepção",
+  description: "atende quem chega",
+  priority: 3,
+  published_version_id: null,
+};
 
 async function salvarNoServidor(cadastro: unknown, agente = CADASTRO_ATUAL) {
   vi.mocked(createAdminClient).mockReturnValue(adminDuble(agente) as never);

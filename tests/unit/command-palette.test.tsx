@@ -29,6 +29,7 @@ function comoPapel(role: ActiveOrg["role"]) {
 afterEach(() => {
   cleanup();
   push.mockClear();
+  authRef.user.is_platform_admin = false;
   comoPapel("admin");
 });
 
@@ -45,6 +46,7 @@ describe("CommandPalette", () => {
   });
 
   it("ignora acento, porque ninguém digita acento com pressa", async () => {
+    authRef.user.is_platform_admin = true;
     const user = userEvent.setup();
     abrir();
     await user.type(screen.getByRole("combobox"), "orcamento");

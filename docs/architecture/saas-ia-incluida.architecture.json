@@ -189,6 +189,27 @@
       "col": 11,
       "type": "ui",
       "label": "Admin assume chamado e prepara proposta; cancelamento anterior confirmado e aceite no faturamento"
+    },
+    {
+      "id": "global-connection",
+      "lane": "db",
+      "col": 4,
+      "type": "database",
+      "label": "platform_ai_credentials cifradas + settings: modelo comum, falha fechada e sem chave no navegador"
+    },
+    {
+      "id": "manual-plan",
+      "lane": "app",
+      "col": 3,
+      "type": "service",
+      "label": "fn_admin_set_commercial_plan: ator full, prazo, consumo preservado e referência idempotente"
+    },
+    {
+      "id": "recovery-default",
+      "lane": "db",
+      "col": 1,
+      "type": "database",
+      "label": "fn_seed_lead_recovery: rascunho 1h/24h/48h, templates próprios e cancelamento ao responder"
     }
   ],
   "edges": [
@@ -391,6 +412,36 @@
       "from": "plan-quote",
       "to": "payment",
       "label": "checkout sem outra recorrência ativa"
+    },
+    {
+      "from": "admin",
+      "to": "global-connection",
+      "label": "seleção de modelo e chave validada e cifrada"
+    },
+    {
+      "from": "global-connection",
+      "to": "runtime",
+      "label": "próxima chamada usa conexão comum sem mudar contrato"
+    },
+    {
+      "from": "admin",
+      "to": "manual-plan",
+      "label": "concessão com motivo e prazo explícito"
+    },
+    {
+      "from": "manual-plan",
+      "to": "account",
+      "label": "plano e limites com consumo preservado"
+    },
+    {
+      "from": "signup",
+      "to": "recovery-default",
+      "label": "nova empresa recebe rascunho isolado"
+    },
+    {
+      "from": "recovery-default",
+      "to": "automation",
+      "label": "publicação explícita; parada por resposta e handoff"
     }
   ]
 }

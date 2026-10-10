@@ -42,6 +42,7 @@ it("erro comercial no banco não cai no provedor legado", async () => {
     .mockResolvedValueOnce({
       rows: [{ mode: "platform", state: "active", access_until: "2100-01-01" }],
     })
+    .mockResolvedValueOnce({ rows: [{ enabled: true, provider: "openai", model: "configured" }] })
     .mockRejectedValueOnce(new Error("ai_credits_exhausted"));
   await expect(
     managedSettingsPg({ query } as unknown as pg.Pool, "qa-org", "agent_turn"),
@@ -50,7 +51,7 @@ it("erro comercial no banco não cai no provedor legado", async () => {
     code: "ai_credits_exhausted",
     terminal: true,
   });
-  expect(query).toHaveBeenCalledTimes(2);
+  expect(query).toHaveBeenCalledTimes(3);
 });
 it("ausência da conta comercial não permite escolher o caminho legado", async () => {
   const query = vi.fn().mockResolvedValue({ rows: [] });
@@ -58,4 +59,33 @@ it("ausência da conta comercial não permite escolher o caminho legado", async 
     managedSettingsPg({ query } as unknown as pg.Pool, "qa-org", "agent_turn"),
   ).rejects.toMatchObject({ code: "ai_account_unavailable" });
   expect(query).toHaveBeenCalledTimes(1);
+});
+it("padroniza o modelo de uma conta legada sem alterar seu contrato", async () => {
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ mode: "legacy", state: "pending", access_until: null }] })
+    .mockResolvedValueOnce({
+      rows: [
+        {
+          enabled: true,
+          apply_to_all: true,
+          provider: "openai",
+          model: "global",
+          purpose_models: { agent_turn: { provider: "anthropic", model: "old", enabled: true } },
+        },
+      ],
+    })
+    .mockResolvedValueOnce({ rows: [] });
+  expect(
+    await managedSettingsPg({ query } as unknown as pg.Pool, "qa-org", "agent_turn"),
+  ).toMatchObject({ model: "global", commercially_managed: false });
+});
+it("falha ao ler a configuração não escapa para a conexão legada", async () => {
+  const query = vi
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ mode: "legacy", state: "pending", access_until: null }] })
+    .mockRejectedValueOnce(new Error("database unavailable"));
+  await expect(
+    managedSettingsPg({ query } as unknown as pg.Pool, "qa-org", "agent_turn"),
+  ).rejects.toMatchObject({ code: "ai_platform_unavailable", terminal: true });
 });

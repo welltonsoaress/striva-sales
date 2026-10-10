@@ -209,7 +209,8 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
   // Skip, não erro: modelo que nenhuma chave desta instalação atende é config,
   // não falha transitória — retentar só repetiria o loop que este PR mata.
   // O painel de provedores manda aqui também — ver lib/ai/gateway-binding.ts.
-  if (await managedSettings(ctx.organization_id, "bot_respond")) {
+  const managed = await managedSettings(ctx.organization_id, "bot_respond");
+  if (managed && managed.commercially_managed !== false) {
     await createAdminClient().rpc("fn_ai_commercial_notice", {
       p_org: ctx.organization_id,
       p_code: "managed_runtime_required",
@@ -227,7 +228,7 @@ export async function processMessageReceived(row: EventRow): Promise<ProcessResu
   );
   // Uma migração pode acontecer entre a primeira guarda e a resolução da chave.
   // A origem já resolvida também precisa respeitar o motor comercial canônico.
-  if (resolvido?.origem === "plataforma") {
+  if (resolvido?.origem === "plataforma" && managed?.commercially_managed !== false) {
     await createAdminClient().rpc("fn_ai_commercial_notice", {
       p_org: ctx.organization_id,
       p_code: "managed_runtime_required",

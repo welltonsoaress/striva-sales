@@ -24,6 +24,9 @@ vi.mock("@/lib/api/client", () => ({
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  useAuth: () => ({ user: { is_platform_admin: false } }),
+}));
 
 import { apiClient } from "@/lib/api/client";
 import {
@@ -369,7 +372,13 @@ describe("StagesSection — a marcação de fechamento", () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.get).mockResolvedValue({ data: estado({ won: "e3" }) });
     vi.mocked(apiClient.patch).mockRejectedValue(
-      new ApiError(422, "unprocessable_entity", undefined, "r", "Já existe uma etapa chamada «Cancelado» neste funil. Escolha outro nome."),
+      new ApiError(
+        422,
+        "unprocessable_entity",
+        undefined,
+        "r",
+        "Já existe uma etapa chamada «Cancelado» neste funil. Escolha outro nome.",
+      ),
     );
     montar();
     const campo = await screen.findByTestId("nome-e3");
@@ -459,7 +468,13 @@ describe("StagesSection — arquivar", () => {
     const soDesfecho: EtapaDoFunil[] = [ETAPAS[0]!, ETAPAS[2]!, ETAPAS[3]!];
     vi.mocked(apiClient.get).mockResolvedValue({ data: estado({}, soDesfecho) });
     vi.mocked(apiClient.delete).mockRejectedValue(
-      new ApiError(422, "unprocessable_entity", { negocios: 4, precisa_destino: true }, "r", "…tem 4 negócios…"),
+      new ApiError(
+        422,
+        "unprocessable_entity",
+        { negocios: 4, precisa_destino: true },
+        "r",
+        "…tem 4 negócios…",
+      ),
     );
     montar();
     await screen.findByTestId("nome-e1");
@@ -541,7 +556,13 @@ describe("StagesSection — arquivar", () => {
   it("com UM negócio a frase não vira «1 negócios estão»", async () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.delete).mockRejectedValue(
-      new ApiError(422, "unprocessable_entity", { negocios: 1, precisa_destino: true }, "r", "…tem 1 negócio…"),
+      new ApiError(
+        422,
+        "unprocessable_entity",
+        { negocios: 1, precisa_destino: true },
+        "r",
+        "…tem 1 negócio…",
+      ),
     );
     montar();
     await screen.findByTestId("nome-e1");

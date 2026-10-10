@@ -31,6 +31,7 @@ interface Props {
   onEnabledChange: (v: boolean) => void;
   /** "" = herda o modelo do Conversador. */
   model: string;
+  modelEditingAllowed?: boolean;
   onModelChange: (v: string) => void;
   provider: Provider;
   toolIds: string[];
@@ -66,7 +67,9 @@ function ComoOPapelEstaIndo() {
       <Card className="p-4" data-testid="operador-como-esta-indo">
         <p className="text-xs text-muted-foreground">
           {t("Nenhuma conversa passou por aqui nos últimos")} {dias}{" "}
-          {t("dias. Assim que o assistente atender alguém, o que ele organizar aparece nesta área.")}
+          {t(
+            "dias. Assim que o assistente atender alguém, o que ele organizar aparece nesta área.",
+          )}
         </p>
       </Card>
     );
@@ -83,7 +86,10 @@ function ComoOPapelEstaIndo() {
       </p>
       {(m.data.semConfirmacao ?? 0) > 0 && (
         <p className="text-xs text-muted-foreground">
-          {m.data.semConfirmacao} {t("turnos antigos não registraram confirmação de execução e ficaram fora dessa contagem.")}
+          {m.data.semConfirmacao}{" "}
+          {t(
+            "turnos antigos não registraram confirmação de execução e ficaram fora dessa contagem.",
+          )}
         </p>
       )}
       <p className="text-xs text-muted-foreground" data-testid="operador-metrica-promessas">
@@ -169,44 +175,48 @@ export function PainelDoOperador(props: Props) {
 
       {props.enabled ? (
         <>
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-medium">{t("A inteligência que ele usa para organizar")}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Pode ser diferente da que conversa. Organizar o sistema é uma tarefa mais mecânica que atender uma pessoa — costuma sair bem com um modelo mais barato.",
-              )}
-            </p>
-            <ModelPicker
-              provider={props.provider}
-              value={props.model}
-              onChange={props.onModelChange}
-              disabled={desabilitado}
-              // O estado vazio é legítimo aqui e precisa ter NOME: chamá-lo de
-              // "Selecione um modelo" faria parecer pendência o que é escolha.
-              placeholder={
-                props.modeloDoConversador === ""
-                  ? t("A mesma que conversa")
-                  : `${t("A mesma que conversa")} (${props.modeloDoConversador})`
-              }
-            />
-            {/*
+          {props.modelEditingAllowed && (
+            <Card className="space-y-2 p-4">
+              <h3 className="text-sm font-medium">
+                {t("A inteligência que ele usa para organizar")}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Pode ser diferente da que conversa. Organizar o sistema é uma tarefa mais mecânica que atender uma pessoa — costuma sair bem com um modelo mais barato.",
+                )}
+              </p>
+              <ModelPicker
+                provider={props.provider}
+                value={props.model}
+                onChange={props.onModelChange}
+                disabled={desabilitado}
+                // O estado vazio é legítimo aqui e precisa ter NOME: chamá-lo de
+                // "Selecione um modelo" faria parecer pendência o que é escolha.
+                placeholder={
+                  props.modeloDoConversador === ""
+                    ? t("A mesma que conversa")
+                    : `${t("A mesma que conversa")} (${props.modeloDoConversador})`
+                }
+              />
+              {/*
               O caminho de VOLTA. Um Select não consegue oferecer "nenhum" como
               item (valor vazio não é selecionável), então sem este botão a
               escolha seria de mão única: bastaria clicar uma vez para nunca mais
               conseguir voltar a herdar — e o usuário não teria como saber por quê.
             */}
-            {props.model !== "" ? (
-              <button
-                type="button"
-                data-testid="operador-modelo-herdar"
-                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                onClick={() => props.onModelChange("")}
-                disabled={desabilitado}
-              >
-                {t("Usar a mesma que conversa")}
-              </button>
-            ) : null}
-          </Card>
+              {props.model !== "" ? (
+                <button
+                  type="button"
+                  data-testid="operador-modelo-herdar"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => props.onModelChange("")}
+                  disabled={desabilitado}
+                >
+                  {t("Usar a mesma que conversa")}
+                </button>
+              ) : null}
+            </Card>
+          )}
 
           <Card className="space-y-2 p-4">
             <h3 className="text-sm font-medium">{t("O que ele pode mexer no sistema")}</h3>

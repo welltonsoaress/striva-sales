@@ -110,7 +110,8 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
    * telefone não precisa de painel de chamada, e um banner tocando para quem o
    * botão "Atender" vai recusar com 403 é uma promessa falsa.
    */
-  const podeLigar = usePermission("voice.call");
+  const canCall = usePermission("voice.call");
+  const podeLigar = canCall && user.is_platform_admin && !user.support;
   const orgId = podeLigar ? activeOrg?.orgId : undefined;
 
   const [call, setCall] = useState<VoiceCallRow | null>(null);
@@ -239,138 +240,141 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
   });
 
   /** Abre a RTCPeerConnection, conecta o DataChannel "pcm" e troca o áudio via AudioWorklets. */
-  const conectarMidia = useCallback(async (callId: string) => {
-    setConnectingMedia(true);
-    setEstadoDaMidia("negociando");
-    recebeuAudioRef.current = false;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = stream;
+  const conectarMidia = useCallback(
+    async (callId: string) => {
+      setConnectingMedia(true);
+      setEstadoDaMidia("negociando");
+      recebeuAudioRef.current = false;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStreamRef.current = stream;
 
-      /**
-       * `iceServers: []` é DELIBERADO, e vale só porque o outro lado tem
-       * endereço público.
-       *
-       * O WaCalls funila toda a mídia numa porta UDP fixa
-       * (`ice.NewMultiUDPMuxFromPort`, `internal/app/webrtc.go`) e reescreve o
-       * candidato para `WACALLS_PUBLIC_IP` com tipo `host`. Então o par de
-       * candidatos que fecha a conexão é [host privado do navegador] ↔ [host
-       * público do servidor]: o navegador manda o Binding request, o NAT dele
-       * reescreve a origem, e o pion aprende o endereço mapeado como candidato
-       * *peer-reflexive* (RFC 8445 §7.3.1.3). Nenhum dos dois lados precisou de
-       * STUN para isso — o servidor já sabe o próprio endereço público porque
-       * o operador o declarou.
-       *
-       * Um STUN aqui só acrescentaria candidatos `srflx` do navegador, que o
-       * servidor nunca precisa usar. O que FALTA mesmo, e não é isto, é TURN:
-       * numa rede que bloqueia UDP de saída não há travessia possível, e é
-       * exatamente esse caso que `sem_rota` passa a nomear em vez de esconder.
-       */
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      pcRef.current = pc;
+        /**
+         * `iceServers: []` é DELIBERADO, e vale só porque o outro lado tem
+         * endereço público.
+         *
+         * O WaCalls funila toda a mídia numa porta UDP fixa
+         * (`ice.NewMultiUDPMuxFromPort`, `internal/app/webrtc.go`) e reescreve o
+         * candidato para `WACALLS_PUBLIC_IP` com tipo `host`. Então o par de
+         * candidatos que fecha a conexão é [host privado do navegador] ↔ [host
+         * público do servidor]: o navegador manda o Binding request, o NAT dele
+         * reescreve a origem, e o pion aprende o endereço mapeado como candidato
+         * *peer-reflexive* (RFC 8445 §7.3.1.3). Nenhum dos dois lados precisou de
+         * STUN para isso — o servidor já sabe o próprio endereço público porque
+         * o operador o declarou.
+         *
+         * Um STUN aqui só acrescentaria candidatos `srflx` do navegador, que o
+         * servidor nunca precisa usar. O que FALTA mesmo, e não é isto, é TURN:
+         * numa rede que bloqueia UDP de saída não há travessia possível, e é
+         * exatamente esse caso que `sem_rota` passa a nomear em vez de esconder.
+         */
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pcRef.current = pc;
 
-      // O WaCalls opera áudio via DataChannel rotulado "pcm" com PCM 16kHz mono (Int16 LE)
-      const dc = pc.createDataChannel("pcm", { ordered: true });
-      dc.binaryType = "arraybuffer";
-      dcRef.current = dc;
+        // O WaCalls opera áudio via DataChannel rotulado "pcm" com PCM 16kHz mono (Int16 LE)
+        const dc = pc.createDataChannel("pcm", { ordered: true });
+        dc.binaryType = "arraybuffer";
+        dcRef.current = dc;
 
-      // Só a partir daqui existe alguém escutando o transporte de verdade.
-      // Antes disto, o único sinal de áudio na tela vinha do banco.
-      dc.onopen = () => {
-        setEstadoDaMidia(recebeuAudioRef.current ? "com_audio" : "aberta");
-      };
-      pc.onconnectionstatechange = () => {
-        const estado = pc.connectionState;
-        if (estado === "failed" || estado === "closed" || estado === "disconnected") {
-          setEstadoDaMidia("sem_rota");
-          return;
-        }
-        // Reconexão: `dc.onopen` não dispara de novo num canal que já abriu, e
-        // sem esta volta o painel ficaria preso em "sem áudio" depois de um
-        // soluço de rede que se resolveu sozinho.
-        if (estado === "connected" && dc.readyState === "open") {
+        // Só a partir daqui existe alguém escutando o transporte de verdade.
+        // Antes disto, o único sinal de áudio na tela vinha do banco.
+        dc.onopen = () => {
           setEstadoDaMidia(recebeuAudioRef.current ? "com_audio" : "aberta");
+        };
+        pc.onconnectionstatechange = () => {
+          const estado = pc.connectionState;
+          if (estado === "failed" || estado === "closed" || estado === "disconnected") {
+            setEstadoDaMidia("sem_rota");
+            return;
+          }
+          // Reconexão: `dc.onopen` não dispara de novo num canal que já abriu, e
+          // sem esta volta o painel ficaria preso em "sem áudio" depois de um
+          // soluço de rede que se resolveu sozinho.
+          if (estado === "connected" && dc.readyState === "open") {
+            setEstadoDaMidia(recebeuAudioRef.current ? "com_audio" : "aberta");
+          }
+        };
+        prazoRef.current = setTimeout(() => {
+          // Functional update: só derruba quem ainda está negociando. Se o canal
+          // abriu no intervalo, este disparo é inofensivo.
+          setEstadoDaMidia((atual) => (atual === "negociando" ? "sem_rota" : atual));
+        }, PRAZO_PARA_ABRIR_MS);
+
+        const AudioContextClass =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AudioContextClass({ sampleRate: 16000 });
+        audioCtxRef.current = ctx;
+
+        await ctx.audioWorklet.addModule("/worklets/capture-processor.js");
+        await ctx.audioWorklet.addModule("/worklets/playback-processor.js");
+        await ctx.resume();
+
+        // Microfone -> capture-processor -> DataChannel (PCM 16-bit LE)
+        const micSource = ctx.createMediaStreamSource(stream);
+        const captureNode = new AudioWorkletNode(ctx, "capture-processor");
+        captureNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
+          if (dc.readyState === "open") {
+            dc.send(float32ToInt16LE(e.data));
+          }
+        };
+        micSource.connect(captureNode);
+        // Conectar ao destination mantém o AudioWorkletNode ativo no Chromium
+        captureNode.connect(ctx.destination);
+
+        // DataChannel (PCM 16-bit LE) -> playback-processor -> MediaStreamDestination -> tag <audio>
+        const playbackNode = new AudioWorkletNode(ctx, "playback-processor");
+        const streamDest = ctx.createMediaStreamDestination();
+        playbackNode.connect(streamDest);
+        dc.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+          // O primeiro quadro que chega é a prova mais forte que existe de que a
+          // ligação tem SOM — mais forte que o canal aberto, e incomparavelmente
+          // mais forte que a linha no banco. Ver `recebeuAudioRef` para por que a
+          // guarda não é opcional.
+          if (!recebeuAudioRef.current) {
+            recebeuAudioRef.current = true;
+            setEstadoDaMidia("com_audio");
+          }
+          playbackNode.port.postMessage(int16LEToFloat32(e.data));
+        };
+
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = streamDest.stream;
+          void remoteAudioRef.current.play().catch(() => {});
         }
-      };
-      prazoRef.current = setTimeout(() => {
-        // Functional update: só derruba quem ainda está negociando. Se o canal
-        // abriu no intervalo, este disparo é inofensivo.
-        setEstadoDaMidia((atual) => (atual === "negociando" ? "sem_rota" : atual));
-      }, PRAZO_PARA_ABRIR_MS);
 
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AudioContextClass({ sampleRate: 16000 });
-      audioCtxRef.current = ctx;
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
-      await ctx.audioWorklet.addModule("/worklets/capture-processor.js");
-      await ctx.audioWorklet.addModule("/worklets/playback-processor.js");
-      await ctx.resume();
+        // Aguarda a coleta de candidatos ICE completar para enviar a oferta com todos os candidatos
+        await new Promise<void>((resolve) => {
+          if (pc.iceGatheringState === "complete") {
+            resolve();
+          } else {
+            const checkState = () => {
+              if (pc.iceGatheringState === "complete") {
+                pc.removeEventListener("icegatheringstatechange", checkState);
+                resolve();
+              }
+            };
+            pc.addEventListener("icegatheringstatechange", checkState);
+          }
+        });
 
-      // Microfone -> capture-processor -> DataChannel (PCM 16-bit LE)
-      const micSource = ctx.createMediaStreamSource(stream);
-      const captureNode = new AudioWorkletNode(ctx, "capture-processor");
-      captureNode.port.onmessage = (e: MessageEvent<Float32Array>) => {
-        if (dc.readyState === "open") {
-          dc.send(float32ToInt16LE(e.data));
-        }
-      };
-      micSource.connect(captureNode);
-      // Conectar ao destination mantém o AudioWorkletNode ativo no Chromium
-      captureNode.connect(ctx.destination);
-
-      // DataChannel (PCM 16-bit LE) -> playback-processor -> MediaStreamDestination -> tag <audio>
-      const playbackNode = new AudioWorkletNode(ctx, "playback-processor");
-      const streamDest = ctx.createMediaStreamDestination();
-      playbackNode.connect(streamDest);
-      dc.onmessage = (e: MessageEvent<ArrayBuffer>) => {
-        // O primeiro quadro que chega é a prova mais forte que existe de que a
-        // ligação tem SOM — mais forte que o canal aberto, e incomparavelmente
-        // mais forte que a linha no banco. Ver `recebeuAudioRef` para por que a
-        // guarda não é opcional.
-        if (!recebeuAudioRef.current) {
-          recebeuAudioRef.current = true;
-          setEstadoDaMidia("com_audio");
-        }
-        playbackNode.port.postMessage(int16LEToFloat32(e.data));
-      };
-
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = streamDest.stream;
-        void remoteAudioRef.current.play().catch(() => {});
+        const res = await apiClient.post<{ data: { sdpAnswer: string } }>(
+          `/api/v1/voice/calls/${callId}/webrtc`,
+          { sdpOffer: pc.localDescription!.sdp },
+        );
+        await pc.setRemoteDescription({ type: "answer", sdp: res.data.sdpAnswer });
+      } catch (err) {
+        showApiError(err);
+        teardownMedia();
+      } finally {
+        setConnectingMedia(false);
       }
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // Aguarda a coleta de candidatos ICE completar para enviar a oferta com todos os candidatos
-      await new Promise<void>((resolve) => {
-        if (pc.iceGatheringState === "complete") {
-          resolve();
-        } else {
-          const checkState = () => {
-            if (pc.iceGatheringState === "complete") {
-              pc.removeEventListener("icegatheringstatechange", checkState);
-              resolve();
-            }
-          };
-          pc.addEventListener("icegatheringstatechange", checkState);
-        }
-      });
-
-      const res = await apiClient.post<{ data: { sdpAnswer: string } }>(
-        `/api/v1/voice/calls/${callId}/webrtc`,
-        { sdpOffer: pc.localDescription!.sdp },
-      );
-      await pc.setRemoteDescription({ type: "answer", sdp: res.data.sdpAnswer });
-    } catch (err) {
-      showApiError(err);
-      teardownMedia();
-    } finally {
-      setConnectingMedia(false);
-    }
-  }, [remoteAudioRef, teardownMedia]);
+    },
+    [remoteAudioRef, teardownMedia],
+  );
 
   // Assim que o Realtime confirma `connected`, abre o áudio — não antes: o
   // WaCalls só aceita a troca de SDP depois que o `<call>` foi realmente
@@ -387,15 +391,20 @@ export function useVoiceCallSession(remoteAudioRef: RefObject<HTMLAudioElement |
     }
   }, [minha, call, connectingMedia, conectarMidia, teardownMedia]);
 
-  const startCall = useCallback(async (contactId: string) => {
-    if (!podeLigar) return;
-    try {
-      const res = await apiClient.post<{ data: VoiceCallRow }>("/api/v1/voice/calls", { contactId });
-      setCall(res.data);
-    } catch (err) {
-      showApiError(err);
-    }
-  }, [podeLigar]);
+  const startCall = useCallback(
+    async (contactId: string) => {
+      if (!podeLigar) return;
+      try {
+        const res = await apiClient.post<{ data: VoiceCallRow }>("/api/v1/voice/calls", {
+          contactId,
+        });
+        setCall(res.data);
+      } catch (err) {
+        showApiError(err);
+      }
+    },
+    [podeLigar],
+  );
 
   const acceptCall = useCallback(async () => {
     const atual = callRef.current;

@@ -16,15 +16,15 @@ import { guardServiceTools } from "@/lib/atendimento/fronteira-server";
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
-import type pg from 'pg';
-import { z } from 'zod';
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
+import type pg from "pg";
+import { z } from "zod";
 
-import { scrubMessage } from '@/lib/sentry/scrub';
+import { scrubMessage } from "@/lib/sentry/scrub";
 
-import type { Logger } from '../../obs/logger';
-import { decidirParaOSeam } from './binding-do-ponto';
-import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from './credentials';
+import type { Logger } from "../../obs/logger";
+import { decidirParaOSeam } from "./binding-do-ponto";
+import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from "./credentials";
 import {
   AVISO_CORPO,
   AVISO_TITULO,
@@ -35,23 +35,30 @@ import {
   LIMIAR_PADRAO_PCT,
   SQL_ORCAMENTO,
   type ChaveDeOrcamento,
-} from './orcamento';
-import { pricedUsage } from '@/lib/ai/model-price';
-import { managedSettingsPg, platformConfig, modelPricePg, assertPricedModel, reserveResponsePg } from '@/lib/billing/managed-ai';
-import { createDefaultRegistry, type ProviderRegistry } from './providers';
-import { buildStablePrefix } from './stable-prefix';
+} from "./orcamento";
+import { pricedUsage } from "@/lib/ai/model-price";
+import {
+  managedSettingsPg,
+  platformConfig,
+  modelPricePg,
+  assertPricedModel,
+  reserveResponsePg,
+} from "@/lib/billing/managed-ai";
+import { platformKeyPg } from "@/lib/billing/platform-credentials";
+import { createDefaultRegistry, type ProviderRegistry } from "./providers";
+import { buildStablePrefix } from "./stable-prefix";
 
 // Call sites FORA da camada importam os tipos daqui — nunca de 'ai' direto
 // (o seam é a única porta). `tool` idem: é como o agente define ToolSet sem
 // tocar no SDK.
-export { tool } from 'ai';
-export type { ModelMessage, ToolSet } from 'ai';
-export type { LlmEdgeConfig } from './credentials';
-export { llmEdgeConfigFromEnv, LlmNotConfiguredError } from './credentials';
+export { tool } from "ai";
+export type { ModelMessage, ToolSet } from "ai";
+export type { LlmEdgeConfig } from "./credentials";
+export { llmEdgeConfigFromEnv, LlmNotConfiguredError } from "./credentials";
 
 /** Teto mensal da org esgotado — runs recusados ANTES do provider (zero tokens). */
 export class LlmBudgetExceededError extends Error {
-  override readonly name = 'llm_budget_exceeded';
+  override readonly name = "llm_budget_exceeded";
   /**
    * Veto PERMANENTE de negócio, não incidente de sistema — tentar de novo daqui
    * a um minuto dá o mesmo resultado, porque o gasto não diminui sozinho.
@@ -64,13 +71,15 @@ export class LlmBudgetExceededError extends Error {
    */
   readonly terminal = true;
   constructor() {
-    super('orçamento mensal de IA da organização atingido — chamada recusada antes de sair byte para o provedor; ajuste o teto em Uso de IA › Orçamento, desligue a proteção, ou aguarde a virada do mês (agent_inbox_items kind=budget_exceeded)');
+    super(
+      "orçamento mensal de IA da organização atingido — chamada recusada antes de sair byte para o provedor; ajuste o teto em Uso de IA › Orçamento, desligue a proteção, ou aguarde a virada do mês (agent_inbox_items kind=budget_exceeded)",
+    );
   }
 }
 
 /** Provider da config sem entrada no registry — erro de config, nunca fallback. */
 export class LlmProviderUnknownError extends Error {
-  override readonly name = 'llm_provider_unknown';
+  override readonly name = "llm_provider_unknown";
   constructor(provider: string) {
     super(`provider LLM desconhecido na config da org: ${provider}`);
   }
@@ -78,7 +87,7 @@ export class LlmProviderUnknownError extends Error {
 
 /** Modelo pedido fora de enabled_models da org. */
 export class LlmModelNotEnabledError extends Error {
-  override readonly name = 'llm_model_not_enabled';
+  override readonly name = "llm_model_not_enabled";
   constructor(model: string) {
     super(`modelo não habilitado para a org (enabled_models): ${model}`);
   }
@@ -134,7 +143,7 @@ export interface RunModelCallInput {
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
    */
-  llmOverride?: import('./credentials').LlmResolveOverride;
+  llmOverride?: import("./credentials").LlmResolveOverride;
 }
 
 export interface RunModelCallDeps {
@@ -192,7 +201,7 @@ interface LinhaDoOrcamento {
  * tranquilizadora sozinha é o que faz um defeito viver meses.
  */
 async function aplicarOrcamento(d: {
-  db: Pick<pg.Pool, 'query'>;
+  db: Pick<pg.Pool, "query">;
   organizationId: string;
   /** Só para o atalho de custo. A decisão usa o snapshot de `SQL_ORCAMENTO`. */
   orcamentoDaConfig: OrcamentoDaOrg;
@@ -208,13 +217,13 @@ async function aplicarOrcamento(d: {
   const comum = { organization_id: d.organizationId, purpose: d.purpose };
 
   if (d.orcamentoIndisponivelPorque !== null) {
-    d.log?.warn('llm: orçamento não pôde ser lido — a chamada SEGUE sem teto', {
+    d.log?.warn("llm: orçamento não pôde ser lido — a chamada SEGUE sem teto", {
       ...comum,
       causa: d.orcamentoIndisponivelPorque,
     });
     return;
   }
-  if (d.orcamentoDaConfig.modo === 'off' || d.chave === 'off') {
+  if (d.orcamentoDaConfig.modo === "off" || d.chave === "off") {
     return;
   }
 
@@ -228,7 +237,7 @@ async function aplicarOrcamento(d: {
     ]);
     linha = rows[0];
   } catch (err) {
-    d.log?.warn('llm: consulta de orçamento falhou — a chamada SEGUE sem teto', {
+    d.log?.warn("llm: consulta de orçamento falhou — a chamada SEGUE sem teto", {
       ...comum,
       ...normalizarErro(err),
     });
@@ -237,7 +246,7 @@ async function aplicarOrcamento(d: {
   if (linha === undefined) {
     // `select` de CTEs escalares sempre devolve uma linha; zero linhas aqui é
     // um mundo que não deveria existir, e nele a resposta segue sendo a frouxa.
-    d.log?.warn('llm: consulta de orçamento não devolveu linha — a chamada SEGUE', comum);
+    d.log?.warn("llm: consulta de orçamento não devolveu linha — a chamada SEGUE", comum);
     return;
   }
 
@@ -255,13 +264,13 @@ async function aplicarOrcamento(d: {
     avisadoNesteMes: linha.avisado_antes === true,
   });
 
-  if (veredito.acao === 'seguir') {
+  if (veredito.acao === "seguir") {
     return;
   }
-  if (veredito.acao === 'avisar_e_seguir') {
+  if (veredito.acao === "avisar_e_seguir") {
     // O item da Central já foi aberto pelo próprio statement (CTE `avisa`), no
     // mesmo snapshot que decidiu — aqui só sobra o log.
-    d.log?.warn('llm: gasto de IA passou do aviso — a chamada SEGUE', {
+    d.log?.warn("llm: gasto de IA passou do aviso — a chamada SEGUE", {
       ...comum,
       porque: veredito.porque,
       gasto_cents: gastoCents,
@@ -301,7 +310,7 @@ async function aplicarOrcamento(d: {
   }).catch(() => {
     // Gravar a recusa não pode impedir a recusa.
   });
-  d.log?.warn('llm: chamada recusada por orçamento', {
+  d.log?.warn("llm: chamada recusada por orçamento", {
     ...comum,
     provider: d.provider,
     model: d.model,
@@ -311,34 +320,59 @@ async function aplicarOrcamento(d: {
   throw erro;
 }
 
-export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfig, input: RunModelCallInput, deps: RunModelCallDeps = {}) {
+export async function runModelCall(
+  db: Pick<pg.Pool, "query">,
+  cfg: LlmEdgeConfig,
+  input: RunModelCallInput,
+  deps: RunModelCallDeps = {},
+) {
   const registry = deps.registry ?? createDefaultRegistry();
-  const purpose = input.purpose ?? 'agent_turn';
+  const purpose = input.purpose ?? "agent_turn";
 
   // A config da org é lida ANTES da decisão porque o resolvedor precisa dela
   // como último degrau da precedência (o padrão, quando ninguém mais opinou).
-  const managed = await managedSettingsPg(db, input.tenantId, purpose, input.jobId ?? input.responseReservationId ?? null);
-  const padrao = managed ? platformConfig(managed, cfg) : await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
+  const managed = await managedSettingsPg(
+    db,
+    input.tenantId,
+    purpose,
+    input.jobId ?? input.responseReservationId ?? null,
+  );
+  const padrao = managed
+    ? platformConfig(managed, cfg, await platformKeyPg(db, managed.provider, cfg))
+    : await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
 
   // O painel de provedores entra AQUI, e é o que faz `purpose` deixar de ser
   // só um rótulo de custo e virar decisão. Sem binding configurado, `decisao`
   // reproduz exatamente o comportamento anterior — a origem volta como
   // 'variavel_de_ambiente' ou 'padrao_da_organizacao'.
-  const decisao = managed ? { provider: managed.provider, modelId: purpose === 'operator_turn' ? (managed.operator_model ?? managed.model) : managed.model,
-    credentialId: null, baseUrl: null, origem: 'padrao_da_organizacao' as const, avisos: [] } : await decidirParaOSeam(db, {
-    organizationId: input.tenantId,
-    purpose,
-    modeloDoCallSite: input.model,
-    overrideDoAgente:
-      input.llmOverride === undefined
-        ? null
-        : {
-            provider: input.llmOverride.provider ?? padrao.provider,
-            credentialId: input.llmOverride.credentialId ?? null,
-            model: input.model,
-          },
-    padraoDaOrganizacao: { provider: padrao.provider, defaultModel: padrao.defaultModel },
-  }, deps.log ? { log: deps.log } : {});
+  const decisao = managed
+    ? {
+        provider: managed.provider,
+        modelId:
+          purpose === "operator_turn" ? (managed.operator_model ?? managed.model) : managed.model,
+        credentialId: null,
+        baseUrl: null,
+        origem: "padrao_da_organizacao" as const,
+        avisos: [],
+      }
+    : await decidirParaOSeam(
+        db,
+        {
+          organizationId: input.tenantId,
+          purpose,
+          modeloDoCallSite: input.model,
+          overrideDoAgente:
+            input.llmOverride === undefined
+              ? null
+              : {
+                  provider: input.llmOverride.provider ?? padrao.provider,
+                  credentialId: input.llmOverride.credentialId ?? null,
+                  model: input.model,
+                },
+          padraoDaOrganizacao: { provider: padrao.provider, defaultModel: padrao.defaultModel },
+        },
+        deps.log ? { log: deps.log } : {},
+      );
 
   // Só re-resolve a credencial quando a decisão aponta para OUTRA que não a já
   // carregada — decifrar duas vezes a mesma chave é custo puro no caminho
@@ -366,8 +400,8 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   const model = decisao.modelId;
   if (model === null || model === undefined) {
     throw new Error(
-      'modelo LLM não definido — configure o ponto no painel de provedores, ' +
-        'organizations.settings.llm.default_model, ou passe input.model',
+      "modelo LLM não definido — configure o ponto no painel de provedores, " +
+        "organizations.settings.llm.default_model, ou passe input.model",
     );
   }
   if (config.enabledModels.length > 0 && !config.enabledModels.includes(model)) {
@@ -381,7 +415,9 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   }
   const parsedParams = paramsSchema.safeParse(config.params);
   if (!parsedParams.success) {
-    throw new Error('params inválidos em organizations.settings.llm.params — corrija a config da org');
+    throw new Error(
+      "params inválidos em organizations.settings.llm.params — corrija a config da org",
+    );
   }
   const { temperature, topP, topK, maxOutputTokens } = parsedParams.data;
 
@@ -399,7 +435,7 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
     organizationId: input.tenantId,
     orcamentoDaConfig: config.orcamento,
     orcamentoIndisponivelPorque: config.orcamentoIndisponivelPorque,
-    chave: cfg.budgetEnforcement ?? 'on',
+    chave: cfg.budgetEnforcement ?? "on",
     purpose,
     provider: config.provider,
     model,
@@ -415,10 +451,10 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   const prefix = buildStablePrefix({
     system: input.system,
     tools: input.tools,
-    cacheTtl: cfg.cacheTtl ?? '1h',
+    cacheTtl: cfg.cacheTtl ?? "1h",
   });
 
-  if (managed && input.jobId && ['agent_turn', 'followup_turn'].includes(purpose)) {
+  if (managed && input.jobId && ["agent_turn", "followup_turn"].includes(purpose)) {
     await reserveResponsePg(db, input.tenantId, input.jobId);
   }
 
@@ -436,7 +472,11 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
       messages: input.messages,
       tools: guardServiceTools(prefix.tools),
       maxRetries: 0,
-      stopWhen: managed ? stepCountIs(Math.min(input.maxSteps ?? managed.max_steps, managed.max_steps)) : input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      stopWhen: managed
+        ? stepCountIs(Math.min(input.maxSteps ?? managed.max_steps, managed.max_steps))
+        : input.maxSteps === undefined
+          ? undefined
+          : stepCountIs(input.maxSteps),
       temperature,
       topP,
       topK,
@@ -467,7 +507,7 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
       // O log da falha não pode causar uma segunda falha. Se o próprio INSERT
       // de erro falhar, o erro ORIGINAL é o que interessa a quem chamou.
     });
-    deps.log?.error('llm: chamada falhou', {
+    deps.log?.error("llm: chamada falhou", {
       organization_id: input.tenantId,
       purpose,
       provider: config.provider,
@@ -488,8 +528,10 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
   };
   // O SDK preserva totais ausentes como undefined; o zero de compatibilidade
   // acima não é evidência de uma chamada gratuita.
-  const cost = total.inputTokens === undefined || total.outputTokens === undefined
-    ? null : pricedUsage(price, usage);
+  const cost =
+    total.inputTokens === undefined || total.outputTokens === undefined
+      ? null
+      : pricedUsage(price, usage);
 
   const { rows } = await db.query<{ id: string }>(
     `insert into llm_calls
@@ -514,12 +556,21 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
       latencyMs,
       decisao.origem,
       input.agentId ?? null,
-      price ? JSON.stringify({ provider: config.provider, model, rates: price, currency: 'USD', unit: 'cents_per_million_tokens', mode: managed ? 'platform' : 'legacy' }) : null,
+      price
+        ? JSON.stringify({
+            provider: config.provider,
+            model,
+            rates: price,
+            currency: "USD",
+            unit: "cents_per_million_tokens",
+            mode: managed ? "platform" : "legacy",
+          })
+        : null,
     ],
   );
 
   // Só métricas — nunca conteúdo de mensagem (PII) nem chave.
-  deps.log?.info('llm: chamada concluída', {
+  deps.log?.info("llm: chamada concluída", {
     organization_id: input.tenantId,
     provider: config.provider,
     model,
@@ -533,7 +584,7 @@ export async function runModelCall(db: Pick<pg.Pool, 'query'>, cfg: LlmEdgeConfi
     latency_ms: latencyMs,
   });
   for (const aviso of decisao.avisos) {
-    deps.log?.warn('llm: configuração do ponto tem incoerência', {
+    deps.log?.warn("llm: configuração do ponto tem incoerência", {
       organization_id: input.tenantId,
       purpose,
       aviso,
@@ -588,20 +639,31 @@ export function normalizarErro(err: unknown): {
   // construímos. Sem este ramo a tela de Execuções mostraria "Não conseguimos
   // classificar esta falha" no caso mais bem explicado do produto.
   if (err instanceof LlmBudgetExceededError) {
-    return { error_code: 'orcamento_esgotado', error_message: redigirMensagemDoProvedor(bruto), http_status: null };
+    return {
+      error_code: "orcamento_esgotado",
+      error_message: redigirMensagemDoProvedor(bruto),
+      http_status: null,
+    };
   }
 
-  let codigo = 'erro_desconhecido';
-  if (status === 401 || status === 403 || /unauthor|invalid.*api.?key|authentication|incorrect api key/i.test(bruto)) {
-    codigo = 'credencial_recusada';
+  let codigo = "erro_desconhecido";
+  if (
+    status === 401 ||
+    status === 403 ||
+    /unauthor|invalid.*api.?key|authentication|incorrect api key/i.test(bruto)
+  ) {
+    codigo = "credencial_recusada";
   } else if (status === 404 || /model.*not.*found|does not exist/i.test(bruto)) {
-    codigo = 'modelo_inexistente';
+    codigo = "modelo_inexistente";
   } else if (status === 429 || /rate.?limit|quota|insufficient.*credit/i.test(bruto)) {
-    codigo = 'limite_ou_saldo';
-  } else if ((status !== null && status >= 500) || /timeout|ECONNREFUSED|fetch failed|network/i.test(bruto)) {
-    codigo = 'provedor_indisponivel';
+    codigo = "limite_ou_saldo";
+  } else if (
+    (status !== null && status >= 500) ||
+    /timeout|ECONNREFUSED|fetch failed|network/i.test(bruto)
+  ) {
+    codigo = "provedor_indisponivel";
   } else if (/tool|function.?call/i.test(bruto)) {
-    codigo = 'modelo_sem_ferramentas';
+    codigo = "modelo_sem_ferramentas";
   }
 
   return {
@@ -617,7 +679,7 @@ export function normalizarErro(err: unknown): {
     // apontado por `base_url` — caminho que o painel de provedores abre — pode
     // ecoar no corpo de erro o header de autorização ou o prompt recebido.
     error_message: redigirMensagemDoProvedor(bruto),
-    http_status: typeof status === 'number' ? status : null,
+    http_status: typeof status === "number" ? status : null,
   };
 }
 
@@ -633,12 +695,12 @@ export function redigirMensagemDoProvedor(bruto: string): string {
   const semSegredo = bruto
     // Chaves de API dos provedores que este produto fala: `sk-ant-…`,
     // `sk-or-v1-…`, `sk-proj-…`, `sk-…`, e as do Google (`AIza…`).
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, '[CHAVE]')
-    .replace(/AIza[A-Za-z0-9_-]{10,}/g, '[CHAVE]')
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[CHAVE]")
+    .replace(/AIza[A-Za-z0-9_-]{10,}/g, "[CHAVE]")
     // O header inteiro, em qualquer caixa, com ou sem `Authorization:` na
     // frente — é assim que ele costuma aparecer ecoado num corpo de erro.
-    .replace(/[Bb]earer\s+[A-Za-z0-9._-]{8,}/g, 'Bearer [CHAVE]')
-    .replace(/(x-api-key|api[-_]?key|authorization)\s*[:=]\s*\S+/gi, '$1: [CHAVE]');
+    .replace(/[Bb]earer\s+[A-Za-z0-9._-]{8,}/g, "Bearer [CHAVE]")
+    .replace(/(x-api-key|api[-_]?key|authorization)\s*[:=]\s*\S+/gi, "$1: [CHAVE]");
   return scrubMessage(semSegredo).slice(0, 500);
 }
 
@@ -653,7 +715,7 @@ export function redigirMensagemDoProvedor(bruto: string): string {
  * é "não sei", nunca "de graça" — mesma doutrina da coluna `cost_cents`.
  */
 async function registrarFalha(
-  db: Pick<pg.Pool, 'query'>,
+  db: Pick<pg.Pool, "query">,
   d: {
     input: RunModelCallInput;
     purpose: string;

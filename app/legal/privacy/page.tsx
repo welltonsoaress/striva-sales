@@ -28,9 +28,7 @@ export default async function PrivacyPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const idioma = normalizarIdioma(
-    (user?.user_metadata?.locale as string | undefined) ?? null,
-  );
+  const idioma = normalizarIdioma((user?.user_metadata?.locale as string | undefined) ?? null);
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
@@ -38,7 +36,7 @@ export default async function PrivacyPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{t("Política de Privacidade")}</h1>
         <p className="text-muted-foreground">
-          {t("Como esta instalação do")} {op.sistema} {t("trata dados pessoais.")}
+          {t("Como a plataforma")} {op.sistema} {t("trata dados pessoais.")}
         </p>
       </header>
 
@@ -48,7 +46,7 @@ export default async function PrivacyPage() {
           {t("O controlador dos dados tratados aqui é")} <strong>{operador}</strong>
           {op.cnpj ? ` (CNPJ ${op.cnpj})` : ""} —{" "}
           {t(
-            "quem instalou e opera este sistema. Os autores do software não têm acesso a este servidor nem aos dados guardados nele, e não são controladores nem operadores desses dados.",
+            "a organização responsável pela operação indicada nesta página. Dados de atendimento são tratados conforme as instruções da empresa cliente e as responsabilidades previstas no contrato. A equipe da plataforma pode acessar dados estritamente necessários para suporte autorizado, operação e segurança.",
           )}
         </p>
       </section>
@@ -82,7 +80,7 @@ export default async function PrivacyPage() {
         <h2 className="text-base font-semibold">{t("4. Com quem são compartilhados")}</h2>
         <p>
           {t(
-            "Os dados ficam no servidor do operador. Para funcionar, o sistema se comunica com terceiros escolhidos e contratados pelo operador:",
+            "Os dados ficam na infraestrutura utilizada pela plataforma. Para funcionar, o sistema se comunica com terceiros escolhidos e contratados pelo operador:",
           )}
         </p>
         <ul className="list-disc space-y-1 pl-5">
@@ -135,7 +133,9 @@ export default async function PrivacyPage() {
         <p>
           {op.dpoEmail ? (
             <>
-              {t("Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:")}{" "}
+              {t(
+                "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:",
+              )}{" "}
               <a className="underline underline-offset-2" href={`mailto:${op.dpoEmail}`}>
                 {op.dpoEmail}
               </a>

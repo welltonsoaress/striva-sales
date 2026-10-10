@@ -8,6 +8,7 @@ import { Robot, Gear } from "@/lib/ui/icons";
 import { autorNaTela, mudadoPorAgente } from "@/lib/operacao/autoria";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
+import { useAuth } from "@/hooks/auth/AuthProvider";
 
 /**
  * Quem mexeu nesta configuração por último — ao lado do estado que ele mudou.
@@ -42,6 +43,7 @@ export function SeloDeAutoria({
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
+  const { user } = useAuth();
   const texto = autorNaTela(kind);
   if (!texto) return null;
 
@@ -50,6 +52,24 @@ export function SeloDeAutoria({
   const quando = em
     ? ` ${formatDistanceToNowStrict(new Date(em), { addSuffix: true, locale: localeDaData })}`
     : "";
+
+  if (!user.is_platform_admin || user.support) {
+    return (
+      <span
+        className={cn(
+          "inline-flex w-fit items-center gap-1 text-xs text-muted-foreground",
+          className,
+        )}
+        data-autoria={kind ?? "desconhecida"}
+      >
+        <Icone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          {t(texto)}
+          {quando}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <Link

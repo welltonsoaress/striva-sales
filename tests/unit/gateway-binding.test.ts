@@ -16,6 +16,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const bindings = vi.hoisted(() => ({ linha: null as Record<string, unknown> | null }));
 const credenciais = vi.hoisted(() => ({ linha: null as Record<string, unknown> | null }));
+// Esta suíte mede bindings legados; a conexão centralizada tem cenários próprios.
+vi.mock("@/lib/billing/managed-ai-server", () => ({ managedSettings: vi.fn(async () => null) }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -164,7 +166,9 @@ describe("cada ponto lê o SEU binding", () => {
               return chain;
             },
             not: () => chain,
-            maybeSingle: async () => ({ data: t==='organization_ai_accounts'?{mode:'legacy'}:null }),
+            maybeSingle: async () => ({
+              data: t === "organization_ai_accounts" ? { mode: "legacy" } : null,
+            }),
           };
           return chain;
         },
@@ -215,11 +219,13 @@ describe("sem binding, a credencial da organização manda", () => {
           limit: () => chain,
           maybeSingle: async () => ({
             data:
-              tabela==='organization_ai_accounts'?{mode:'legacy'}:tabela === "ai_purpose_bindings"
-                ? null
-                : tabela === "organizations"
-                  ? { settings: orgSettings }
-                  : credencial,
+              tabela === "organization_ai_accounts"
+                ? { mode: "legacy" }
+                : tabela === "ai_purpose_bindings"
+                  ? null
+                  : tabela === "organizations"
+                    ? { settings: orgSettings }
+                    : credencial,
           }),
         };
         return chain;
@@ -310,11 +316,13 @@ describe("a credencial da organização só vale para modelo que o provider dela
           limit: () => chain,
           maybeSingle: async () => ({
             data:
-              tabela==='organization_ai_accounts'?{mode:'legacy'}:tabela === "ai_purpose_bindings"
-                ? null
-                : tabela === "organizations"
-                  ? { settings: { llm: { provider } } }
-                  : { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" },
+              tabela === "organization_ai_accounts"
+                ? { mode: "legacy" }
+                : tabela === "ai_purpose_bindings"
+                  ? null
+                  : tabela === "organizations"
+                    ? { settings: { llm: { provider } } }
+                    : { api_key_encrypted: "x", api_key_iv: "y", api_key_tag: "z" },
           }),
         };
         return chain;

@@ -4,7 +4,7 @@ import {
   interfaceTemDestino,
   type InterfaceSettings,
 } from "@/lib/navigation/interface";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { env } from "@/lib/env";
 import { audit } from "@/lib/audit";
 import { signInviteToken, INVITE_TTL_SECONDS } from "@/lib/auth/invite-token";
@@ -79,7 +79,11 @@ export async function issueInvite(input: {
       resourceType: "membership",
       resourceId: inviteId,
       requestId: input.requestId,
-      metadata: { email, role: input.role, email_dispatched: dispatched },
+      metadata: {
+        email_hash: createHash("sha256").update(email).digest("hex"),
+        role: input.role,
+        email_dispatched: dispatched,
+      },
     });
   }
   return {

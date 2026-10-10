@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { AtritoPanel } from "./AtritoPanel";
+import { CommercialCharts } from "./CommercialCharts";
+import { Button } from "@/components/ui/button";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -47,20 +49,39 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
   const t = useT();
   const [owner, setOwner] = useState<string>(ALL);
   const selectedOwner = owner === ALL ? null : owner;
-  const { data, isLoading, isError } = useAttendantMetrics(selectedOwner);
+  const [days, setDays] = useState(30);
+  const { data, isLoading, isError, refetch } = useAttendantMetrics(selectedOwner, days);
   // Opções do filtro: só manager+ (a rota /team é manager+). Agent nem vê o filtro.
   const team = useTeamMembers({ enabled: canCompare });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
   if (isError || !data)
-    return <p className="text-sm text-destructive">{t("Erro ao carregar métricas.")}</p>;
+    return (
+      <div role="alert" className="space-y-3">
+        <p className="text-sm text-destructive">{t("Erro ao carregar métricas.")}</p>
+        <Button onClick={() => void refetch()}>{t("Tentar novamente")}</Button>
+      </div>
+    );
 
   const metrics = data.data;
-  const funnelTotal = metrics.funnel.reduce((acc, s) => acc + s.count, 0);
-  const maxCount = Math.max(1, ...metrics.funnel.map((s) => s.count));
 
   return (
     <div className="flex flex-col gap-6">
+      <label className="flex items-center gap-3 text-sm">
+        {t("Período")}
+        <select
+          aria-label={t("Período")}
+          className="h-10 rounded-md border bg-background px-3"
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+        >
+          {[7, 30, 90].map((n) => (
+            <option key={n} value={n}>
+              {t("Últimos")} {n} {t("dias")}
+            </option>
+          ))}
+        </select>
+      </label>
       {canCompare ? (
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{t("Atendente")}</span>
@@ -88,33 +109,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           Não filtra por atendente — atrito é propriedade do sistema, e quebrá-lo
           por pessoa convida a otimização local que degrada o todo. */}
       <AtritoPanel podeEditarRegua={canCompare} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("Funil")} {selectedOwner ? t("do atendente") : ""} · {funnelTotal}{" "}
-            {funnelTotal === 1 ? t("aberto") : t("abertos")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {metrics.funnel.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("Nenhuma etapa configurada.")}</p>
-          ) : (
-            metrics.funnel.map((s) => (
-              <div key={s.stage_id} className="flex items-center gap-3">
-                <span className="w-40 shrink-0 truncate text-sm">{s.stage_name}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${(s.count / maxCount) * 100}%` }}
-                  />
-                </div>
-                <span className="w-8 shrink-0 text-right text-sm tabular-nums">{s.count}</span>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <CommercialCharts metrics={metrics} />
 
       <Card>
         <CardHeader>

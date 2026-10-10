@@ -4,12 +4,12 @@ import {
   assertCommercialAccess,
   assertPricedModel,
   CommercialAiError,
-  platformKey,
   type ManagedSettings,
 } from "./managed-ai";
 import type { ModelPrice } from "@/lib/ai/model-price";
 import { env } from "@/lib/env";
 import { currentExecutionJob } from "@/lib/atendimento/fronteira-server";
+import { platformKeyServer } from "./platform-credentials";
 
 export async function managedSettings(
   org: string,
@@ -23,7 +23,13 @@ export async function managedSettings(
     .maybeSingle();
   if (error) throw new CommercialAiError("ai_account_unavailable");
   if (!account) throw new CommercialAiError("ai_account_unavailable");
-  if (account.mode === "legacy") return null;
+  const { data: settings, error: settingsError } = await admin
+    .from("platform_ai_settings")
+    .select("*")
+    .eq("id", true)
+    .single();
+  if (settingsError) throw new CommercialAiError("ai_platform_unavailable");
+  if (account.mode === "legacy" && !settings.apply_to_all) return null;
   const execution = currentExecutionJob();
   const { error: accessError } = await admin.rpc("fn_ai_check_access", {
     p_org: org,
@@ -32,15 +38,10 @@ export async function managedSettings(
   });
   if (accessError) throw new CommercialAiError(accessError.message);
   assertCommercialAccess(account, purpose);
-  const { data: settings, error: settingsError } = await admin
-    .from("platform_ai_settings")
-    .select("*")
-    .eq("id", true)
-    .single();
   if (settingsError || !settings.enabled || !settings.provider || !settings.model)
     throw new CommercialAiError("ai_platform_unavailable");
   const purposes = settings.purpose_models as ManagedSettings["purpose_models"];
-  const selected = purposes?.[purpose];
+  const selected = settings.apply_to_all ? undefined : purposes?.[purpose];
   if (selected && !selected.enabled) throw new CommercialAiError("ai_purpose_unavailable");
   const embedding = purpose === "embedding_indexar" || purpose === "embedding_consultar";
   const transcription = purpose === "transcricao_de_audio";
@@ -51,7 +52,9 @@ export async function managedSettings(
       : transcription
         ? "whisper-1"
         : purpose === "operator_turn"
-          ? (settings.operator_model ?? settings.model)
+          ? settings.apply_to_all
+            ? settings.model
+            : (settings.operator_model ?? settings.model)
           : settings.model);
   const provider =
     selected?.provider ?? (embedding || transcription ? "openai" : settings.provider);
@@ -69,14 +72,15 @@ export async function managedSettings(
     return {
       ...settings,
       purpose_models: purposes,
+      commercially_managed: account.mode === "platform",
       provider,
       model,
-      api_key: platformKey(provider, llmEdgeConfigFromEnv(env)),
+      api_key: await platformKeyServer(provider, llmEdgeConfigFromEnv(env)),
     };
   const { data: price } = await admin
     .from("ai_models")
     .select(
-      "input_price_per_million_cents,output_price_per_million_cents,cache_read_price_per_million_cents,cache_write_price_per_million_cents,pricing_verified_at,pricing_source",
+      "input_price_per_million_cents,output_price_per_million_cents,cache_read_price_per_million_cents,cache_write_price_per_million_cents,pricing_verified_at,pricing_source,long_context_pricing",
     )
     .eq("provider", provider)
     .eq("model_id", model)
@@ -91,15 +95,17 @@ export async function managedSettings(
           cache_write: price.cache_write_price_per_million_cents,
           verified_at: price.pricing_verified_at,
           source: price.pricing_source,
+          long_context: price.long_context_pricing,
         } satisfies ModelPrice)
       : null,
   );
   return {
     ...settings,
     purpose_models: purposes,
+    commercially_managed: account.mode === "platform",
     provider,
     model,
-    api_key: platformKey(provider, llmEdgeConfigFromEnv(env)),
+    api_key: await platformKeyServer(provider, llmEdgeConfigFromEnv(env)),
   };
 }
 

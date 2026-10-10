@@ -94,7 +94,11 @@ describe("o endpoint próprio chega até a fábrica", () => {
     // A assinatura precisa aceitar baseUrl, senão `ai_purpose_bindings.base_url`
     // seria uma coluna que a tela preenche e o runtime ignora — configuração
     // que não configura nada.
-    const modelo = registry["openrouter"]!("chave-de-teste", "meta-llama/llama-3.3-70b-instruct", "https://gateway.exemplo/v1");
+    const modelo = registry["openrouter"]!(
+      "chave-de-teste",
+      "meta-llama/llama-3.3-70b-instruct",
+      "https://gateway.exemplo/v1",
+    );
     expect(modelo).toBeDefined();
   });
 
@@ -264,7 +268,7 @@ describe("a corrente inteira: lista × execução × tela", () => {
     expect(() => buildModel("provedor-que-nao-existe", "k", "m")).toThrow(/unsupported_provider/);
   });
 
-  it("a tela do agente DERIVA a lista, em vez de repetir os provedores à mão", async () => {
+  it("a tela do agente não oferece provedores ao cliente do SaaS", async () => {
     // Guarda de construção: enquanto o seletor for montado a partir de
     // PROVEDORES, "a tela oferece todos" é verdade por construção e o
     // invariante do topo deste arquivo passa a valer para o que se vê.
@@ -279,6 +283,6 @@ describe("a corrente inteira: lista × execução × tela", () => {
       literais,
       "o seletor voltou a listar provedores à mão — o próximo provedor da lista nasce invisível na tela",
     ).toEqual([]);
-    expect(fonte).toMatch(/from "@\/lib\/ai\/pontos\/provedores"/);
+    expect(fonte).not.toMatch(/<CredentialPicker|<ModelPicker/);
   });
 });

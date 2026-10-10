@@ -10,24 +10,28 @@ import {
 } from "@/components/ui/select";
 import { useAdminUsers, type AdminUsersFilters } from "@/hooks/useAdminUsers";
 import { useAdminTenants } from "@/hooks/useAdminTenants";
-import {
-  UsersTableAdmin,
-  UsersTableAdminSkeleton,
-} from "@/components/admin/users/UsersTableAdmin";
+import { UsersTableAdmin, UsersTableAdminSkeleton } from "@/components/admin/users/UsersTableAdmin";
 import { useT } from "@/hooks/i18n/useT";
+import { InviteUser } from "@/components/admin/users/InviteUser";
+import { Button } from "@/components/ui/button";
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function UsersClient() {
+export function UsersClient({ canManage = false }: { canManage?: boolean }) {
   const t = useT();
   const [filters, setFilters] = useState<AdminUsersFilters>({});
   const [inputValue, setInputValue] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load tenants for the tenant select filter
-  const { data: tenantsData } = useAdminTenants({});
+  const {
+    data: tenantsData,
+    hasNextPage: hasMoreTenants,
+    fetchNextPage: fetchMoreTenants,
+    isFetchingNextPage: loadingTenants,
+  } = useAdminTenants({});
   const tenants = (tenantsData?.pages ?? [])
     .flatMap((p) => p.data ?? [])
     .map((t) => ({ id: t.id, slug: t.slug, display_name: t.display_name }));
@@ -38,16 +42,13 @@ export function UsersClient() {
   const rows = data?.pages.flatMap((p) => p.data ?? []) ?? [];
   const total = rows.length;
 
-  const handleSearch = useCallback(
-    (value: string) => {
-      setInputValue(value);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        setFilters((prev) => ({ ...prev, q: value || undefined }));
-      }, 300);
-    },
-    [],
-  );
+  const handleSearch = useCallback((value: string) => {
+    setInputValue(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, q: value || undefined }));
+    }, 300);
+  }, []);
 
   const handleTenant = useCallback((value: string) => {
     setFilters((prev) => ({
@@ -59,10 +60,7 @@ export function UsersClient() {
   const handleRole = useCallback((value: string) => {
     setFilters((prev) => ({
       ...prev,
-      role:
-        value === "all"
-          ? undefined
-          : (value as AdminUsersFilters["role"]),
+      role: value === "all" ? undefined : (value as AdminUsersFilters["role"]),
     }));
   }, []);
 
@@ -71,7 +69,7 @@ export function UsersClient() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{t("Usuários")}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="mt-1 text-sm text-muted-foreground">
           {isLoading
             ? t("Carregando...")
             : `${total} ${total !== 1 ? t("usuários") : t("usuário")}${hasNextPage ? "+" : ""}`}
@@ -79,7 +77,13 @@ export function UsersClient() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+      {canManage && <InviteUser tenants={tenants} />}
+      {hasMoreTenants && (
+        <Button variant="outline" disabled={loadingTenants} onClick={() => void fetchMoreTenants()}>
+          {loadingTenants ? t("Carregando...") : t("Carregar mais empresas")}
+        </Button>
+      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           placeholder={t("Buscar por email ou nome...")}
           value={inputValue}
@@ -88,10 +92,7 @@ export function UsersClient() {
           aria-label={t("Buscar usuários")}
         />
 
-        <Select
-          value={filters.tenant_id ?? "all"}
-          onValueChange={handleTenant}
-        >
+        <Select value={filters.tenant_id ?? "all"} onValueChange={handleTenant}>
           <SelectTrigger className="sm:w-52" aria-label={t("Filtrar por tenant")}>
             <SelectValue placeholder="Tenant" />
           </SelectTrigger>

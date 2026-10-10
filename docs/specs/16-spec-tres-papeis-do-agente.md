@@ -1,5 +1,7 @@
 # Spec 16 — Os três papéis do agente
 
+Atualização confirmada em 09/10/2026: os papéis e suas capacidades continuam separados; clientes deixam de selecionar seus modelos. Atendimento, organizador e classificações herdam a seleção da plataforma quando a conexão global se aplica à conta. Os modelos específicos de documentos e áudio permanecem internos. Ver [experiência SaaS](experiencia-saas.md).
+
 > Executa [`docs/doctrine/separacao-fala-e-operacao.md`](../doctrine/separacao-fala-e-operacao.md),
 > agora com o número medido e as decisões de produto fechadas.
 > Doutrina irmã: [`sistema-vivo.md`](../doctrine/sistema-vivo.md).

@@ -1,6 +1,6 @@
 /**
  * G4-02 — Inbox com escopo (acceptance 1 e 4). Prova que a visão 'Todas' é
- * ocultada para `agent` em modo own* e visível para manager/admin/viewer, e que
+ * visível para todos os papéis, sempre limitada pela RLS, e que
  * as contagens por visão são renderizadas a partir do hook RLS-scoped
  * (useConversationCounts → /api/v1/conversations/counts, client user-scoped).
  *
@@ -16,7 +16,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { InboxFilters, visibleInboxTabs, type InboxFiltersValue } from "@/components/inbox/InboxFilters";
+import {
+  InboxFilters,
+  visibleInboxTabs,
+  type InboxFiltersValue,
+} from "@/components/inbox/InboxFilters";
 import type * as CanaisModule from "@/hooks/channels/useChannelSessions";
 import type { ChannelSession } from "@/hooks/channels/useChannelSessions";
 import type { ActiveOrg } from "@/lib/auth/types";
@@ -73,11 +77,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("visibleInboxTabs (lógica pura de visões)", () => {
-  it("agent em own_and_unassigned NÃO vê 'all'", () => {
-    expect(visibleInboxTabs("agent", "own_and_unassigned")).not.toContain("all");
+  it("agent em own_and_unassigned vê 'all' dentro do próprio escopo", () => {
+    expect(visibleInboxTabs("agent", "own_and_unassigned")).toContain("all");
   });
-  it("agent em 'own' NÃO vê 'all'", () => {
-    expect(visibleInboxTabs("agent", "own")).not.toContain("all");
+  it("agent em 'own' vê 'all' dentro do próprio escopo", () => {
+    expect(visibleInboxTabs("agent", "own")).toContain("all");
   });
   it("agent em 'all' VÊ 'all'", () => {
     expect(visibleInboxTabs("agent", "all")).toContain("all");
@@ -98,12 +102,12 @@ describe("visibleInboxTabs (lógica pura de visões)", () => {
 });
 
 describe("InboxFilters render — 3 visões + escopo", () => {
-  it("agent em modo own*: mostra Minhas e Fila, esconde Todas", () => {
+  it("agent em modo own*: mostra Todas, Minhas e Fila dentro do escopo", () => {
     setOrg("agent", "own_and_unassigned");
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
     expect(screen.getByRole("tab", { name: /Minhas/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Fila/ })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Todas/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Todas/ })).toBeInTheDocument();
   });
 
   it("manager: mostra Todas", () => {
@@ -146,7 +150,10 @@ describe("InboxFilters — seletor de número e o filtro órfão", () => {
     setOrg("manager", "all");
     canaisRef.current = [canal()];
     render(
-      <InboxFilters value={{ ...VALUE, channel_session_id: "canal-excluido" }} onChange={() => {}} />,
+      <InboxFilters
+        value={{ ...VALUE, channel_session_id: "canal-excluido" }}
+        onChange={() => {}}
+      />,
     );
     const seletor = screen.getByLabelText(SELETOR);
     expect(seletor).toBeInTheDocument();
@@ -156,7 +163,9 @@ describe("InboxFilters — seletor de número e o filtro órfão", () => {
   it("filtro que casa com a lista: nada de 'Número removido'", () => {
     setOrg("manager", "all");
     canaisRef.current = [canal(), canal({ id: "canal-2", display_name: "Suporte" })];
-    render(<InboxFilters value={{ ...VALUE, channel_session_id: "canal-2" }} onChange={() => {}} />);
+    render(
+      <InboxFilters value={{ ...VALUE, channel_session_id: "canal-2" }} onChange={() => {}} />,
+    );
     const seletor = screen.getByLabelText(SELETOR);
     expect(seletor).toHaveTextContent("Suporte");
     expect(seletor).not.toHaveTextContent("Número removido");

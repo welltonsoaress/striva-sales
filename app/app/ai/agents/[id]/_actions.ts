@@ -17,12 +17,13 @@
  * aqui chamamos os handlers internos para reusar a lógica.
  */
 import { randomUUID } from "node:crypto";
+import { applyAgentConnection } from "@/lib/ai/agents/platform-connection";
 import { guardAgentCredential, guardNewAgentCredential } from "@/lib/ai/agents/credential-access";
 import { revalidatePath } from "next/cache";
 
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { ROLE_RANK } from "@/lib/auth/types";
+import { requireRole } from "@/lib/auth/require-role";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import {
@@ -42,18 +43,22 @@ const VERSION_COLUMNS =
   "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_prompt, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin";
 
 type ActionResult<T = void> =
-  | { ok: true; data?: T }
-  | { ok: false; error: string; message?: string; details?: unknown };
+  { ok: true; data?: T } | { ok: false; error: string; message?: string; details?: unknown };
 
 async function ensureAdmin() {
-  const authUser = await loadAuthUser();
-  if (!authUser) return { ok: false as const, error: "unauthenticated" };
-  const activeOrg = await resolveActiveOrg(authUser);
-  if (!activeOrg) return { ok: false as const, error: "forbidden_tenant" };
-  if (ROLE_RANK[activeOrg.role] < ROLE_RANK.admin) {
-    return { ok: false as const, error: "forbidden_role" };
+  const denied = await requireSupportWrite();
+  const authz = denied
+    ? { ok: false as const, response: denied }
+    : await requireRole("admin", { resource: "ai_agents" });
+  if (!authz.ok) {
+    const body = await authz.response.json();
+    return {
+      ok: false as const,
+      error: body.error.code as string,
+      message: body.error.message as string,
+    };
   }
-  return { ok: true as const, authUser, activeOrg };
+  return { ok: true as const, authUser: authz.user, activeOrg: authz.org };
 }
 
 // ---------------------------------------------------------------------------
@@ -140,15 +145,24 @@ export async function saveAgentDraftAction(
   // nome já trocado — a lista mostrando o novo e o editor o velho.
   // `agentMcpPatchSchema` é a régua que a rota REST já usa: uma quarta régua
   // para o mesmo campo é o defeito seguinte.
-  const cadastroParsed =
-    cadastro === undefined ? null : agentMcpPatchSchema.safeParse(cadastro);
+  const cadastroParsed = cadastro === undefined ? null : agentMcpPatchSchema.safeParse(cadastro);
   if (cadastroParsed && !cadastroParsed.success) {
     return { ok: false, error: "validation_failed", details: cadastroParsed.error.flatten() };
   }
 
-  const v = parsed.data;
+  const v = await applyAgentConnection(activeOrg.orgId, parsed.data).catch(() => null);
+  if (!v)
+    return {
+      ok: false,
+      error: "state_conflict",
+      message: "A plataforma precisa configurar a conexão de IA antes de criar ou editar agentes.",
+    };
   if (await guardAgentCredential(activeOrg.orgId, agentId, v.credential_id))
-    return { ok: false, error: "forbidden", message: "A conexão de IA é administrada pela plataforma." };
+    return {
+      ok: false,
+      error: "forbidden",
+      message: "A conexão de IA é administrada pela plataforma.",
+    };
   const requestId = randomUUID();
   const admin = createAdminClient();
 
@@ -220,7 +234,7 @@ export async function saveAgentDraftAction(
 
   if (existingDraft) {
     // PATCH na draft existente — não infla a sequência de versions.
-    const patchValidated = versionPatchSchema.safeParse(payload);
+    const patchValidated = versionPatchSchema.safeParse(v);
     if (!patchValidated.success) {
       return { ok: false, error: "validation_failed", details: patchValidated.error.flatten() };
     }
@@ -494,7 +508,12 @@ export async function revertToVersionAction(
     .maybeSingle();
   if (!source) return { ok: false, error: "version_not_found" };
   if (await guardAgentCredential(activeOrg.orgId, agentId, source.credential_id))
-    return { ok: false, error: "forbidden", message: "A versão anterior usa outra conexão de IA. Peça à plataforma para conferir antes de restaurar." };
+    return {
+      ok: false,
+      error: "forbidden",
+      message:
+        "A versão anterior usa outra conexão de IA. Peça à plataforma para conferir antes de restaurar.",
+    };
 
   // Espelha tool_id check do publish.
   const tools = ((source as { tool_ids: string[] | null }).tool_ids ?? []) as string[];
@@ -676,12 +695,34 @@ export async function createMcpAgentAction(
     return { ok: false, error: "validation_failed", details: parsed.error.flatten() };
   }
 
+  const connection = await applyAgentConnection(activeOrg.orgId, parsed.data.version).catch(
+    () => null,
+  );
+  if (!connection)
+    return {
+      ok: false,
+      error: "state_conflict",
+      message: "A plataforma precisa configurar a conexão de IA antes de criar agentes.",
+    };
+  parsed.data.version = connection;
   const requestId = randomUUID();
   const admin = createAdminClient();
+  const scope = await validarEscopoDaVersao(admin, activeOrg.orgId, parsed.data.version);
+  if (!scope.ok) return { ok: false, error: "validation_failed", message: mensagemDoEscopo(scope) };
 
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
-  if (await guardNewAgentCredential(parsed.data.version.credential_id, activeOrg.orgId, parsed.data.version))
-    return { ok: false, error: "forbidden", message: "A conexão de IA é administrada pela plataforma." };
+  if (
+    await guardNewAgentCredential(
+      parsed.data.version.credential_id,
+      activeOrg.orgId,
+      parsed.data.version,
+    )
+  )
+    return {
+      ok: false,
+      error: "forbidden",
+      message: "A conexão de IA é administrada pela plataforma.",
+    };
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
     .insert({
@@ -725,12 +766,13 @@ export async function createMcpAgentAction(
     cases_enabled: v.cases_enabled,
     split_messages: v.split_messages,
     split_max_chars: v.split_max_chars,
+    followup: v.followup,
     // O corpo ACEITAVA estes cinco e o INSERT os descartava: criar o assistente
     // pela tela com papel Operador, escopo de funil ou material marcado produzia
     // uma versão com tudo no default do banco — desligado e vazio.
     operator_enabled: v.operator_enabled,
     operator_model: v.operator_model,
-        operator_prompt: v.operator_prompt,
+    operator_prompt: v.operator_prompt,
     operator_tool_ids: v.operator_tool_ids,
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,

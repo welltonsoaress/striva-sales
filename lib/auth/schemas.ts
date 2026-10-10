@@ -24,6 +24,9 @@ export const organizationNameSchema = z
 export const signupSchema = z
   .object({
     org_name: organizationNameSchema,
+    accepted_terms: z
+      .boolean()
+      .refine((value) => value, "Confirme os Termos de Uso e a Política de Privacidade"),
     business_segment: z.enum(BUSINESS_SEGMENTS).optional(),
     avatar_id: z.enum(AVATAR_IDS).optional(),
     email: z.string().email("Email inválido"),
@@ -60,6 +63,9 @@ export const signupComConviteSchema = z
      * inventar o próprio remendo para a ausência.
      */
     full_name: z.string().trim().min(2, "Informe seu nome").max(120),
+    accepted_terms: z
+      .boolean()
+      .refine((value) => value, "Confirme os Termos de Uso e a Política de Privacidade"),
     avatar_id: z.enum(AVATAR_IDS).optional(),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),

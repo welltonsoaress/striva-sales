@@ -502,7 +502,7 @@ export type Database = {
         Row: {
           agent_id: string;
           cases_enabled: boolean;
-          channel_session_id: string;
+          channel_session_id: string | null;
           cost_budget_cents: number;
           created_at: string;
           created_by: string | null;
@@ -541,7 +541,7 @@ export type Database = {
         Insert: {
           agent_id: string;
           cases_enabled?: boolean;
-          channel_session_id: string;
+          channel_session_id?: string | null;
           cost_budget_cents?: number;
           created_at?: string;
           created_by?: string | null;
@@ -579,7 +579,7 @@ export type Database = {
         Update: {
           agent_id?: string;
           cases_enabled?: boolean;
-          channel_session_id?: string;
+          channel_session_id?: string | null;
           cost_budget_cents?: number;
           created_at?: string;
           created_by?: string | null;
@@ -1277,6 +1277,7 @@ export type Database = {
           id: string;
           input_price_per_million_cents: number | null;
           is_default_for_provider: boolean;
+          long_context_pricing: Json | null;
           metadata: NonNullable<Json>;
           model_id: string;
           output_price_per_million_cents: number | null;
@@ -1302,6 +1303,7 @@ export type Database = {
           id?: string;
           input_price_per_million_cents?: number | null;
           is_default_for_provider?: boolean;
+          long_context_pricing?: Json | null;
           metadata?: NonNullable<Json>;
           model_id: string;
           output_price_per_million_cents?: number | null;
@@ -1326,6 +1328,7 @@ export type Database = {
           id?: string;
           input_price_per_million_cents?: number | null;
           is_default_for_provider?: boolean;
+          long_context_pricing?: Json | null;
           metadata?: NonNullable<Json>;
           model_id?: string;
           output_price_per_million_cents?: number | null;
@@ -8008,8 +8011,37 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_ai_credentials: {
+        Row: {
+          ciphertext: string;
+          iv: string;
+          last4: string;
+          provider: string;
+          tag: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          ciphertext: string;
+          iv: string;
+          last4: string;
+          provider: string;
+          tag: string;
+          updated_at?: string;
+        };
+        Update: {
+          ciphertext?: string;
+          iv?: string;
+          last4?: string;
+          provider?: string;
+          tag?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       platform_ai_settings: {
         Row: {
+          apply_to_all: boolean;
           enabled: boolean;
           id: boolean;
           max_output_tokens: number;
@@ -8026,6 +8058,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          apply_to_all?: boolean;
           enabled?: boolean;
           id?: boolean;
           max_output_tokens?: number;
@@ -8041,6 +8074,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          apply_to_all?: boolean;
           enabled?: boolean;
           id?: boolean;
           max_output_tokens?: number;
@@ -9926,11 +9960,26 @@ export type Database = {
         Args: { p_end: string; p_limit?: number; p_offset?: number; p_start: string };
         Returns: Json;
       };
+      fn_admin_manage_user_access: {
+        Args: { p_actor: string; p_org: string; p_revoke: boolean; p_role: string; p_user: string };
+        Returns: undefined;
+      };
       fn_admin_publish_credit_pack: {
         Args: { p_actor: string; p_id: string; p_reason: string };
         Returns: undefined;
       };
       fn_admin_saas_overview: { Args: Record<PropertyKey, never>; Returns: Json };
+      fn_admin_set_commercial_plan: {
+        Args: {
+          p_actor: string;
+          p_org: string;
+          p_plan: string;
+          p_reason: string;
+          p_reference: string;
+          p_until: string;
+        };
+        Returns: undefined;
+      };
       fn_agenda_minutes: {
         Args: { p_default: number; p_key: string; p_settings: Json };
         Returns: number;
@@ -10569,6 +10618,7 @@ export type Database = {
         Args: { p_conversation: string; p_org: string; p_reason: string };
         Returns: undefined;
       };
+      fn_seed_lead_recovery: { Args: { p_org: string }; Returns: undefined };
       fn_semear_tipos_de_agendamento: { Args: { p_organization_id: string }; Returns: number };
       fn_service_begin: {
         Args: { p_contact: string; p_observed?: Json; p_org: string; p_session?: string };

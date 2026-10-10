@@ -20,6 +20,8 @@ import { RefreshUsage } from "@/components/billing/RefreshUsage";
 import { ResponseBalance } from "@/components/billing/ResponseBalance";
 import { CreditPacks } from "@/components/billing/CreditPacks";
 import { planPricing } from "@/lib/billing/pricing";
+import { CurrentPlan } from "@/components/billing/CurrentPlan";
+import { countActiveMessagingChannels } from "@/lib/channels/selectable";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Faturamento" };
@@ -42,12 +44,33 @@ export default async function BillingPage({
   ]);
   const query = await searchParams;
   const proposalId = z.string().uuid().safeParse(query.proposal);
-  const { data: proposal } = proposalId.success ? await createAdminClient().from("billing_checkouts")
-    .select("id,plan_id,price_cents,billing_interval,transaction_code")
-    .eq("organization_id", org.orgId).eq("id", proposalId.data).not("change_request_id", "is", null).maybeSingle() : { data: null };
+  const { data: proposal } = proposalId.success
+    ? await createAdminClient()
+        .from("billing_checkouts")
+        .select("id,plan_id,price_cents,billing_interval,transaction_code")
+        .eq("organization_id", org.orgId)
+        .eq("id", proposalId.data)
+        .not("change_request_id", "is", null)
+        .maybeSingle()
+    : { data: null };
 
   const { account: commercial, checked_at, usage } = creditSnapshot;
-  const paidActive = commercial?.mode === "platform" && commercial.state === "active" && !!commercial.access_until && Date.parse(commercial.access_until) > checked_at;
+  const db = createAdminClient();
+  const [members, numbers] = await Promise.all([
+    db
+      .from("user_organizations")
+      .select("user_id", { count: "exact", head: true })
+      .eq("organization_id", org.orgId)
+      .is("revoked_at", null)
+      .not("accepted_at", "is", null),
+    countActiveMessagingChannels(db, org.orgId),
+  ]);
+  const currentPlan = catalog.plans.find((plan) => plan.id === commercial?.plan_id);
+  const paidActive =
+    commercial?.mode === "platform" &&
+    commercial.state === "active" &&
+    !!commercial.access_until &&
+    Date.parse(commercial.access_until) > checked_at;
   const selected = catalog.plans.find((plan) => plan.id === query.plan);
   const period =
     selected?.billing_interval === "year" || (!selected && query.period === "year")
@@ -60,21 +83,54 @@ export default async function BillingPage({
     <div className="mx-auto w-full max-w-6xl space-y-8 px-5 py-8 md:px-8">
       <header className="space-y-3">
         <Receipt size={28} className="text-primary" />
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Faturamento")}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("Meu plano")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("Planos, consumo e condições da sua contratação.")}
         </p>
       </header>
       {query.payment && <PaymentStatus />}
-      {proposal && !proposal.transaction_code && <section className="space-y-3 rounded-xl border border-primary p-5">
-        <h2 className="text-lg font-semibold">{t("Proposta de troca de plano")}</h2>
-        <p>{catalog.plans.find(p => p.id === proposal.plan_id)?.name} · {t(proposal.billing_interval === "year" ? "1 ano" : "6 meses")}</p>
-        <p><strong>{t("Total do período:")} {new Intl.NumberFormat(user.idioma, { style: "currency", currency: "BRL" }).format(Number(proposal.price_cents) / 100)}</strong></p>
-        <p className="text-sm text-muted-foreground">{t("Confira as condições acertadas com a equipe da plataforma antes de pagar. Seu plano só muda após a confirmação do pagamento.")}</p>
-        {env.HOTMART_CHECKOUT_ENABLED === "true" && env.HOTMART_HOTTOK && catalog.plans.some(plan => plan.id === proposal.plan_id && plan.checkout_available)
-          ? <CheckoutButton proposalId={proposal.id} label={t("Aceitar proposta e pagar")} />
-          : <p role="status" className="text-sm text-muted-foreground">{t("Contratação indisponível no momento. A equipe está concluindo a liberação das ofertas.")}</p>}
-      </section>}
+      <CurrentPlan
+        account={commercial}
+        plan={currentPlan}
+        users={members.error ? null : members.count}
+        channels={numbers.error ? null : numbers.count}
+        t={t}
+        locale={user.idioma}
+        timezone={user.timezone ?? "UTC"}
+      />
+      {proposal && !proposal.transaction_code && (
+        <section className="space-y-3 rounded-xl border border-primary p-5">
+          <h2 className="text-lg font-semibold">{t("Proposta de troca de plano")}</h2>
+          <p>
+            {catalog.plans.find((p) => p.id === proposal.plan_id)?.name} ·{" "}
+            {t(proposal.billing_interval === "year" ? "1 ano" : "6 meses")}
+          </p>
+          <p>
+            <strong>
+              {t("Total do período:")}{" "}
+              {new Intl.NumberFormat(user.idioma, { style: "currency", currency: "BRL" }).format(
+                Number(proposal.price_cents) / 100,
+              )}
+            </strong>
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Confira as condições acertadas com a equipe da plataforma antes de pagar. Seu plano só muda após a confirmação do pagamento.",
+            )}
+          </p>
+          {env.HOTMART_CHECKOUT_ENABLED === "true" &&
+          env.HOTMART_HOTTOK &&
+          catalog.plans.some((plan) => plan.id === proposal.plan_id && plan.checkout_available) ? (
+            <CheckoutButton proposalId={proposal.id} label={t("Aceitar proposta e pagar")} />
+          ) : (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t(
+                "Contratação indisponível no momento. A equipe está concluindo a liberação das ofertas.",
+              )}
+            </p>
+          )}
+        </section>
+      )}
       <ResponseBalance account={commercial} checkedAt={checked_at} />
       <section className="space-y-3 rounded-lg border bg-card p-6">
         <h2 className="text-lg font-semibold">{t("Sua contratação")}</h2>
@@ -135,10 +191,19 @@ export default async function BillingPage({
             </p>
           </div>
         ))}
-        {paidActive && <div className="space-y-3 border-t pt-4">
-          <p className="text-sm text-muted-foreground">{t("A equipe da plataforma confirma o valor da troca antes de efetivá-la. Sua solicitação não gera uma nova cobrança.")}</p>
-          <div className="flex flex-wrap gap-3"><PlanChangeButton intent="renew" /><PlanChangeButton intent="cancel" /></div>
-        </div>}
+        {paidActive && (
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "A equipe da plataforma confirma o valor da troca antes de efetivá-la. Sua solicitação não gera uma nova cobrança.",
+              )}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <PlanChangeButton intent="renew" />
+              <PlanChangeButton intent="cancel" />
+            </div>
+          </div>
+        )}
         {!account.contracts.length && (
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
             {t(
@@ -232,10 +297,14 @@ export default async function BillingPage({
                     </div>
                   ))}
                 </dl>
-                {paidActive ? <div className="mt-auto border-t pt-4"><PlanChangeButton planId={plan.id} /></div> : env.HOTMART_HOTTOK &&
-                env.HOTMART_CHECKOUT_ENABLED === "true" &&
-                plan.publication_state === "published" &&
-                plan.checkout_available ? (
+                {paidActive ? (
+                  <div className="mt-auto border-t pt-4">
+                    <PlanChangeButton planId={plan.id} />
+                  </div>
+                ) : env.HOTMART_HOTTOK &&
+                  env.HOTMART_CHECKOUT_ENABLED === "true" &&
+                  plan.publication_state === "published" &&
+                  plan.checkout_available ? (
                   <div className="mt-auto border-t pt-4">
                     <CheckoutButton planId={plan.id} />
                   </div>
@@ -384,9 +453,11 @@ export default async function BillingPage({
                 {t("Parte do consumo não tem custo registrado. O valor exibido é parcial.")}
               </p>
             )}
-            <Button asChild variant="outline">
-              <Link href="/app/ai/usage">{t("Ver detalhes do uso")}</Link>
-            </Button>
+            {user.is_platform_admin && !user.support && (
+              <Button asChild variant="outline">
+                <Link href="/app/ai/usage">{t("Ver detalhes do uso")}</Link>
+              </Button>
+            )}
           </div>
         )}
         <CreditPacks account={commercial} idioma={user.idioma} />

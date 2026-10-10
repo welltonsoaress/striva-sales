@@ -35,7 +35,7 @@ const TELAS = [
   { rota: "/app/ai/knowledge/sources", nome: "acervo-de-conhecimento", dono: "W5" },
   { rota: "/app/ai/skills", nome: "habilidades", dono: "W5" },
   { rota: "/app/ai/memory", nome: "memoria-da-organizacao", dono: "W5" },
-  { rota: "/app/ai/usage", nome: "consumo", dono: "W1" },
+  { rota: "/app/settings/billing", nome: "meu-plano", dono: "W1" },
   { rota: "/app/ai/inbox", nome: "caixa-do-humano", dono: "W3" },
   { rota: "/app/ai/routers", nome: "roteadores", dono: "W3" },
   { rota: "/app/ai/agents/new", nome: "criar-agente", dono: "W1" },
@@ -51,11 +51,8 @@ test.beforeAll(async () => {
   // Este arquivo afirma ALCANCE: que estas telas abrem para uma pessoa. Alcance
   // medido com um usuário promovido a dono do servidor seria alcance emprestado.
   //
-  // ⚠️ Medido: as 7 rotas de `TELAS` são todas `/app/ai/*`, gateadas em
-  // `ROLE_RANK < manager` — um admin de tenant já passa por rank, e a promoção
-  // não muda o desfecho hoje. Ela mudaria no instante em que a lista ganhasse
-  // uma tela exclusiva do dono (`/app/settings/atualizacao` faz `notFound()` sem
-  // a flag), e é esse acréscimo silencioso que a precondição barra.
+  // Consumo técnico passou a ser exclusivo da plataforma. O cliente acompanha
+  // seus limites em Meu plano; as demais telas continuam acessíveis ao tenant.
   await afirmarAdminDeTenantPuro(creds.users.admin!.email);
 });
 
@@ -97,7 +94,12 @@ test.describe("as telas do épico abrem para uma pessoa", () => {
       await page.waitForTimeout(800);
 
       const status = resp?.status() ?? 0;
-      const texto = (await page.locator("body").innerText().catch(() => ""))
+      const texto = (
+        await page
+          .locator("body")
+          .innerText()
+          .catch(() => "")
+      )
         .replace(/\s+/g, " ")
         .trim();
 

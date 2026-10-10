@@ -61,6 +61,21 @@ const ORG = "33333333-3333-4333-8333-333333333333";
 const AGENTE = "44444444-4444-4444-8444-444444444444";
 const CREDENCIAL = "11111111-1111-4111-8111-111111111111";
 const CANAL = "22222222-2222-4222-8222-222222222222";
+vi.mock("@/lib/auth/require-role", () => ({
+  requireRole: vi.fn(async () => ({
+    ok: true,
+    user: { id: "user-1" },
+    org: { orgId: ORG, role: "admin" },
+  })),
+}));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
+vi.mock("@/lib/ai/agents/inherited-connection", () => ({
+  inheritedAgentConnection: vi.fn(async () => ({
+    provider: "openai",
+    model: "gpt-6.1-sol",
+    credential_id: CREDENCIAL,
+  })),
+}));
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 // Estes cenários mantêm a conexão atual. A autorização de troca tem teste próprio.

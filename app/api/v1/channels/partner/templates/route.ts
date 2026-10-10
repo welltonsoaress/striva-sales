@@ -64,10 +64,16 @@ async function contexto(
   requestId: string,
 ): Promise<{ ok: true; ctx: Contexto } | { ok: false; res: Response }> {
   const user = await loadAuthUser();
+  if (user && (!user.is_platform_admin || user.support))
+    return {
+      ok: false,
+      res: fail("forbidden", "Este recurso é administrado pela plataforma.", 403),
+    };
   if (!user) return { ok: false, res: fail("unauthenticated", "Faça login.", 401, { requestId }) };
   const t = (texto: string) => traduzir(texto, user.idioma);
   const org = await resolveActiveOrg(user);
-  if (!org) return { ok: false, res: fail("forbidden", t("Sem organização ativa."), 403, { requestId }) };
+  if (!org)
+    return { ok: false, res: fail("forbidden", t("Sem organização ativa."), 403, { requestId }) };
 
   const admin = createAdminClient();
   const sessao = await findPartnerSession(admin, org.orgId);
@@ -92,7 +98,9 @@ async function contexto(
   if (!sessionRef) {
     return {
       ok: false,
-      res: fail("failed_precondition", t("Conexão sem identificador utilizável."), 409, { requestId }),
+      res: fail("failed_precondition", t("Conexão sem identificador utilizável."), 409, {
+        requestId,
+      }),
     };
   }
 

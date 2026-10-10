@@ -33,7 +33,7 @@ export async function POST(): Promise<Response> {
 
   const authz = await requireRole("admin", {
     requestId,
-    resource: "channel_sessions",
+    resource: "voice_sessions",
     allowPlatformAdmin: true,
   });
   if (!authz.ok) return authz.response;
@@ -95,7 +95,8 @@ export async function POST(): Promise<Response> {
           })
           .select("id")
           .single();
-        if (insertErr || !inserted) throw new Error(`channel_sessions insert: ${insertErr?.message}`);
+        if (insertErr || !inserted)
+          throw new Error(`channel_sessions insert: ${insertErr?.message}`);
         channelSessionId = (inserted as { id: string }).id;
       }
     }

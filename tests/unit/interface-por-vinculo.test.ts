@@ -17,7 +17,16 @@ const hrefs = (settings: unknown, role: "agent" | "admin" = "admin", platform = 
 describe("interface por vínculo é apresentação", () => {
   it("legado completa acompanha catálogo e não duplica IDs", () => {
     expect(hrefs(null)).toEqual(
-      NAV_CATALOG.filter((d) => d.href !== "/app/ai/credentials").map((d) => d.href),
+      NAV_CATALOG.filter(
+        (d) =>
+          ![
+            "/app/ai/credentials",
+            "/app/audit",
+            "/app/ai/runs",
+            "/app/ai/providers",
+            "/app/ai/usage",
+          ].includes(d.href),
+      ).map((d) => d.href),
     );
     expect(hrefs(null, "admin", true)).toEqual(NAV_CATALOG.map((d) => d.href));
     expect(new Set(NAV_CATALOG.map((d) => d.href)).size).toBe(NAV_CATALOG.length);
@@ -67,8 +76,12 @@ describe("interface por vínculo é apresentação", () => {
   it("Início é o padrão; seleção explícita respeita o papel e mantém portas essenciais", () => {
     expect(homeDaInterface(simplified, false, "agent")).toBe("/app/inicio");
     expect(homeDaInterface(complete, false, "admin")).toBe("/app/inicio");
-    expect(homeDaInterface({ preset: "simplificada", destinos: ["/app/tasks"] }, false, "agent")).toBe("/app/tasks");
-    expect(homeDaInterface({ preset: "completa", destinos: ["/app/settings/billing"] }, false, "agent")).toBe("/app/inicio");
+    expect(
+      homeDaInterface({ preset: "simplificada", destinos: ["/app/tasks"] }, false, "agent"),
+    ).toBe("/app/tasks");
+    expect(
+      homeDaInterface({ preset: "completa", destinos: ["/app/settings/billing"] }, false, "agent"),
+    ).toBe("/app/inicio");
     expect(hrefs(granular)).toContain("/app/inicio");
   });
   it("escrita recusa arbitrário/vazio; leitura remove obsoleto e degrada sem lançar", () => {

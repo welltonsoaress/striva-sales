@@ -18,6 +18,9 @@ export interface ManagedSettings {
   max_output_tokens: number;
   max_steps: number;
   monthly_cost_limit_cents: number;
+  apply_to_all?: boolean;
+  /** Padronizar a conexão não converte o contrato de uma conta legada. */
+  commercially_managed?: boolean;
   purpose_models?: Record<string, { provider: string; model: string; enabled: boolean }>;
   transcription_price_per_minute_cents?: number | null;
   transcription_pricing_source?: string | null;
@@ -58,10 +61,14 @@ export function platformKey(provider: string, cfg: LlmEdgeConfig): string {
   return key;
 }
 
-export function platformConfig(settings: ManagedSettings, cfg: LlmEdgeConfig): OrgLlmConfig {
+export function platformConfig(
+  settings: ManagedSettings,
+  cfg: LlmEdgeConfig,
+  apiKey?: string,
+): OrgLlmConfig {
   return {
     provider: settings.provider,
-    apiKey: platformKey(settings.provider, cfg),
+    apiKey: apiKey ?? platformKey(settings.provider, cfg),
     defaultModel: settings.model,
     enabledModels: [],
     params: { maxOutputTokens: settings.max_output_tokens },
@@ -83,8 +90,17 @@ export async function managedSettingsPg(
   );
   const account = rows[0];
   if (!account) throw new CommercialAiError("ai_account_unavailable");
-  if (account.mode === "legacy") return null;
-  if (account.mode !== "platform") throw new CommercialAiError("ai_account_unavailable");
+  if (!["platform", "legacy"].includes(account.mode))
+    throw new CommercialAiError("ai_account_unavailable");
+  const { rows: settings } = await db
+    .query<ManagedSettings & { enabled: boolean }>(
+      "select * from platform_ai_settings where id=true",
+    )
+    .catch(() => {
+      throw new CommercialAiError("ai_platform_unavailable");
+    });
+  const config = settings[0];
+  if (account.mode === "legacy" && !config?.apply_to_all) return null;
   try {
     await db.query("select fn_ai_check_access($1,$2,$3)", [org, purpose, job]);
   } catch (error) {
@@ -92,13 +108,10 @@ export async function managedSettingsPg(
     throw new CommercialAiError(/^ai_[a-z_]+$/.test(message) ? message : "ai_account_unavailable");
   }
   assertCommercialAccess(account, purpose);
-  const { rows: settings } = await db.query<ManagedSettings & { enabled: boolean }>(
-    "select * from platform_ai_settings where id=true",
-  );
-  const config = settings[0];
   if (!config?.enabled || !config.provider || !config.model)
     throw new CommercialAiError("ai_platform_unavailable");
-  const selected = config.purpose_models?.[purpose];
+  config.commercially_managed = account.mode === "platform";
+  const selected = config.apply_to_all ? undefined : config.purpose_models?.[purpose];
   if (selected && !selected.enabled) throw new CommercialAiError("ai_purpose_unavailable");
   return selected
     ? {
@@ -122,9 +135,10 @@ export async function modelPricePg(
     cache_write: string | null;
     verified_at?: string | null;
     source?: string | null;
+    long_context?: unknown;
   }>(
     `select input_price_per_million_cents as input,output_price_per_million_cents as output,
-      cache_read_price_per_million_cents as cache_read,cache_write_price_per_million_cents as cache_write,pricing_verified_at::text as verified_at,pricing_source as source
+      cache_read_price_per_million_cents as cache_read,cache_write_price_per_million_cents as cache_write,pricing_verified_at::text as verified_at,pricing_source as source,long_context_pricing as long_context
       from ai_models where provider=$1 and model_id=$2 and deprecated_at is null`,
     [provider, model],
   );
@@ -132,7 +146,11 @@ export async function modelPricePg(
   const rates = Object.fromEntries(
     Object.entries(rows[0]).map(([key, value]) => [
       key,
-      ["source", "verified_at"].includes(key) ? value : value === null ? null : Number(value),
+      ["source", "verified_at", "long_context"].includes(key)
+        ? value
+        : value === null
+          ? null
+          : Number(value),
     ]),
   ) as unknown as ModelPrice;
   return rates;

@@ -44,6 +44,7 @@ const entrada = () => ({
   email: `cadastro-${++n}-${Date.now()}@exemplo.test`,
   password: "SenhaForte!2026",
   password_confirm: "SenhaForte!2026",
+  accepted_terms: true,
 });
 
 describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
@@ -57,6 +58,11 @@ describe("signUp — a tela precisa saber se a sessão já veio aberta", () => {
     vi.mocked(createClient).mockResolvedValue({
       auth: { signUp: signUpDoProvedor },
     } as never);
+  });
+  it("não cria conta sem a confirmação dos termos", async () => {
+    const { signUp } = await import("./signUp");
+    expect((await signUp({ ...entrada(), accepted_terms: false })).ok).toBe(false);
+    expect(signUpDoProvedor).not.toHaveBeenCalled();
   });
 
   it('"Confirm email" DESLIGADO: o provedor devolve sessão → sessao_ativa', async () => {

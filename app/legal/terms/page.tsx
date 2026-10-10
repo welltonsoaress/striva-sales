@@ -20,9 +20,7 @@ export default async function TermsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const idioma = normalizarIdioma(
-    (user?.user_metadata?.locale as string | undefined) ?? null,
-  );
+  const idioma = normalizarIdioma((user?.user_metadata?.locale as string | undefined) ?? null);
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
@@ -37,7 +35,8 @@ export default async function TermsPage() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold">{t("1. Quem é quem")}</h2>
         <p>
-          {t("O")} {op.sistema} {t("é um software de código aberto instalado e operado por")}{" "}
+          {t("O")} {op.sistema}{" "}
+          {t("é uma plataforma de atendimento e gestão comercial operada por")}{" "}
           <strong>{operador}</strong>
           {op.cnpj ? ` (CNPJ ${op.cnpj})` : ""}, {t("daqui em diante")}{" "}
           <strong>{t("o operador")}</strong>.{" "}
@@ -47,7 +46,7 @@ export default async function TermsPage() {
         </p>
         <p>
           {t(
-            "Os autores e mantenedores do software não operam esta instalação, não têm acesso a este servidor nem aos dados nele guardados, e não são parte da relação entre o operador e você. Qualquer pedido sobre uso, cobrança, suporte ou dados deve ser dirigido ao operador.",
+            "Pedidos sobre uso, cobrança, suporte ou dados devem ser dirigidos à equipe operadora. As condições comerciais e os recursos disponíveis são os da oferta contratada.",
           )}
         </p>
       </section>
@@ -66,7 +65,7 @@ export default async function TermsPage() {
         <h2 className="text-base font-semibold">{t("3. Sua conta")}</h2>
         <p>
           {t(
-            "O acesso é pessoal. Você é responsável por manter sua senha em segredo e pelo que for feito com a sua conta. Contas de administrador exigem verificação em duas etapas. Avise o operador imediatamente se suspeitar de acesso indevido.",
+            "O acesso é pessoal. Mantenha sua senha em segredo e respeite as permissões concedidas à sua conta. A verificação em duas etapas pode ser exigida pela política de segurança da plataforma ou da organização. Avise o operador se suspeitar de acesso indevido.",
           )}
         </p>
       </section>
@@ -75,11 +74,15 @@ export default async function TermsPage() {
         <h2 className="text-base font-semibold">{t("4. Uso aceitável")}</h2>
         <p>{t("Ao usar este sistema, você concorda em não:")}</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>{t("enviar mensagens não solicitadas em massa, nem burlar pedidos de descadastro;")}</li>
+          <li>
+            {t("enviar mensagens não solicitadas em massa, nem burlar pedidos de descadastro;")}
+          </li>
           <li>{t("usar os dados de clientes para finalidade diferente da que os originou;")}</li>
           <li>{t("tentar acessar dados de outra organização hospedada nesta instalação;")}</li>
           <li>
-            {t("violar os termos dos serviços conectados, como as regras da plataforma de mensagens.")}
+            {t(
+              "violar os termos dos serviços conectados, como as regras da plataforma de mensagens.",
+            )}
           </li>
         </ul>
         <p>
@@ -111,7 +114,7 @@ export default async function TermsPage() {
         <h2 className="text-base font-semibold">{t("6. Disponibilidade e garantias")}</h2>
         <p>
           {t(
-            "Este sistema roda em servidor do operador e depende de serviços de terceiros para funcionar. O software é distribuído “como está”, sem garantia de funcionamento ininterrupto ou de adequação a uma finalidade específica. Interrupções, falhas de terceiros e perda de dados por causas fora do controle do operador não geram obrigação de indenizar, salvo quando a lei determinar.",
+            "A plataforma depende de infraestrutura e serviços de terceiros. Os compromissos de suporte e disponibilidade são os estabelecidos na oferta contratada, respeitados os direitos previstos na legislação aplicável.",
           )}
         </p>
       </section>

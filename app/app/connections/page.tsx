@@ -27,13 +27,14 @@ export default async function ConnectionsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Conexões", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Por onde seu negócio fala com o cliente. Conecte números por QR ou o número oficial da Meta, e acompanhe a saúde de cada um.",
-            idioma,
-          )}
+          {traduzir("Conecte seu WhatsApp pelo QR code e acompanhe o estado da conexão.", idioma)}
         </p>
       </header>
-      <ConexoesShell wahaConfigured={wahaConfigured} wacallsConfigured={wacallsConfigured} />
+      <ConexoesShell
+        wahaConfigured={wahaConfigured}
+        wacallsConfigured={wacallsConfigured}
+        advancedAllowed={user.is_platform_admin && !user.support}
+      />
     </div>
   );
 }

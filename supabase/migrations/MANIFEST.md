@@ -320,3 +320,4 @@ To re-apply on a fresh Supabase project, replay the migrations in version order 
 | `20261008183000` | `0252_revisao_creditos_e_versoes` | Reserva e recuperação de automações, timeout incerto, imutabilidade das instruções do organizador, origem histórica do orçamento e extrato/auditoria de créditos; apêndice idempotente no baseline. |
 
 | `20261008220952` | `0253_jornada_comercial_e_credenciais` | Navegação simples para novos vínculos, credenciais/bindings operados somente pela plataforma, proteção do vínculo de chave em versões, caixa de saída isolada de lembretes e proposta de checkout única por solicitação, com vínculo à empresa. |
+| `20261009204415` | `0254_experiencia_saas` | Conexão global cifrada, catálogo GPT-6 e preço de contexto longo, leitura de logs pela plataforma, agentes sem escolha de IA, follow-up padrão isolado e concessões/acessos administrativos auditados e idempotentes. |

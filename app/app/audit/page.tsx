@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { ROLE_RANK } from "@/lib/auth/types";
 import { AuditClient } from "./_client";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +11,7 @@ export default async function AuditPage() {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
   const idioma = user.idioma;
-  if (!(user.is_platform_admin && !user.support) && ROLE_RANK[activeOrg.role] < ROLE_RANK.manager) {
+  if (!user.is_platform_admin || user.support) {
     redirect("/403");
   }
   const t = (texto: string) => traduzir(texto, user.idioma);

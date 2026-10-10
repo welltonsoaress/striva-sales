@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useAuth } from "@/hooks/auth/AuthProvider";
 
 import { Card } from "@/components/ui/card";
 import { CheckCircle, Warning } from "@/lib/ui/icons";
@@ -196,6 +197,7 @@ export function EvolutionGaps({
   /** Decisões de encaminhamento no período — evidência da 2ª afirmação. */
   decisoes: number;
 }) {
+  const { user } = useAuth();
   const lacunas = montaLacunas(gaps);
 
   if (lacunas.length === 0) {
@@ -219,7 +221,11 @@ export function EvolutionGaps({
               <p className="text-sm leading-relaxed">{l.texto}</p>
               {l.href && (
                 <Link
-                  href={l.href}
+                  href={
+                    l.href === "/app/ai/credentials" && (!user.is_platform_admin || user.support)
+                      ? "/app/ajuda"
+                      : l.href
+                  }
                   className="mt-2 inline-block text-sm font-medium text-accent underline underline-offset-4"
                 >
                   {l.cta}

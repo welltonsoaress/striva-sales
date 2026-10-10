@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { ok } from "@/lib/api/wrappers";
+import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,9 +15,11 @@ export async function GET(): Promise<Response> {
   const requestId = randomUUID();
 
   const user = await loadAuthUser();
-  if (!user) return new Response(null, { status: 401 });
+  if (user && (!user.is_platform_admin || user.support))
+    return fail("forbidden", "Este recurso é administrado pela plataforma.", 403);
+  if (!user) return fail("unauthenticated", "Faça login.", 401);
   const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg) return new Response(null, { status: 403 });
+  if (!activeOrg) return fail("forbidden", "Sem organização ativa.", 403);
 
   const supabase = await createClient();
   const { data } = await supabase

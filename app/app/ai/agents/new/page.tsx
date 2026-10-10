@@ -1,21 +1,17 @@
 import { redirect } from "next/navigation";
-import { requireAiPlatformAdmin } from "@/lib/auth/require-ai-platform-admin";
+
 import { inheritedAgentConnection } from "@/lib/ai/agents/inherited-connection";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { createClient } from "@/lib/supabase/server";
-import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 
 import { AgentForm } from "../[id]/_components/AgentForm";
 
 export const dynamic = "force-dynamic";
-
-const CREDENTIAL_COLUMNS =
-  "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
 
 /**
  * Os provedores cuja chave veio na INSTALAÇÃO (`.env`), não da tela de
@@ -41,22 +37,15 @@ export default async function NewAgentPage() {
   }
 
   const supabase = await createClient();
-  const [credentialsRes, channelSessions] = await Promise.all([
-    supabase
-      .from("ai_provider_credentials_safe")
-      .select(CREDENTIAL_COLUMNS)
-      .eq("organization_id", activeOrg.orgId),
-    listSelectableChannels(supabase, activeOrg.orgId),
-  ]);
-
-  const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
+  const channelSessions = await listSelectableChannels(supabase, activeOrg.orgId);
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <AgentForm credentialEditingAllowed={(await requireAiPlatformAdmin()).ok}
+      <AgentForm
+        credentialEditingAllowed={false}
         inheritedConnection={await inheritedAgentConnection(activeOrg.orgId)}
         mode="create"
-        credentials={credentials}
+        credentials={[]}
         provedoresDaInstalacao={provedoresDaInstalacao()}
         channelSessions={channelSessions}
       />

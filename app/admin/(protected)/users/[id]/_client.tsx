@@ -1,6 +1,7 @@
 "use client";
 
 import type { Locale } from "date-fns";
+import { UserAccessEditor } from "@/components/admin/users/UserAccessEditor";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import Link from "next/link";
@@ -26,10 +27,7 @@ import { useT } from "@/hooks/i18n/useT";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const ROLE_VARIANTS: Record<
-  string,
-  "success" | "info" | "warning" | "error" | "neutral"
-> = {
+const ROLE_VARIANTS: Record<string, "success" | "info" | "warning" | "error" | "neutral"> = {
   admin: "error",
   manager: "warning",
   agent: "info",
@@ -45,11 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 function RoleBadge({ role }: { role: string }) {
   const t = useT();
-  return (
-    <Badge variant={ROLE_VARIANTS[role] ?? "neutral"}>
-      {t(ROLE_LABELS[role] ?? role)}
-    </Badge>
-  );
+  return <Badge variant={ROLE_VARIANTS[role] ?? "neutral"}>{t(ROLE_LABELS[role] ?? role)}</Badge>;
 }
 
 function relativeDate(iso: string | null, locale: Locale): string {
@@ -76,9 +70,10 @@ function absoluteDate(iso: string | null, locale: Locale): string {
 
 interface UserDetailClientProps {
   id: string;
+  canManage?: boolean;
 }
 
-export function UserDetailClient({ id }: UserDetailClientProps) {
+export function UserDetailClient({ id, canManage = false }: UserDetailClientProps) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const { data, isLoading, isError } = useAdminUser(id);
@@ -117,7 +112,7 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
       <div>
         <Link
           href="/admin/users"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <CaretLeft size={14} aria-hidden />
           {t("Usuários")}
@@ -129,10 +124,8 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
         <h1 className="text-2xl font-semibold tracking-tight">
           {user.full_name ?? user.email ?? t("Usuário sem nome")}
         </h1>
-        {user.full_name && (
-          <p className="font-mono text-sm text-muted-foreground">{user.email}</p>
-        )}
-        <p className="text-xs text-muted-foreground font-mono">{user.id}</p>
+        {user.full_name && <p className="font-mono text-sm text-muted-foreground">{user.email}</p>}
+        <p className="font-mono text-xs text-muted-foreground">{user.id}</p>
       </div>
 
       <Separator />
@@ -145,19 +138,25 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
         <CardContent>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
             <div>
-              <dt className="text-xs text-muted-foreground mb-0.5">{t("Email confirmado")}</dt>
-              <dd>{user.email_confirmed_at ? absoluteDate(user.email_confirmed_at, localeDaData) : <Badge variant="warning">{t("Pendente")}</Badge>}</dd>
+              <dt className="mb-0.5 text-xs text-muted-foreground">{t("Email confirmado")}</dt>
+              <dd>
+                {user.email_confirmed_at ? (
+                  absoluteDate(user.email_confirmed_at, localeDaData)
+                ) : (
+                  <Badge variant="warning">{t("Pendente")}</Badge>
+                )}
+              </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground mb-0.5">{t("Último acesso")}</dt>
+              <dt className="mb-0.5 text-xs text-muted-foreground">{t("Último acesso")}</dt>
               <dd className="text-sm">{relativeDate(user.last_sign_in_at, localeDaData)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground mb-0.5">{t("Criado em")}</dt>
+              <dt className="mb-0.5 text-xs text-muted-foreground">{t("Criado em")}</dt>
               <dd className="text-sm">{absoluteDate(user.created_at, localeDaData)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground mb-0.5">MFA</dt>
+              <dt className="mb-0.5 text-xs text-muted-foreground">MFA</dt>
               <dd>
                 {hasMfa ? (
                   <Badge variant="success">{t("Ativo")}</Badge>
@@ -168,7 +167,7 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
             </div>
             {user.phone && (
               <div>
-                <dt className="text-xs text-muted-foreground mb-0.5">{t("Telefone")}</dt>
+                <dt className="mb-0.5 text-xs text-muted-foreground">{t("Telefone")}</dt>
                 <dd className="font-mono text-sm">{user.phone}</dd>
               </div>
             )}
@@ -177,11 +176,10 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
       </Card>
 
       {/* Memberships table */}
+      {canManage && <UserAccessEditor user={user} memberships={memberships} />}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            Memberships ({memberships.length})
-          </CardTitle>
+          <CardTitle className="text-sm font-medium">Memberships ({memberships.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {memberships.length === 0 ? (
@@ -241,7 +239,8 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium">
-            {t("Audit recente")} ({recent_audit.length}{recent_audit.length === 50 ? "+" : ""})
+            {t("Audit recente")} ({recent_audit.length}
+            {recent_audit.length === 50 ? "+" : ""})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -250,15 +249,13 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
               {t("Nenhuma entrada de auditoria encontrada para este usuário.")}
             </p>
           ) : (
-            <div className="space-y-3 max-h-96 overflow-auto pr-1">
+            <div className="max-h-96 space-y-3 overflow-auto pr-1">
               {recent_audit.map((entry) => (
                 <div key={entry.id} className="flex items-start gap-2 text-xs">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
                   <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-muted-foreground">
-                        {entry.action}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-muted-foreground">{entry.action}</span>
                       <span className="text-muted-foreground">
                         {format(new Date(entry.created_at), "dd/MM HH:mm:ss", {
                           locale: localeDaData,

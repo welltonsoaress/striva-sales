@@ -431,12 +431,7 @@ export const NAV_CATALOG = [
   {
     href: "/app/connections",
     label: "Conexões",
-    // Cobre os DOIS caminhos desde o PR #105: número por QR e canal oficial da
-    // Meta (com os templates dele), cada um numa aba. A descrição cita "oficial"
-    // e "Meta" de propósito — é por esses nomes que se procura no ⌘K, e a busca
-    // varre a descrição além do rótulo.
-    description:
-      "Seus números de WhatsApp: por QR ou canal oficial da Meta, com saúde, reconexão e templates.",
+    description: "Seus números de WhatsApp: conexão por QR code, estado e reconexão.",
     icon: "PlugsConnected",
     group: "canais",
     minRole: "admin",

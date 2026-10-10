@@ -5,7 +5,11 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
-import { platformKey, assertPricedModel } from "@/lib/billing/managed-ai";
+import { assertPricedModel } from "@/lib/billing/managed-ai";
+import { platformKeyServer } from "@/lib/billing/platform-credentials";
+import { encryptKey } from "@/lib/crypto/aes_gcm";
+import { validateProviderKey } from "@/lib/ai/provider-validators";
+import { mfaEmDivida } from "@/lib/auth/server";
 import { llmEdgeConfigFromEnv } from "@/lib/agent-engine/edge/llm/credentials";
 import { env } from "@/lib/env";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -17,6 +21,7 @@ async function guard() {
     throw new Error("Encerre o acompanhamento para alterar a plataforma.");
   const ctx = await requirePlatformAdmin();
   if (ctx.platformAdmin.scope !== "full") throw new Error("Seu acesso permite somente leitura.");
+  if (await mfaEmDivida()) throw new Error("Confirme a verificação em duas etapas.");
   return ctx;
 }
 const purposeSchema = z.record(
@@ -29,6 +34,8 @@ const purposeSchema = z.record(
 );
 const settingsSchema = z.object({
   enabled: z.boolean(),
+  apply_to_all: z.boolean().default(false),
+  api_key: z.string().trim().max(500).optional(),
   provider: z.enum(["openai", "anthropic", "openrouter"]),
   model: z.string().trim().min(1).max(120),
   operator_model: z.string().trim().max(120).nullable(),
@@ -45,11 +52,24 @@ export async function saveManagedAi(raw: unknown) {
   const { user } = await guard();
   const parsed = settingsSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, error: "Confira modelo, limites e motivo." };
-  const { reason, ...settings } = parsed.data;
+  const { reason, api_key, ...settings } = parsed.data;
   const admin = createAdminClient();
   try {
+    if (api_key) {
+      const validation = await validateProviderKey(settings.provider, api_key);
+      if (!validation.ok)
+        return {
+          ok: false as const,
+          error: "A chave não foi aceita pelo provedor. Confira a chave e tente novamente.",
+        };
+      if (validation.models.length && !validation.models.includes(settings.model))
+        return {
+          ok: false as const,
+          error: "O modelo selecionado não está disponível para esta chave.",
+        };
+    }
     if (settings.enabled) {
-      platformKey(settings.provider, llmEdgeConfigFromEnv(env));
+      if (!api_key) await platformKeyServer(settings.provider, llmEdgeConfigFromEnv(env));
       for (const model of new Set([settings.model, settings.operator_model].filter(Boolean))) {
         const { data } = await admin
           .from("ai_models")
@@ -76,7 +96,8 @@ export async function saveManagedAi(raw: unknown) {
       }
       for (const [purpose, selection] of Object.entries(settings.purpose_models)) {
         if (!selection.enabled) continue;
-        platformKey(selection.provider, llmEdgeConfigFromEnv(env));
+        if (!(api_key && selection.provider === settings.provider))
+          await platformKeyServer(selection.provider, llmEdgeConfigFromEnv(env));
         if (purpose === "transcricao_de_audio") {
           if (
             selection.provider !== "openai" ||
@@ -124,18 +145,51 @@ export async function saveManagedAi(raw: unknown) {
         });
       }
     }
-    const { error } = await admin
-      .from("platform_ai_settings")
-      .update({ ...settings, updated_at: new Date().toISOString() })
-      .eq("id", true);
-    if (error) return { ok: false as const, error: "Não foi possível salvar a configuração." };
+    // A conexão e a chave entram juntas. Uma falha não deixa o modelo novo usando a chave anterior.
+    const client = await getRequestPool().connect();
+    try {
+      await client.query("begin");
+      if (api_key) {
+        const secret = encryptKey(api_key);
+        await client.query(
+          `insert into platform_ai_credentials(provider,ciphertext,iv,tag,last4)
+          values($1,$2,$3,$4,$5) on conflict(provider) do update set ciphertext=excluded.ciphertext,iv=excluded.iv,tag=excluded.tag,last4=excluded.last4,updated_at=now()`,
+          [settings.provider, secret.ciphertext, secret.iv, secret.tag, secret.last4],
+        );
+      }
+      await client.query(
+        `update platform_ai_settings set enabled=$1,apply_to_all=$2,provider=$3,model=$4,operator_model=$5,
+        max_output_tokens=$6,max_steps=$7,monthly_cost_limit_cents=$8,requests_per_minute=$9,purpose_models=$10,
+        transcription_price_per_minute_cents=$11,transcription_pricing_source=$12,updated_at=now() where id=true`,
+        [
+          settings.enabled,
+          settings.apply_to_all,
+          settings.provider,
+          settings.model,
+          settings.operator_model,
+          settings.max_output_tokens,
+          settings.max_steps,
+          settings.monthly_cost_limit_cents,
+          settings.requests_per_minute,
+          settings.purpose_models,
+          settings.transcription_price_per_minute_cents,
+          settings.transcription_pricing_source,
+        ],
+      );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
     await audit({
       action: "platform_admin.managed_ai_configured",
       actorUserId: user.id,
       actingAsPlatformAdmin: true,
       bypassedRls: true,
       resourceType: "platform_ai_settings",
-      metadata: { ...settings, reason },
+      metadata: { ...settings, reason, credential_changed: !!api_key },
     });
     revalidatePath("/admin/ai");
     return { ok: true as const };
@@ -168,7 +222,7 @@ export async function changeAiAccount(raw: unknown) {
       .single();
     try {
       if (!settings?.enabled || !settings.provider) throw new Error("unavailable");
-      platformKey(settings.provider, llmEdgeConfigFromEnv(env));
+      await platformKeyServer(settings.provider, llmEdgeConfigFromEnv(env));
     } catch {
       return {
         ok: false as const,
@@ -191,6 +245,52 @@ export async function changeAiAccount(raw: unknown) {
     };
   revalidatePath(`/admin/tenants/${d.organization_id}`);
   revalidatePath("/admin/dashboard");
+  return { ok: true as const };
+}
+export async function setClientPlan(raw: unknown) {
+  const { user } = await guard();
+  const parsed = z
+    .object({
+      organization_id: z.uuid(),
+      plan_id: z.uuid(),
+      access_until: z.iso.datetime({ offset: true }),
+      reason: z.string().trim().min(10).max(1000),
+      reference: z.uuid(),
+    })
+    .safeParse(raw);
+  if (!parsed.success)
+    return { ok: false as const, error: "Informe plano, período de acesso e motivo." };
+  const db = createAdminClient();
+  const { data: settings } = await db
+    .from("platform_ai_settings")
+    .select("enabled,provider")
+    .eq("id", true)
+    .single();
+  try {
+    if (!settings?.enabled || !settings.provider) throw new Error("unavailable");
+    await platformKeyServer(settings.provider, llmEdgeConfigFromEnv(env));
+  } catch {
+    return {
+      ok: false as const,
+      error: "Configure a IA da plataforma antes de conceder um plano com IA incluída.",
+    };
+  }
+  const { error } = await db.rpc("fn_admin_set_commercial_plan", {
+    p_org: parsed.data.organization_id,
+    p_actor: user.id,
+    p_plan: parsed.data.plan_id,
+    p_until: parsed.data.access_until,
+    p_reason: parsed.data.reason,
+    p_reference: parsed.data.reference,
+  });
+  if (error)
+    return {
+      ok: false as const,
+      error:
+        "Não foi possível aplicar. Use um plano publicado com limites definidos, um período futuro e aguarde chamadas de IA pendentes.",
+    };
+  revalidatePath(`/admin/tenants/${parsed.data.organization_id}`);
+  revalidatePath("/app/settings/billing");
   return { ok: true as const };
 }
 export async function testManagedAi(orgId: string) {
