@@ -765,6 +765,7 @@ test("pacote preparado fica explicado, saldo esgotado mostra renovação e recup
 }) => {
   await login(page, 2);
   await page.goto("/admin/ai");
+  await page.getByText("Tarifas e pacotes de créditos", { exact: true }).click();
   const packs = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Pacotes de créditos extras", exact: true }),
   });
